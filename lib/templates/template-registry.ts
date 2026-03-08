@@ -101,6 +101,20 @@ export const TEMPLATE_MANIFESTS: TemplateManifest[] = [
     compareScriptPath: "scripts/compare-rsv-baseline.sh",
     presetModule: "lib/templates/reservation-saas.ts",
   },
+  {
+    templateKey: "simple_crm_saas",
+    label: "シンプルCRM SaaS",
+    finalPromptDir: "final/simple_crm_saas",
+    finalPrompts: FINAL_PROMPT_FILENAMES,
+    prefixPrompt: "12-claude-membership-template-prefix.md", // TODO: CRM-specific prefix
+    rulesRoot: "docs/rules/simple_crm_saas",
+    fixturePath: "tests/fixtures/simple-crm-first-run.json",
+    baselineDocPath: "docs/baselines/simple-crm-green-v1.md",
+    baselineJsonPath: "tests/baselines/simple-crm-green-v1.json",
+    regressionCommand: "", // TODO: create after first GREEN
+    compareScriptPath: "", // TODO: create after first GREEN
+    presetModule: "lib/templates/simple-crm-saas.ts",
+  },
 ];
 
 // ---------------------------------------------------------------------------

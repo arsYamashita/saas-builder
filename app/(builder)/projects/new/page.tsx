@@ -5,6 +5,7 @@ import { defaultProjectFormValues } from "./defaultValues";
 import { projectFormSchema } from "@/lib/validation/project-form";
 import { membershipContentAffiliatePreset } from "@/lib/templates/membership-content-affiliate";
 import { reservationSaasPreset } from "@/lib/templates/reservation-saas";
+import { simpleCrmSaasPreset } from "@/lib/templates/simple-crm-saas";
 
 export default function NewProjectPage() {
   const [form, setForm] = useState(defaultProjectFormValues);
@@ -148,6 +149,15 @@ export default function NewProjectPage() {
                   return;
                 }
 
+                if (templateKey === "simple_crm_saas") {
+                  setForm((prev) => ({
+                    ...prev,
+                    ...simpleCrmSaasPreset,
+                    templateKey,
+                  }));
+                  return;
+                }
+
                 setForm({ ...form, templateKey });
               }}
             >
@@ -155,6 +165,7 @@ export default function NewProjectPage() {
                 会員サイト + コンテンツ販売 + アフィリエイト
               </option>
               <option value="reservation_saas">予約管理SaaS</option>
+              <option value="simple_crm_saas">シンプルCRM SaaS</option>
               <option value="online_salon">オンラインサロン</option>
               <option value="custom">カスタム</option>
             </select>

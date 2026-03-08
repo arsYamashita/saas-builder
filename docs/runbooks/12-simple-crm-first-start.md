@@ -110,3 +110,48 @@ This is acceptable for a first run.
 5. Fix one thing at a time
 6. Repeat until GREEN
 7. Create baseline and regression script for simple_crm_saas
+
+---
+
+## Post-Routing Connection Checklist
+
+Template routing is now wired. Before first simple_crm_saas generation:
+
+### Step 1: Verify MCA and RSV are not broken
+
+```bash
+npm run regression:mca
+npm run regression:rsv
+```
+
+Both must return GREEN. If not, revert routing changes and investigate.
+
+### Step 2: Create simple_crm_saas project
+
+```bash
+curl -X POST http://localhost:3000/api/projects \
+  -H "Content-Type: application/json" \
+  -d @tests/fixtures/simple-crm-first-run.json
+```
+
+### Step 3: Trigger generation
+
+```bash
+curl -X POST http://localhost:3000/api/projects/{id}/generate-template
+```
+
+### Step 4: Observe results
+
+Do not debug yet. Record:
+- Which step failed first
+- Error message
+- Whether blueprint was saved
+
+### Step 5: Run MCA and RSV regression again
+
+```bash
+npm run regression:mca
+npm run regression:rsv
+```
+
+Confirm both are still GREEN after simple_crm_saas attempt.
