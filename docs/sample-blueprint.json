@@ -1,0 +1,112 @@
+{
+  "product_summary": {
+    "name": "SalonCore",
+    "problem": "オンラインサロン運営者が会員管理、限定コンテンツ、課金、紹介制度を一元管理できない",
+    "target": "小規模〜中規模のオンラインサロン運営者",
+    "category": "membership_content_affiliate"
+  },
+  "entities": [
+    {
+      "name": "content",
+      "description": "会員向けに公開するコンテンツ",
+      "main_fields": [
+        { "name": "title", "type": "string", "required": true },
+        { "name": "body", "type": "text", "required": false },
+        { "name": "content_type", "type": "string", "required": true },
+        { "name": "published", "type": "boolean", "required": true }
+      ]
+    },
+    {
+      "name": "membership_plan",
+      "description": "会員向けの料金プラン",
+      "main_fields": [
+        { "name": "name", "type": "string", "required": true },
+        { "name": "description", "type": "text", "required": false },
+        { "name": "price", "type": "number", "required": true },
+        { "name": "status", "type": "string", "required": true }
+      ]
+    }
+  ],
+  "screens": [
+    {
+      "name": "dashboard",
+      "purpose": "運営状況の確認",
+      "role_access": ["owner", "admin"]
+    },
+    {
+      "name": "contents_list",
+      "purpose": "コンテンツ一覧表示",
+      "role_access": ["owner", "admin"]
+    },
+    {
+      "name": "plans_list",
+      "purpose": "料金プラン一覧表示",
+      "role_access": ["owner", "admin"]
+    }
+  ],
+  "roles": [
+    { "name": "owner" },
+    { "name": "admin" },
+    { "name": "member" }
+  ],
+  "permissions": [
+    {
+      "role": "owner",
+      "allowed_actions": [
+        "manage_billing",
+        "manage_affiliate",
+        "manage_content",
+        "manage_members"
+      ]
+    },
+    {
+      "role": "admin",
+      "allowed_actions": ["manage_content", "manage_members"]
+    },
+    {
+      "role": "member",
+      "allowed_actions": ["read_own_content", "update_own_profile"]
+    }
+  ],
+  "billing": {
+    "enabled": true,
+    "model": "subscription",
+    "products": ["monthly_membership"],
+    "notes": "Stripe定期課金を前提とする"
+  },
+  "affiliate": {
+    "enabled": true,
+    "commission_type": "percentage",
+    "commission_value": 20,
+    "notes": "紹介登録から初回課金時に成果を生成"
+  },
+  "events": [
+    "member_signed_up",
+    "subscription_created",
+    "content_published",
+    "affiliate_conversion_created"
+  ],
+  "kpis": [
+    "mrr",
+    "active_members",
+    "trial_to_paid_rate",
+    "affiliate_conversion_rate"
+  ],
+  "assumptions": [
+    "会員は複数プランを同時契約しない",
+    "紹介成果は初回課金時のみ発生する"
+  ],
+  "mvp_scope": [
+    "auth",
+    "tenant",
+    "roles",
+    "content_crud",
+    "subscription_billing",
+    "affiliate_tracking"
+  ],
+  "future_scope": [
+    "mobile_app",
+    "advanced_analytics",
+    "multi_language"
+  ]
+}

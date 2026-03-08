@@ -1,0 +1,102 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getStripeClient } from "@/lib/billing/stripe";
+import { createAdminClient } from "@/lib/db/supabase/admin";
+import { requireCurrentUser } from "@/lib/auth/current-user";
+import { getCurrentTenantForUser } from "@/lib/tenant/current-tenant";
+import { getAffiliateTracking } from "@/lib/affiliate/tracking";
+import { findAffiliateByCode } from "@/lib/affiliate/find-affiliate-by-code";
+import { findOrCreateReferral } from "@/lib/affiliate/find-or-create-referral";
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const membershipPlanId = body.membership_plan_id as string | undefined;
+
+    if (!membershipPlanId) {
+      return NextResponse.json(
+        { error: "membership_plan_id is required" },
+        { status: 400 }
+      );
+    }
+
+    const user = await requireCurrentUser();
+    const tenantMembership = await getCurrentTenantForUser();
+    const tenantId = tenantMembership.tenant_id;
+    const supabase = createAdminClient();
+    const stripe = getStripeClient();
+
+    const { data: plan, error: planError } = await supabase
+      .from("membership_plans")
+      .select("*")
+      .eq("id", membershipPlanId)
+      .eq("tenant_id", tenantId)
+      .single();
+
+    if (planError || !plan) {
+      return NextResponse.json(
+        { error: "Plan not found", details: planError?.message },
+        { status: 404 }
+      );
+    }
+
+    if (!plan.price_id) {
+      return NextResponse.json(
+        { error: "price_id is not set on the plan" },
+        { status: 400 }
+      );
+    }
+
+    const { affiliateCode, visitorToken } = await getAffiliateTracking();
+
+    let referralId: string | null = null;
+    let affiliateId: string | null = null;
+
+    if (affiliateCode) {
+      const affiliate = await findAffiliateByCode(tenantId, affiliateCode);
+
+      if (affiliate) {
+        affiliateId = affiliate.id;
+
+        const referral = await findOrCreateReferral({
+          tenantId,
+          affiliateId: affiliate.id,
+          visitorToken,
+          referredUserId: user.id,
+        });
+
+        referralId = referral.id;
+      }
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      mode: "subscription",
+      line_items: [
+        {
+          price: plan.price_id,
+          quantity: 1,
+        },
+      ],
+      success_url: `${process.env.NEXT_PUBLIC_APP_URL}/billing?checkout=success`,
+      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/billing?checkout=cancel`,
+      client_reference_id: user.id,
+      customer_email: user.email,
+      metadata: {
+        tenant_id: tenantId,
+        app_user_id: user.id,
+        membership_plan_id: membershipPlanId,
+        referral_id: referralId ?? "",
+        affiliate_id: affiliateId ?? "",
+      },
+    });
+
+    return NextResponse.json({ url: session.url }, { status: 200 });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Unknown error";
+
+    return NextResponse.json(
+      { error: "Failed to create checkout session", details: message },
+      { status: 500 }
+    );
+  }
+}

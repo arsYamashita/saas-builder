@@ -1,0 +1,45 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getLatestBlueprintByProjectId } from "@/lib/db/blueprints";
+import { saveGeneratedFile } from "@/lib/db/generated-files";
+
+type Props = {
+  params: Promise<{ projectId: string }>;
+};
+
+export async function POST(req: NextRequest, { params }: Props) {
+  try {
+    const { projectId } = await params;
+    const body = await req.json();
+
+    const latestBlueprint = await getLatestBlueprintByProjectId(projectId);
+
+    if (!body.filePath || !body.contentText || !body.fileCategory) {
+      return NextResponse.json(
+        { error: "filePath, contentText, fileCategory are required" },
+        { status: 400 }
+      );
+    }
+
+    const saved = await saveGeneratedFile({
+      projectId,
+      blueprintId: latestBlueprint.id,
+      fileCategory: body.fileCategory,
+      filePath: body.filePath,
+      language: body.language || "tsx",
+      title: body.title,
+      description: body.description,
+      contentText: body.contentText,
+      source: "lovable",
+    });
+
+    return NextResponse.json({ file: saved });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Unknown server error";
+
+    return NextResponse.json(
+      { error: "Failed to save UI file", details: message },
+      { status: 500 }
+    );
+  }
+}
