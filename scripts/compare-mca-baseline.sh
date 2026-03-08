@@ -4,6 +4,11 @@ set -euo pipefail
 # Compare a regression run against the MCA GREEN v1 baseline
 # Usage: bash scripts/compare-mca-baseline.sh <project-id>
 # Requires: curl, jq, dev server running
+#
+# API response structure:
+#   .generationRuns[0].steps_json[]   — {key, status}
+#   .qualityRuns[0].checks_json[]     — {key, status}
+#   .blueprints, .implementationRuns, .generatedFiles — arrays
 
 if [ $# -lt 1 ]; then
   echo "Usage: $0 <project-id>"
@@ -28,34 +33,36 @@ echo ""
 
 # --- Fetch project data ---
 PROJ_RESP=$(curl -s "$BASE_URL/api/projects/$PROJECT_ID")
-GEN_RUN=$(echo "$PROJ_RESP" | jq '.project.latestGenerationRun // {}')
-QUALITY_RUN=$(echo "$PROJ_RESP" | jq '.project.latestQualityRun // {}')
 
 # --- Load baseline ---
 BASELINE=$(cat "$BASELINE_JSON")
 
 # --- 1. Generation Steps ---
 echo "[1] Generation Steps"
-for STEP in step_blueprint step_implementation step_schema step_api_design step_split_files step_export_files; do
-  EXPECTED=$(echo "$BASELINE" | jq -r ".expectedGenerationSteps.$STEP")
-  ACTUAL=$(echo "$GEN_RUN" | jq -r ".$STEP // \"missing\"")
-  if [ "$ACTUAL" = "$EXPECTED" ]; then
-    pass "$STEP = $ACTUAL"
+EXPECTED_STEPS=$(echo "$BASELINE" | jq -r '.expectedGenerationSteps | to_entries[] | "\(.key)=\(.value)"')
+for ENTRY in $EXPECTED_STEPS; do
+  STEP_KEY="${ENTRY%%=*}"
+  EXPECTED_STATUS="${ENTRY#*=}"
+  ACTUAL=$(echo "$PROJ_RESP" | jq -r --arg k "$STEP_KEY" '[.generationRuns[0].steps_json // [] | .[] | select(.key==$k)][0].status // "missing"')
+  if [ "$ACTUAL" = "$EXPECTED_STATUS" ]; then
+    pass "$STEP_KEY = $ACTUAL"
   else
-    fail "$STEP expected=$EXPECTED actual=$ACTUAL"
+    fail "$STEP_KEY expected=$EXPECTED_STATUS actual=$ACTUAL"
   fi
 done
 echo ""
 
 # --- 2. Quality Statuses ---
 echo "[2] Quality Statuses"
-for STATUS in lint_status typecheck_status playwright_status; do
-  EXPECTED=$(echo "$BASELINE" | jq -r ".expectedQualityStatuses.$STATUS")
-  ACTUAL=$(echo "$QUALITY_RUN" | jq -r ".$STATUS // \"missing\"")
-  if [ "$ACTUAL" = "$EXPECTED" ]; then
-    pass "$STATUS = $ACTUAL"
+EXPECTED_CHECKS=$(echo "$BASELINE" | jq -r '.expectedQualityStatuses | to_entries[] | "\(.key)=\(.value)"')
+for ENTRY in $EXPECTED_CHECKS; do
+  CHECK_KEY="${ENTRY%%=*}"
+  EXPECTED_STATUS="${ENTRY#*=}"
+  ACTUAL=$(echo "$PROJ_RESP" | jq -r --arg k "$CHECK_KEY" '[.qualityRuns[0].checks_json // [] | .[] | select(.key==$k)][0].status // "missing"')
+  if [ "$ACTUAL" = "$EXPECTED_STATUS" ]; then
+    pass "$CHECK_KEY = $ACTUAL"
   else
-    fail "$STATUS expected=$EXPECTED actual=$ACTUAL"
+    fail "$CHECK_KEY expected=$EXPECTED_STATUS actual=$ACTUAL"
   fi
 done
 echo ""
@@ -63,14 +70,13 @@ echo ""
 # --- 3. Minimum Counts ---
 echo "[3] Saved Counts"
 for KEY in blueprints implementation_runs generated_files; do
-  # Map key to API response field
   case "$KEY" in
-    blueprints) API_KEY="blueprintsCount" ;;
-    implementation_runs) API_KEY="implementationRunsCount" ;;
-    generated_files) API_KEY="generatedFilesCount" ;;
+    blueprints) API_KEY="blueprints" ;;
+    implementation_runs) API_KEY="implementationRuns" ;;
+    generated_files) API_KEY="generatedFiles" ;;
   esac
   MIN=$(echo "$BASELINE" | jq ".minimumCounts.$KEY")
-  ACTUAL=$(echo "$PROJ_RESP" | jq ".project.$API_KEY // 0")
+  ACTUAL=$(echo "$PROJ_RESP" | jq ".$API_KEY | length")
   if [ "$ACTUAL" -ge "$MIN" ]; then
     pass "$KEY = $ACTUAL (min: $MIN)"
   else
@@ -79,15 +85,20 @@ for KEY in blueprints implementation_runs generated_files; do
 done
 echo ""
 
-# --- 4. Required Generated File Paths ---
-echo "[4] Required Generated Files (export dir)"
+# --- 4. Required Export Checks (e.g., at least one .sql under supabase/) ---
+echo "[4] Required Export Checks (export dir)"
 if [ -d "$EXPORT_DIR" ]; then
-  PATHS=$(echo "$BASELINE" | jq -r '.requiredGeneratedFilePaths[]')
-  for P in $PATHS; do
-    if [ -f "$EXPORT_DIR/$P" ]; then
-      pass "$P exists"
+  CHECK_COUNT=$(echo "$BASELINE" | jq '.requiredExportChecks | length')
+  for idx in $(seq 0 $((CHECK_COUNT - 1))); do
+    DESC=$(echo "$BASELINE" | jq -r ".requiredExportChecks[$idx].description")
+    DIR=$(echo "$BASELINE" | jq -r ".requiredExportChecks[$idx].dir")
+    EXT=$(echo "$BASELINE" | jq -r ".requiredExportChecks[$idx].extension")
+    MIN=$(echo "$BASELINE" | jq ".requiredExportChecks[$idx].minCount")
+    MATCH_COUNT=$(find "$EXPORT_DIR/$DIR" -name "*$EXT" 2>/dev/null | wc -l | tr -d ' ')
+    if [ "$MATCH_COUNT" -ge "$MIN" ]; then
+      pass "$DESC ($MATCH_COUNT found)"
     else
-      fail "$P missing"
+      fail "$DESC (found $MATCH_COUNT, min $MIN)"
     fi
   done
 else

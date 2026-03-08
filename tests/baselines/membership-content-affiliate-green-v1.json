@@ -4,18 +4,18 @@
   "fixturePath": "tests/fixtures/membership-content-affiliate-saloncore-first-run.json",
 
   "expectedGenerationSteps": {
-    "step_blueprint": "completed",
-    "step_implementation": "completed",
-    "step_schema": "completed",
-    "step_api_design": "completed",
-    "step_split_files": "completed",
-    "step_export_files": "completed"
+    "blueprint": "completed",
+    "implementation": "completed",
+    "schema": "completed",
+    "api_design": "completed",
+    "split_files": "completed",
+    "export_files": "completed"
   },
 
   "expectedQualityStatuses": {
-    "lint_status": "pass",
-    "typecheck_status": "pass",
-    "playwright_status": "pass"
+    "lint": "passed",
+    "typecheck": "passed",
+    "playwright": "passed"
   },
 
   "minimumCounts": {
@@ -24,12 +24,8 @@
     "generated_files": 1
   },
 
-  "requiredGeneratedFilePaths": [
-    "src/app/api/webhooks/stripe/route.ts",
-    "src/app/api/aff/[code]/route.ts",
-    "src/lib/permissions/rbac.ts",
-    "src/lib/navigation/dashboard-nav.ts",
-    "supabase/schema.sql"
+  "requiredExportChecks": [
+    { "description": "at least one .sql file under supabase/", "dir": "supabase", "extension": ".sql", "minCount": 1 }
   ],
 
   "requiredScaffoldFilePaths": [

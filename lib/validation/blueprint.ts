@@ -38,7 +38,7 @@ export const blueprintBillingSchema = z.object({
 
 export const blueprintAffiliateSchema = z.object({
   enabled: z.boolean(),
-  commission_type: z.enum(["fixed", "percentage"]).optional(),
+  commission_type: z.enum(["fixed", "percentage", "configurable"]).optional(),
   commission_value: z.number().optional(),
   notes: z.string().optional(),
 });
