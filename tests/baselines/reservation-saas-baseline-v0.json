@@ -1,0 +1,46 @@
+{
+  "baselineTag": null,
+  "status": "draft — not yet GREEN",
+  "templateKey": "reservation_saas",
+  "fixturePath": "tests/fixtures/reservation-saas-first-run.json",
+
+  "expectedGenerationSteps": {
+    "blueprint": "completed",
+    "implementation": "completed",
+    "schema": "completed",
+    "api_design": "completed",
+    "split_files": "completed",
+    "export_files": "completed"
+  },
+
+  "expectedQualityStatuses": {
+    "lint": "passed",
+    "typecheck": "passed",
+    "playwright": "passed"
+  },
+
+  "minimumCounts": {
+    "blueprints": 1,
+    "implementation_runs": 1,
+    "generated_files": 1
+  },
+
+  "requiredExportChecks": [
+    { "description": "at least one .sql file under supabase/", "dir": "supabase", "extension": ".sql", "minCount": 1 }
+  ],
+
+  "requiredScaffoldFilePaths": [
+    "package.json",
+    "tsconfig.json",
+    "next.config.ts",
+    "eslint.config.mjs",
+    "playwright.config.ts",
+    "middleware.ts",
+    "app/layout.tsx",
+    "app/page.tsx",
+    "src/lib/supabase/server.ts",
+    "src/lib/supabase/client.ts",
+    "tests/playwright/auth.spec.ts",
+    "tests/playwright/smoke.spec.ts"
+  ]
+}

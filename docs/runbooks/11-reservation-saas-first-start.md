@@ -1,0 +1,112 @@
+# reservation_saas First Start Runbook
+
+## Purpose
+
+Guide the first generation attempt for the reservation_saas template.
+The goal is NOT immediate GREEN.
+The goal is localized failure identification.
+
+---
+
+## Prerequisites
+
+Before attempting any reservation_saas generation:
+
+1. `npm run regression:mca` is GREEN
+2. `compare-mca-baseline.sh` is PASS
+3. Template routing code change is applied
+   (see: `docs/architecture/reservation-saas-template-routing-plan.md`)
+4. reservation_saas prompts exist at `prompts/final/reservation_saas/`
+5. reservation_saas rules exist at `docs/rules/reservation_saas/`
+6. reservation_saas fixture exists at `tests/fixtures/reservation-saas-first-run.json`
+
+---
+
+## Fixed Test Input
+
+Use this fixture:
+`tests/fixtures/reservation-saas-first-run.json`
+
+- name: BookEasy First Run
+- templateKey: reservation_saas
+- domain: services, reservations, customers
+- billingModel: none
+- affiliateEnabled: false
+- roles: owner, admin, staff
+
+---
+
+## First Run Procedure
+
+### Step 1
+Run MCA regression first. Confirm GREEN.
+
+### Step 2
+Create a project using the reservation_saas fixture:
+```bash
+curl -X POST http://localhost:3000/api/projects \
+  -H "Content-Type: application/json" \
+  -d @tests/fixtures/reservation-saas-first-run.json
+```
+
+### Step 3
+Trigger generation:
+```bash
+curl -X POST http://localhost:3000/api/projects/{id}/generate-template
+```
+
+### Step 4
+Wait for completion or failure. Do not debug yet. First observe.
+
+### Step 5
+Record results using the same format as MCA first run
+(see: `docs/runbooks/05-first-template-execution.md`)
+
+---
+
+## What To Check After First Run
+
+In this order:
+
+1. **Blueprint** — did it produce reservation_saas entities (services, reservations, customers)?
+2. **Schema** — did it produce services, reservations, customers, staff_members tables?
+3. **API design** — did it produce /api/domain/services, /reservations, /customers routes?
+4. **Split files** — did it emit valid file objects?
+5. **Export** — did files appear in export directory?
+6. **Quality gate** — install -> lint -> typecheck -> playwright
+
+---
+
+## Expected First Run Outcomes
+
+Realistic expectation:
+- Blueprint: likely completed (prompt is clear)
+- Implementation: likely completed
+- Schema: likely completed
+- API design: likely completed
+- Split files: may fail (path rules are new)
+- Export: may fail if split_files fails
+- Quality: lint may pass, typecheck may fail
+
+This is acceptable for a first run.
+
+---
+
+## Do NOT
+
+- Do not modify MCA prompts to "fix" reservation_saas
+- Do not modify shared scaffold to "fix" reservation_saas
+- Do not modify MCA rules
+- Do not add reservation_saas entities to MCA scope
+- Do not change billing/affiliate modules
+
+---
+
+## After First Run
+
+1. Run MCA regression — must still be GREEN
+2. Record reservation_saas first run results
+3. Identify first failure point
+4. Fix one thing at a time
+5. Repeat until GREEN
+6. Create baseline and regression script for reservation_saas

@@ -1,0 +1,51 @@
+{
+  "name": "BookEasy First Run",
+  "summary": "美容サロンや小規模店舗向けに、サービス管理、予約管理、顧客管理をまとめて扱えるSaaS",
+  "targetUsers": "小規模から中規模の美容サロン・店舗オーナー",
+  "problemToSolve": "予約管理、顧客管理、サービスメニュー管理が分散していて運営が煩雑",
+  "referenceServices": "RESERVA, Coubic",
+  "brandTone": "professional",
+  "templateKey": "reservation_saas",
+  "requiredFeatures": [
+    "service_management",
+    "reservation_management",
+    "customer_management",
+    "admin_dashboard"
+  ],
+  "managedData": [
+    "services",
+    "reservations",
+    "customers"
+  ],
+  "endUserCreatedData": [
+    "profile",
+    "reservation_requests"
+  ],
+  "roles": [
+    "owner",
+    "admin",
+    "staff"
+  ],
+  "billingModel": "none",
+  "affiliateEnabled": false,
+  "visibilityRule": "staff_and_admin",
+  "mvpScope": [
+    "auth",
+    "tenant",
+    "roles",
+    "service_crud",
+    "reservation_crud",
+    "customer_crud"
+  ],
+  "excludedInitialScope": [
+    "advanced_analytics",
+    "mobile_app",
+    "multi_language",
+    "calendar_sync",
+    "payment_processing",
+    "notification_system"
+  ],
+  "stackPreference": "Next.js + Supabase + Stripe",
+  "notes": "first execution run for reservation_saas template",
+  "priority": "high"
+}
