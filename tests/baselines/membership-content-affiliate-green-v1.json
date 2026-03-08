@@ -1,0 +1,49 @@
+{
+  "baselineTag": "baseline/mca-green-v1",
+  "templateKey": "membership_content_affiliate",
+  "fixturePath": "tests/fixtures/membership-content-affiliate-saloncore-first-run.json",
+
+  "expectedGenerationSteps": {
+    "step_blueprint": "completed",
+    "step_implementation": "completed",
+    "step_schema": "completed",
+    "step_api_design": "completed",
+    "step_split_files": "completed",
+    "step_export_files": "completed"
+  },
+
+  "expectedQualityStatuses": {
+    "lint_status": "pass",
+    "typecheck_status": "pass",
+    "playwright_status": "pass"
+  },
+
+  "minimumCounts": {
+    "blueprints": 1,
+    "implementation_runs": 1,
+    "generated_files": 1
+  },
+
+  "requiredGeneratedFilePaths": [
+    "src/app/api/webhooks/stripe/route.ts",
+    "src/app/api/aff/[code]/route.ts",
+    "src/lib/permissions/rbac.ts",
+    "src/lib/navigation/dashboard-nav.ts",
+    "supabase/schema.sql"
+  ],
+
+  "requiredScaffoldFilePaths": [
+    "package.json",
+    "tsconfig.json",
+    "next.config.ts",
+    "eslint.config.mjs",
+    "playwright.config.ts",
+    "middleware.ts",
+    "app/layout.tsx",
+    "app/page.tsx",
+    "src/lib/supabase/server.ts",
+    "src/lib/supabase/client.ts",
+    "tests/playwright/auth.spec.ts",
+    "tests/playwright/smoke.spec.ts"
+  ]
+}

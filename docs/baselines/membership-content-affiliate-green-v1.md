@@ -126,6 +126,32 @@ All of these must be true:
 
 ---
 
+## Automated Comparison
+
+### Files
+
+- Baseline JSON: `tests/baselines/membership-content-affiliate-green-v1.json`
+- Compare script: `scripts/compare-mca-baseline.sh`
+- Integrated in: `scripts/run-mca-regression.sh` (auto-runs after generation)
+
+### Deterministic Comparison Targets
+
+- Generation steps (6 steps, all "completed")
+- Quality gate statuses (lint, typecheck, playwright, all "pass")
+- Saved counts (blueprints, implementation_runs, generated_files meet minimums)
+- Required file paths exist in export directory
+- Scaffold file paths exist in export directory
+
+### Excluded from Automated Comparison
+
+- AI-generated code content (non-deterministic)
+- Exact generated_files count (varies with AI output)
+- Blueprint/schema/API design content
+- File content checksums
+- Project ID and timestamps
+
+---
+
 ## Known Fragile Points
 
 1. `src/lib/permissions/rbac.ts` is AI-generated only. No scaffold fallback.

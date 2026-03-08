@@ -126,4 +126,9 @@ else
   echo "  playwright: $PLAYWRIGHT"
 fi
 echo ""
-echo "Compare with baseline: git diff baseline/mca-green-v1"
+
+# --- Step 6: Baseline Comparison ---
+echo ""
+echo "=== BASELINE COMPARISON ==="
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+bash "$SCRIPT_DIR/compare-mca-baseline.sh" "$PROJECT_ID"
