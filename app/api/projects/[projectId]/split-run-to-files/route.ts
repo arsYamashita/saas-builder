@@ -4,6 +4,8 @@ import { getLatestImplementationRun } from "@/lib/db/latest-run";
 import { runClaudeFileSplitter } from "@/lib/ai/claude-file-splitter";
 import { saveGeneratedFile } from "@/lib/db/generated-files";
 import { getLatestBlueprintByProjectId } from "@/lib/db/blueprints";
+import { createAdminClient } from "@/lib/db/supabase/admin";
+import { resolveFinalPromptPath } from "@/lib/ai/template-prompt-resolver";
 
 type Props = {
   params: Promise<{ projectId: string }>;
@@ -12,13 +14,21 @@ type Props = {
 export async function POST(_req: NextRequest, { params }: Props) {
   try {
     const { projectId } = await params;
+    const supabase = createAdminClient();
+    const { data: project } = await supabase
+      .from("projects")
+      .select("template_key")
+      .eq("id", projectId)
+      .single();
+    const templateKey = project?.template_key ?? "membership_content_affiliate";
 
     const latestRun = await getLatestImplementationRun(
       projectId,
       "implementation_plan"
     );
     const latestBlueprint = await getLatestBlueprintByProjectId(projectId);
-    const promptTemplate = await readPrompt("final/05-file-split-final.md");
+    const promptPath = resolveFinalPromptPath(templateKey, "file_split");
+    const promptTemplate = await readPrompt(promptPath);
 
     const splitResult = await runClaudeFileSplitter({
       implementationOutput: latestRun.output_text,

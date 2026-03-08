@@ -4,6 +4,8 @@ import { getLatestBlueprintByProjectId } from "@/lib/db/blueprints";
 import { saveImplementationRun } from "@/lib/db/implementation-runs";
 import { getLatestImplementationRun } from "@/lib/db/latest-run";
 import { runClaudeApi } from "@/lib/ai/claude-api";
+import { createAdminClient } from "@/lib/db/supabase/admin";
+import { resolveFinalPromptPath } from "@/lib/ai/template-prompt-resolver";
 
 type Props = {
   params: Promise<{ projectId: string }>;
@@ -28,6 +30,13 @@ function buildBlueprintJsonForClaude(blueprint: Record<string, unknown>) {
 export async function POST(_req: NextRequest, { params }: Props) {
   try {
     const { projectId } = await params;
+    const supabase = createAdminClient();
+    const { data: project } = await supabase
+      .from("projects")
+      .select("template_key")
+      .eq("id", projectId)
+      .single();
+    const templateKey = project?.template_key ?? "membership_content_affiliate";
 
     const blueprint = await getLatestBlueprintByProjectId(projectId);
 
@@ -48,7 +57,8 @@ export async function POST(_req: NextRequest, { params }: Props) {
     }
 
     const blueprintJson = buildBlueprintJsonForClaude(blueprint);
-    const promptTemplate = await readPrompt("final/03-api-final.md");
+    const promptPath = resolveFinalPromptPath(templateKey, "api");
+    const promptTemplate = await readPrompt(promptPath);
 
     const result = await runClaudeApi({
       schemaSql: schemaRun.output_text,

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { defaultProjectFormValues } from "./defaultValues";
 import { projectFormSchema } from "@/lib/validation/project-form";
 import { membershipContentAffiliatePreset } from "@/lib/templates/membership-content-affiliate";
+import { reservationSaasPreset } from "@/lib/templates/reservation-saas";
 
 export default function NewProjectPage() {
   const [form, setForm] = useState(defaultProjectFormValues);
@@ -133,6 +134,15 @@ export default function NewProjectPage() {
                   setForm((prev) => ({
                     ...prev,
                     ...membershipContentAffiliatePreset,
+                    templateKey,
+                  }));
+                  return;
+                }
+
+                if (templateKey === "reservation_saas") {
+                  setForm((prev) => ({
+                    ...prev,
+                    ...reservationSaasPreset,
                     templateKey,
                   }));
                   return;

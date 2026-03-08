@@ -110,3 +110,46 @@ This is acceptable for a first run.
 4. Fix one thing at a time
 5. Repeat until GREEN
 6. Create baseline and regression script for reservation_saas
+
+---
+
+## Post-Routing Connection Checklist
+
+Template routing is now wired. Before first reservation_saas generation:
+
+### Step 1: Verify MCA is not broken
+
+```bash
+npm run regression:mca
+```
+
+Must return GREEN. If not, revert routing changes and investigate.
+
+### Step 2: Create reservation_saas project
+
+```bash
+curl -X POST http://localhost:3000/api/projects \
+  -H "Content-Type: application/json" \
+  -d @tests/fixtures/reservation-saas-first-run.json
+```
+
+### Step 3: Trigger generation
+
+```bash
+curl -X POST http://localhost:3000/api/projects/{id}/generate-template
+```
+
+### Step 4: Observe results
+
+Do not debug yet. Record:
+- Which step failed first
+- Error message
+- Whether blueprint was saved
+
+### Step 5: Run MCA regression again
+
+```bash
+npm run regression:mca
+```
+
+Confirm MCA is still GREEN after reservation_saas attempt.
