@@ -36,10 +36,25 @@
 - quality gate 設定（現在は共通）
 - export 設定（現在は共通）
 
+## Manifest 導入（次段階）
+
+Registry の次段階として `TemplateManifest` 型を導入した。
+
+- `TemplateManifest` = 1テンプレの純粋データ定義（ロジックなし）
+- `TEMPLATE_MANIFESTS` 配列が正本。Registry はここから自動構築される
+- `TemplateKey` 型は manifest 配列から自動導出される
+- 3本目追加 = `TEMPLATE_MANIFESTS` にオブジェクト追加 + assets 作成
+
+現時点では still code-owned registry（TypeScript コード内定義）。
+完全動的ロード（外部 JSON / DB 管理）にはまだ進んでいない。
+
+詳細: `docs/architecture/template-manifest-minimal-spec.md`
+
 ## 3本目テンプレを足す時の手順
 
-1. `TEMPLATE_REGISTRY` にエントリを追加（`lib/templates/template-registry.ts`）
-2. `TemplateKey` 型に新キーを追加（同ファイル）
+1. `TEMPLATE_MANIFESTS` 配列にオブジェクトを追加（`lib/templates/template-registry.ts`）
+   — `TemplateKey` 型、`TEMPLATE_REGISTRY`、`SUPPORTED_TEMPLATE_KEYS` は自動導出
+2. （不要）~~`TemplateKey` 型に新キーを追加~~ — manifest から自動導出
 3. `prompts/final/{new_key}/` にプロンプト5本を配置
 4. `docs/rules/{new_key}/` にルールファイルを配置
 5. `lib/templates/{new-key}.ts` に preset を作成
