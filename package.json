@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "test": "playwright test",
-    "test:ui": "playwright test --ui"
+    "test:ui": "playwright test --ui",
+    "regression:mca": "bash scripts/run-mca-regression.sh"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.30.0",
