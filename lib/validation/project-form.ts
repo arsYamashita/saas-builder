@@ -18,6 +18,7 @@ export const projectFormSchema = z.object({
   templateKey: z.enum([
     "membership_content_affiliate",
     "reservation_saas",
+    "simple_crm_saas",
     "online_salon",
     "custom",
   ]),
