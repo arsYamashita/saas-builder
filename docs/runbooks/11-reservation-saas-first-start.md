@@ -169,3 +169,41 @@ Confirm MCA is still GREEN after reservation_saas attempt.
 
 If blueprint validation fails, check `lib/validation/blueprint.ts` first.
 The blueprint schema must accommodate all templates' valid output values.
+
+---
+
+## GREEN Achieved
+
+reservation_saas は full GREEN を達成済み。
+
+- First GREEN project ID: `5d53dc3b-b072-40b2-ab18-61d3b57931e7`
+- All 6 generation steps: completed
+- Quality: lint=passed, typecheck=passed, playwright=passed
+- Fix required: commission_type "none" のみ
+
+### Baseline & Regression
+
+baseline と regression インフラが整備済み:
+
+- Baseline 文書: `docs/baselines/reservation-saas-green-v1.md`
+- Baseline JSON: `tests/baselines/reservation-saas-green-v1.json`（正本）
+- Regression script: `scripts/run-rsv-regression.sh`
+- Compare script: `scripts/compare-rsv-baseline.sh`
+- Tag: `baseline/rsv-green-v1`
+
+### 実行方法
+
+```bash
+# Full regression (create → generate → quality → compare)
+npm run regression:rsv
+
+# Compare only (既存 project に対して)
+bash scripts/compare-rsv-baseline.sh <project-id>
+```
+
+### 壊れた時
+
+1. まず `bash scripts/compare-rsv-baseline.sh <project-id>` で差分を確認
+2. generation steps の FAIL を特定
+3. quality checks の FAIL を特定
+4. `docs/baselines/reservation-saas-green-v1.md` の "Where to Look" セクション参照
