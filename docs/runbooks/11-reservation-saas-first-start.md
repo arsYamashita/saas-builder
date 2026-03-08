@@ -153,3 +153,19 @@ npm run regression:mca
 ```
 
 Confirm MCA is still GREEN after reservation_saas attempt.
+
+---
+
+## Known First-Run Failures
+
+### Failure #1: affiliate.commission_type validation
+
+- Symptom: blueprint validation fails with `commission_type "none"` not in enum
+- Cause: reservation_saas has `affiliate.enabled: false`, AI returns `commission_type: "none"`
+- Fix: add `"none"` to `blueprintAffiliateSchema.commission_type` enum in `lib/validation/blueprint.ts`
+- MCA impact: none (MCA uses "fixed", "percentage", or "configurable")
+
+### General Rule
+
+If blueprint validation fails, check `lib/validation/blueprint.ts` first.
+The blueprint schema must accommodate all templates' valid output values.
