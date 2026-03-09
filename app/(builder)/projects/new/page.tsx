@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { defaultProjectFormValues } from "./defaultValues";
 import { projectFormSchema } from "@/lib/validation/project-form";
 import { membershipContentAffiliatePreset } from "@/lib/templates/membership-content-affiliate";
@@ -11,6 +11,12 @@ import {
   getCatalogEntry,
 } from "@/lib/templates/template-catalog";
 import { getRecommendations } from "@/lib/templates/template-recommendation";
+import {
+  INTAKE_QUESTIONS,
+  DEFAULT_INTAKE_ANSWERS,
+  intakeToFormHints,
+  type IntakeAnswers,
+} from "@/lib/projects/project-intake-questions";
 
 const PRESET_MAP: Record<string, Record<string, unknown>> = {
   membership_content_affiliate: membershipContentAffiliatePreset,
@@ -21,6 +27,8 @@ const PRESET_MAP: Record<string, Record<string, unknown>> = {
 export default function NewProjectPage() {
   const [form, setForm] = useState(defaultProjectFormValues);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [intake, setIntake] = useState<IntakeAnswers>(DEFAULT_INTAKE_ANSWERS);
+  const [showDetails, setShowDetails] = useState(false);
 
   const selectedCatalog = getCatalogEntry(form.templateKey);
 
@@ -44,6 +52,20 @@ export default function NewProjectPage() {
     ]
   );
 
+  const applyIntake = useCallback(
+    (updated: IntakeAnswers) => {
+      setIntake(updated);
+      const hints = intakeToFormHints(updated);
+      setForm((prev) => ({ ...prev, ...hints }));
+    },
+    []
+  );
+
+  const handleIntakeChange = (id: string, value: string | boolean) => {
+    const updated = { ...intake, [id]: value };
+    applyIntake(updated);
+  };
+
   const handleTemplateChange = (templateKey: string) => {
     const preset = PRESET_MAP[templateKey];
     if (preset) {
@@ -65,6 +87,7 @@ export default function NewProjectPage() {
         fieldErrors[key] = issue.message;
       }
       setErrors(fieldErrors);
+      setShowDetails(true);
       return;
     }
 
@@ -90,84 +113,73 @@ export default function NewProjectPage() {
       <h1 className="text-2xl font-bold mb-6">新規プロジェクト作成</h1>
 
       <form onSubmit={handleSubmit} className="space-y-8">
-        <section className="space-y-4">
-          <h2 className="text-lg font-semibold">基本情報</h2>
+        {/* --- かんたん入力 --- */}
+        <section className="space-y-4 border rounded-lg p-5 bg-slate-50">
+          <h2 className="text-lg font-semibold">かんたん入力</h2>
+          <p className="text-sm text-gray-500">
+            質問に答えると、下のフォームが自動で埋まります
+          </p>
 
-          <div>
-            <label className="block mb-1">サービス名</label>
-            <input
-              className="w-full border rounded px-3 py-2"
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-            />
-            {errors.name && (
-              <p className="text-red-500 text-sm">{errors.name}</p>
-            )}
-          </div>
+          {INTAKE_QUESTIONS.map((q) => (
+            <div key={q.id}>
+              <label className="block mb-1 font-medium text-sm">
+                {q.question}
+              </label>
+              <p className="text-xs text-gray-400 mb-1">{q.helpText}</p>
 
-          <div>
-            <label className="block mb-1">サービス概要</label>
-            <textarea
-              className="w-full border rounded px-3 py-2 min-h-28"
-              value={form.summary}
-              onChange={(e) => setForm({ ...form, summary: e.target.value })}
-            />
-          </div>
+              {q.type === "text" && (
+                <input
+                  className="w-full border rounded px-3 py-2 text-sm"
+                  value={(intake[q.id as keyof IntakeAnswers] as string) || ""}
+                  onChange={(e) => handleIntakeChange(q.id, e.target.value)}
+                  placeholder={q.helpText}
+                />
+              )}
 
-          <div>
-            <label className="block mb-1">ターゲットユーザー</label>
-            <input
-              className="w-full border rounded px-3 py-2"
-              value={form.targetUsers}
-              onChange={(e) =>
-                setForm({ ...form, targetUsers: e.target.value })
-              }
-            />
-          </div>
+              {q.type === "select" && q.options && (
+                <select
+                  className="w-full border rounded px-3 py-2 text-sm"
+                  value={(intake[q.id as keyof IntakeAnswers] as string) || ""}
+                  onChange={(e) => handleIntakeChange(q.id, e.target.value)}
+                >
+                  <option value="">選択してください</option>
+                  {q.options.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              )}
 
-          <div>
-            <label className="block mb-1">解決したい課題</label>
-            <textarea
-              className="w-full border rounded px-3 py-2"
-              value={form.problemToSolve}
-              onChange={(e) =>
-                setForm({ ...form, problemToSolve: e.target.value })
-              }
-            />
-          </div>
-
-          <div>
-            <label className="block mb-1">参考サービス</label>
-            <input
-              className="w-full border rounded px-3 py-2"
-              value={form.referenceServices}
-              onChange={(e) =>
-                setForm({ ...form, referenceServices: e.target.value })
-              }
-            />
-          </div>
-
-          <div>
-            <label className="block mb-1">ブランドトーン</label>
-            <select
-              className="w-full border rounded px-3 py-2"
-              value={form.brandTone}
-              onChange={(e) =>
-                setForm({ ...form, brandTone: e.target.value as any })
-              }
-            >
-              <option value="modern">Modern</option>
-              <option value="minimal">Minimal</option>
-              <option value="luxury">Luxury</option>
-              <option value="friendly">Friendly</option>
-              <option value="professional">Professional</option>
-              <option value="playful">Playful</option>
-            </select>
-          </div>
+              {q.type === "boolean" && (
+                <div className="flex gap-4 text-sm">
+                  <label className="flex items-center gap-1.5">
+                    <input
+                      type="radio"
+                      name={q.id}
+                      checked={intake[q.id as keyof IntakeAnswers] === true}
+                      onChange={() => handleIntakeChange(q.id, true)}
+                    />
+                    はい
+                  </label>
+                  <label className="flex items-center gap-1.5">
+                    <input
+                      type="radio"
+                      name={q.id}
+                      checked={intake[q.id as keyof IntakeAnswers] !== true}
+                      onChange={() => handleIntakeChange(q.id, false)}
+                    />
+                    いいえ
+                  </label>
+                </div>
+              )}
+            </div>
+          ))}
         </section>
 
+        {/* --- テンプレ選択 + recommendation --- */}
         <section className="space-y-4">
-          <h2 className="text-lg font-semibold">機能要件</h2>
+          <h2 className="text-lg font-semibold">テンプレート</h2>
 
           <div>
             <label className="block mb-1">テンプレカテゴリ</label>
@@ -266,58 +278,160 @@ export default function NewProjectPage() {
               </div>
             </div>
           )}
+        </section>
 
+        {/* --- サービス名（常に表示） --- */}
+        <section className="space-y-4">
           <div>
-            <label className="block mb-1">課金方式</label>
-            <select
-              className="w-full border rounded px-3 py-2"
-              value={form.billingModel}
-              onChange={(e) =>
-                setForm({ ...form, billingModel: e.target.value as any })
-              }
-            >
-              <option value="subscription">サブスクリプション</option>
-              <option value="one_time">買い切り</option>
-              <option value="hybrid">ハイブリッド</option>
-              <option value="none">なし</option>
-            </select>
-          </div>
-
-          <label className="flex items-center gap-2">
+            <label className="block mb-1">サービス名</label>
             <input
-              type="checkbox"
-              checked={form.affiliateEnabled}
-              onChange={(e) =>
-                setForm({ ...form, affiliateEnabled: e.target.checked })
-              }
-            />
-            アフィリエイトを有効化
-          </label>
-
-          <div>
-            <label className="block mb-1">優先度</label>
-            <select
               className="w-full border rounded px-3 py-2"
-              value={form.priority}
-              onChange={(e) =>
-                setForm({ ...form, priority: e.target.value as any })
-              }
-            >
-              <option value="high">高</option>
-              <option value="medium">中</option>
-              <option value="low">低</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block mb-1">備考</label>
-            <textarea
-              className="w-full border rounded px-3 py-2"
-              value={form.notes}
-              onChange={(e) => setForm({ ...form, notes: e.target.value })}
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
             />
+            {errors.name && (
+              <p className="text-red-500 text-sm">{errors.name}</p>
+            )}
           </div>
         </section>
+
+        {/* --- 詳細設定（トグル） --- */}
+        <div>
+          <button
+            type="button"
+            className="text-sm text-gray-500 underline hover:text-gray-700"
+            onClick={() => setShowDetails(!showDetails)}
+          >
+            {showDetails ? "詳細設定を閉じる" : "詳細設定を開く"}
+          </button>
+        </div>
+
+        {showDetails && (
+          <>
+            <section className="space-y-4">
+              <h2 className="text-lg font-semibold">基本情報（詳細）</h2>
+
+              <div>
+                <label className="block mb-1">サービス概要</label>
+                <textarea
+                  className="w-full border rounded px-3 py-2 min-h-28"
+                  value={form.summary}
+                  onChange={(e) =>
+                    setForm({ ...form, summary: e.target.value })
+                  }
+                />
+              </div>
+
+              <div>
+                <label className="block mb-1">ターゲットユーザー</label>
+                <input
+                  className="w-full border rounded px-3 py-2"
+                  value={form.targetUsers}
+                  onChange={(e) =>
+                    setForm({ ...form, targetUsers: e.target.value })
+                  }
+                />
+              </div>
+
+              <div>
+                <label className="block mb-1">解決したい課題</label>
+                <textarea
+                  className="w-full border rounded px-3 py-2"
+                  value={form.problemToSolve}
+                  onChange={(e) =>
+                    setForm({ ...form, problemToSolve: e.target.value })
+                  }
+                />
+              </div>
+
+              <div>
+                <label className="block mb-1">参考サービス</label>
+                <input
+                  className="w-full border rounded px-3 py-2"
+                  value={form.referenceServices}
+                  onChange={(e) =>
+                    setForm({ ...form, referenceServices: e.target.value })
+                  }
+                />
+              </div>
+
+              <div>
+                <label className="block mb-1">ブランドトーン</label>
+                <select
+                  className="w-full border rounded px-3 py-2"
+                  value={form.brandTone}
+                  onChange={(e) =>
+                    setForm({ ...form, brandTone: e.target.value as any })
+                  }
+                >
+                  <option value="modern">Modern</option>
+                  <option value="minimal">Minimal</option>
+                  <option value="luxury">Luxury</option>
+                  <option value="friendly">Friendly</option>
+                  <option value="professional">Professional</option>
+                  <option value="playful">Playful</option>
+                </select>
+              </div>
+            </section>
+
+            <section className="space-y-4">
+              <h2 className="text-lg font-semibold">機能要件（詳細）</h2>
+
+              <div>
+                <label className="block mb-1">課金方式</label>
+                <select
+                  className="w-full border rounded px-3 py-2"
+                  value={form.billingModel}
+                  onChange={(e) =>
+                    setForm({ ...form, billingModel: e.target.value as any })
+                  }
+                >
+                  <option value="subscription">サブスクリプション</option>
+                  <option value="one_time">買い切り</option>
+                  <option value="hybrid">ハイブリッド</option>
+                  <option value="none">なし</option>
+                </select>
+              </div>
+
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={form.affiliateEnabled}
+                  onChange={(e) =>
+                    setForm({ ...form, affiliateEnabled: e.target.checked })
+                  }
+                />
+                アフィリエイトを有効化
+              </label>
+
+              <div>
+                <label className="block mb-1">優先度</label>
+                <select
+                  className="w-full border rounded px-3 py-2"
+                  value={form.priority}
+                  onChange={(e) =>
+                    setForm({ ...form, priority: e.target.value as any })
+                  }
+                >
+                  <option value="high">高</option>
+                  <option value="medium">中</option>
+                  <option value="low">低</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block mb-1">備考</label>
+                <textarea
+                  className="w-full border rounded px-3 py-2"
+                  value={form.notes}
+                  onChange={(e) =>
+                    setForm({ ...form, notes: e.target.value })
+                  }
+                />
+              </div>
+            </section>
+          </>
+        )}
 
         <button
           type="submit"
