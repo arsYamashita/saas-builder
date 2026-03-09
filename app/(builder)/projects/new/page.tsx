@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { defaultProjectFormValues } from "./defaultValues";
 import { projectFormSchema } from "@/lib/validation/project-form";
 import { membershipContentAffiliatePreset } from "@/lib/templates/membership-content-affiliate";
@@ -10,6 +10,7 @@ import {
   TEMPLATE_CATALOG,
   getCatalogEntry,
 } from "@/lib/templates/template-catalog";
+import { getRecommendations } from "@/lib/templates/template-recommendation";
 
 const PRESET_MAP: Record<string, Record<string, unknown>> = {
   membership_content_affiliate: membershipContentAffiliatePreset,
@@ -22,6 +23,26 @@ export default function NewProjectPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const selectedCatalog = getCatalogEntry(form.templateKey);
+
+  const recommendations = useMemo(
+    () =>
+      getRecommendations({
+        summary: form.summary || "",
+        targetUsers: form.targetUsers || "",
+        requiredFeatures: form.requiredFeatures || [],
+        managedData: form.managedData || [],
+        billingModel: form.billingModel || "none",
+        affiliateEnabled: form.affiliateEnabled ?? false,
+      }),
+    [
+      form.summary,
+      form.targetUsers,
+      form.requiredFeatures,
+      form.managedData,
+      form.billingModel,
+      form.affiliateEnabled,
+    ]
+  );
 
   const handleTemplateChange = (templateKey: string) => {
     const preset = PRESET_MAP[templateKey];
@@ -79,7 +100,9 @@ export default function NewProjectPage() {
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
             />
-            {errors.name && <p className="text-red-500 text-sm">{errors.name}</p>}
+            {errors.name && (
+              <p className="text-red-500 text-sm">{errors.name}</p>
+            )}
           </div>
 
           <div>
@@ -96,7 +119,9 @@ export default function NewProjectPage() {
             <input
               className="w-full border rounded px-3 py-2"
               value={form.targetUsers}
-              onChange={(e) => setForm({ ...form, targetUsers: e.target.value })}
+              onChange={(e) =>
+                setForm({ ...form, targetUsers: e.target.value })
+              }
             />
           </div>
 
@@ -161,6 +186,52 @@ export default function NewProjectPage() {
             </select>
           </div>
 
+          {recommendations.length > 0 && (
+            <div className="border border-blue-200 rounded p-3 bg-blue-50 space-y-2 text-sm">
+              <p className="font-medium text-blue-800">
+                おすすめテンプレート
+              </p>
+              {recommendations.map((rec, idx) => {
+                const catalog = getCatalogEntry(rec.templateKey);
+                const label = catalog?.label ?? rec.templateKey;
+                const isSelected = form.templateKey === rec.templateKey;
+                return (
+                  <div
+                    key={rec.templateKey}
+                    className={`flex items-start gap-2 ${idx === 0 ? "" : "opacity-70"}`}
+                  >
+                    <span className="shrink-0 font-medium text-blue-700">
+                      {idx + 1}.
+                    </span>
+                    <div className="flex-1">
+                      <span className="font-medium">{label}</span>
+                      {isSelected && (
+                        <span className="ml-1.5 text-xs text-green-700">
+                          (選択中)
+                        </span>
+                      )}
+                      <span className="ml-1.5 text-xs text-blue-600">
+                        スコア: {rec.score}
+                      </span>
+                      {!isSelected && (
+                        <button
+                          type="button"
+                          className="ml-2 text-xs text-blue-600 underline hover:text-blue-800"
+                          onClick={() => handleTemplateChange(rec.templateKey)}
+                        >
+                          選択
+                        </button>
+                      )}
+                      <p className="text-gray-600 text-xs mt-0.5">
+                        {rec.reasons.join(" / ")}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           {selectedCatalog && (
             <div className="border rounded p-4 bg-gray-50 space-y-2 text-sm">
               <div className="flex items-center gap-2">
@@ -169,7 +240,9 @@ export default function NewProjectPage() {
                   {selectedCatalog.statusBadge}
                 </span>
               </div>
-              <p className="text-gray-700">{selectedCatalog.shortDescription}</p>
+              <p className="text-gray-700">
+                {selectedCatalog.shortDescription}
+              </p>
               <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-gray-600">
                 <div>
                   <span className="font-medium">対象:</span>{" "}
