@@ -155,3 +155,41 @@ npm run regression:rsv
 ```
 
 Confirm both are still GREEN after simple_crm_saas attempt.
+
+---
+
+## GREEN Achieved
+
+simple_crm_saas は full GREEN を達成済み。
+
+- First GREEN project ID: `ea3dc501-b7aa-4661-8cc3-76a56a7406d3`
+- All 6 generation steps: completed
+- Quality: lint=passed, typecheck=passed, playwright=passed
+- Fix required: project form validation enum のみ
+
+### Baseline & Regression
+
+baseline と regression インフラが整備済み:
+
+- Baseline 文書: `docs/baselines/simple-crm-green-v1.md`
+- Baseline JSON: `tests/baselines/simple-crm-green-v1.json`（正本）
+- Regression script: `scripts/run-crm-regression.sh`
+- Compare script: `scripts/compare-crm-baseline.sh`
+- Tag: `baseline/crm-green-v1`
+
+### 実行方法
+
+```bash
+# Full regression (create → generate → quality → compare)
+npm run regression:crm
+
+# Compare only (既存 project に対して)
+bash scripts/compare-crm-baseline.sh <project-id>
+```
+
+### 壊れた時
+
+1. まず `bash scripts/compare-crm-baseline.sh <project-id>` で差分を確認
+2. generation steps の FAIL を特定
+3. quality checks の FAIL を特定
+4. `docs/baselines/simple-crm-green-v1.md` の "Where to Look" セクション参照

@@ -10,7 +10,8 @@
     "test": "playwright test",
     "test:ui": "playwright test --ui",
     "regression:mca": "bash scripts/run-mca-regression.sh",
-    "regression:rsv": "bash scripts/run-rsv-regression.sh"
+    "regression:rsv": "bash scripts/run-rsv-regression.sh",
+    "regression:crm": "bash scripts/run-crm-regression.sh"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.30.0",
