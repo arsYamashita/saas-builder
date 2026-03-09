@@ -6,10 +6,31 @@ import { projectFormSchema } from "@/lib/validation/project-form";
 import { membershipContentAffiliatePreset } from "@/lib/templates/membership-content-affiliate";
 import { reservationSaasPreset } from "@/lib/templates/reservation-saas";
 import { simpleCrmSaasPreset } from "@/lib/templates/simple-crm-saas";
+import {
+  TEMPLATE_CATALOG,
+  getCatalogEntry,
+} from "@/lib/templates/template-catalog";
+
+const PRESET_MAP: Record<string, Record<string, unknown>> = {
+  membership_content_affiliate: membershipContentAffiliatePreset,
+  reservation_saas: reservationSaasPreset,
+  simple_crm_saas: simpleCrmSaasPreset,
+};
 
 export default function NewProjectPage() {
   const [form, setForm] = useState(defaultProjectFormValues);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const selectedCatalog = getCatalogEntry(form.templateKey);
+
+  const handleTemplateChange = (templateKey: string) => {
+    const preset = PRESET_MAP[templateKey];
+    if (preset) {
+      setForm((prev) => ({ ...prev, ...preset, templateKey }));
+    } else {
+      setForm((prev) => ({ ...prev, templateKey }));
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -128,48 +149,50 @@ export default function NewProjectPage() {
             <select
               className="w-full border rounded px-3 py-2"
               value={form.templateKey}
-              onChange={(e) => {
-                const templateKey = e.target.value as any;
-
-                if (templateKey === "membership_content_affiliate") {
-                  setForm((prev) => ({
-                    ...prev,
-                    ...membershipContentAffiliatePreset,
-                    templateKey,
-                  }));
-                  return;
-                }
-
-                if (templateKey === "reservation_saas") {
-                  setForm((prev) => ({
-                    ...prev,
-                    ...reservationSaasPreset,
-                    templateKey,
-                  }));
-                  return;
-                }
-
-                if (templateKey === "simple_crm_saas") {
-                  setForm((prev) => ({
-                    ...prev,
-                    ...simpleCrmSaasPreset,
-                    templateKey,
-                  }));
-                  return;
-                }
-
-                setForm({ ...form, templateKey });
-              }}
+              onChange={(e) => handleTemplateChange(e.target.value)}
             >
-              <option value="membership_content_affiliate">
-                会員サイト + コンテンツ販売 + アフィリエイト
-              </option>
-              <option value="reservation_saas">予約管理SaaS</option>
-              <option value="simple_crm_saas">シンプルCRM SaaS</option>
+              {TEMPLATE_CATALOG.map((t) => (
+                <option key={t.templateKey} value={t.templateKey}>
+                  {t.label}
+                </option>
+              ))}
               <option value="online_salon">オンラインサロン</option>
               <option value="custom">カスタム</option>
             </select>
           </div>
+
+          {selectedCatalog && (
+            <div className="border rounded p-4 bg-gray-50 space-y-2 text-sm">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold">{selectedCatalog.label}</span>
+                <span className="inline-block px-1.5 py-0.5 text-xs font-medium rounded bg-green-100 text-green-800">
+                  {selectedCatalog.statusBadge}
+                </span>
+              </div>
+              <p className="text-gray-700">{selectedCatalog.shortDescription}</p>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-gray-600">
+                <div>
+                  <span className="font-medium">対象:</span>{" "}
+                  {selectedCatalog.targetUsers}
+                </div>
+                <div>
+                  <span className="font-medium">推奨:</span>{" "}
+                  {selectedCatalog.recommendedFor}
+                </div>
+                <div>
+                  <span className="font-medium">主要エンティティ:</span>{" "}
+                  {selectedCatalog.coreEntities.join(", ")}
+                </div>
+                <div>
+                  <span className="font-medium">課金:</span>{" "}
+                  {selectedCatalog.includesBilling ? "あり" : "なし"}
+                  {" / "}
+                  <span className="font-medium">アフィリエイト:</span>{" "}
+                  {selectedCatalog.includesAffiliate ? "あり" : "なし"}
+                </div>
+              </div>
+            </div>
+          )}
 
           <div>
             <label className="block mb-1">課金方式</label>
