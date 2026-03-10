@@ -43,6 +43,28 @@ Template Registry（prompt routing 用）とは別のレイヤー:
 - テンプレごとのスクリーンショットプレビュー
 - catalog を registry と統合（manifest に UI メタデータを追加）
 
+## Builder UI Flow の完成状況
+
+Template Selection UX を起点に、以下の一連フローが完成した:
+
+```
+New Project:
+  intake → recommendation → draft preview → draft apply → AI rewrite
+  → review → validation summary → template guidance → submit
+
+Project Detail:
+  blueprint preview → blueprint diff → full generate
+  → generation progress → quality progress → generated project summary
+```
+
+関連 helper は `lib/projects/` に集約。確認手順は `docs/runbooks/13-builder-ui-flow-checklist.md`。
+
+### 次の段階
+
+- Generated files diff（ファイル名レベルの added/removed）
+- Blueprint approval workflow
+- Generated files compare（内容レベル）
+
 ## まだやらないこと
 
 - online_salon / custom の catalog 登録

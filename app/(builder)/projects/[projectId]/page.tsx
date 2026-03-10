@@ -1,8 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import type { ImplementationRunType } from "@/types/implementation-run";
+import { extractBlueprintSummary } from "@/lib/projects/blueprint-preview";
+import { computeBlueprintDiff } from "@/lib/projects/blueprint-diff";
+import { toGenerationProgress } from "@/lib/projects/generation-progress";
+import { toQualityProgress } from "@/lib/projects/quality-progress";
+import { buildGeneratedProjectSummary } from "@/lib/projects/generated-project-summary";
 
 type ImplementationRun = {
   id: string;
@@ -102,24 +107,60 @@ export default function ProjectDetailPage() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [pollingTarget, setPollingTarget] = useState<"generation" | "quality" | null>(null);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  async function fetchProject() {
+  const fetchProject = useCallback(async () => {
     try {
       const res = await fetch(`/api/projects/${projectId}`);
       if (!res.ok) throw new Error("Failed to fetch project");
       const json = await res.json();
       setData(json);
+      return json as ProjectData;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
+      return null;
     } finally {
       setLoading(false);
     }
-  }
+  }, [projectId]);
+
+  const stopPolling = useCallback(() => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+    setPollingTarget(null);
+  }, []);
+
+  const startPolling = useCallback(
+    (target: "generation" | "quality") => {
+      stopPolling();
+      setPollingTarget(target);
+      pollingRef.current = setInterval(async () => {
+        const result = await fetchProject();
+        if (!result) return;
+
+        if (target === "generation") {
+          const latest = result.generationRuns?.[0];
+          if (!latest || latest.status === "completed" || latest.status === "failed") {
+            stopPolling();
+          }
+        } else {
+          const latest = result.qualityRuns?.[0];
+          if (!latest || latest.status === "passed" || latest.status === "failed") {
+            stopPolling();
+          }
+        }
+      }, 3000);
+    },
+    [fetchProject, stopPolling]
+  );
 
   useEffect(() => {
     fetchProject();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId]);
+    return () => stopPolling();
+  }, [fetchProject, stopPolling]);
 
   async function handleGenerate(
     endpoint: string,
@@ -127,6 +168,13 @@ export default function ProjectDetailPage() {
   ) {
     setGenerating(label);
     setError(null);
+
+    if (endpoint === "generate-template") {
+      startPolling("generation");
+    } else if (endpoint === "run-quality-gate") {
+      startPolling("quality");
+    }
+
     try {
       const res = await fetch(
         `/api/projects/${projectId}/${endpoint}`,
@@ -141,6 +189,7 @@ export default function ProjectDetailPage() {
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
       setGenerating(null);
+      stopPolling();
     }
   }
 
@@ -213,6 +262,107 @@ export default function ProjectDetailPage() {
         </div>
       </section>
 
+      {/* Generation Progress (active run) */}
+      {(() => {
+        const latestRun = data.generationRuns?.[0];
+        if (!latestRun) return null;
+        const progress = toGenerationProgress(latestRun);
+        if (!progress.isActive && pollingTarget !== "generation" && generating !== "Generate Full Template") return null;
+        return (
+          <section className="border-2 border-blue-300 rounded-xl p-4 space-y-3 bg-blue-50">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <h2 className="font-semibold">Generation Progress</h2>
+                <span
+                  className={`inline-block px-2 py-0.5 text-xs font-medium rounded ${
+                    progress.overallStatus === "completed"
+                      ? "bg-green-100 text-green-800"
+                      : progress.overallStatus === "failed"
+                      ? "bg-red-100 text-red-800"
+                      : "bg-blue-100 text-blue-800"
+                  }`}
+                >
+                  {progress.overallStatus}
+                </span>
+              </div>
+              <span className="text-xs text-gray-500">
+                {progress.completedCount} / {progress.totalCount} steps
+              </span>
+            </div>
+
+            {/* Progress bar */}
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div
+                className={`h-2 rounded-full transition-all duration-500 ${
+                  progress.overallStatus === "failed"
+                    ? "bg-red-500"
+                    : progress.overallStatus === "completed"
+                    ? "bg-green-500"
+                    : "bg-blue-500"
+                }`}
+                style={{
+                  width: `${
+                    progress.totalCount > 0
+                      ? (progress.completedCount / progress.totalCount) * 100
+                      : 0
+                  }%`,
+                }}
+              />
+            </div>
+
+            {/* Steps */}
+            <div className="grid gap-1.5">
+              {progress.steps.map((step) => (
+                <div
+                  key={step.key}
+                  className="flex items-center justify-between text-sm bg-white rounded px-3 py-2"
+                >
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`inline-block w-2 h-2 rounded-full ${
+                        step.status === "completed"
+                          ? "bg-green-500"
+                          : step.status === "running"
+                          ? "bg-blue-500 animate-pulse"
+                          : step.status === "failed"
+                          ? "bg-red-500"
+                          : "bg-gray-300"
+                      }`}
+                    />
+                    <span
+                      className={
+                        step.status === "running" ? "font-medium" : ""
+                      }
+                    >
+                      {step.label}
+                    </span>
+                  </div>
+                  <span
+                    className={`text-xs ${
+                      step.status === "completed"
+                        ? "text-green-600"
+                        : step.status === "running"
+                        ? "text-blue-600 font-medium"
+                        : step.status === "failed"
+                        ? "text-red-600"
+                        : "text-gray-400"
+                    }`}
+                  >
+                    {step.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {progress.errorMessage && (
+              <pre className="bg-red-50 border border-red-200 p-3 rounded text-xs text-red-700 whitespace-pre-wrap overflow-auto max-h-32">
+                {progress.errorMessage}
+              </pre>
+            )}
+          </section>
+        );
+      })()}
+
       {/* Generation Runs */}
       <section className="border rounded-xl p-4">
         <h2 className="font-semibold mb-3">Generation Runs</h2>
@@ -273,7 +423,12 @@ export default function ProjectDetailPage() {
       {/* Generate Blueprint */}
       <section className="border rounded-xl p-4 space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="font-semibold">Blueprint (Gemini)</h2>
+          <div>
+            <h2 className="font-semibold">Blueprint (Gemini)</h2>
+            <p className="text-xs text-gray-500">
+              Full Generation の前に Blueprint だけ生成して内容を確認できます
+            </p>
+          </div>
           <button
             onClick={() =>
               handleGenerate("generate-blueprint", "Generate Blueprint")
@@ -289,49 +444,231 @@ export default function ProjectDetailPage() {
 
         {!latestBlueprint ? (
           <p className="text-sm text-gray-500">
-            まだBlueprintは生成されていません。
+            まだ Blueprint は生成されていません。
           </p>
         ) : (
-          <div className="space-y-4 text-sm">
-            <div>
-              <h3 className="font-medium">Product Summary</h3>
-              <pre className="bg-gray-50 p-3 rounded overflow-auto max-h-48">
-                {JSON.stringify(latestBlueprint.prd_json, null, 2)}
-              </pre>
-            </div>
-            <div>
-              <h3 className="font-medium">Entities</h3>
-              <pre className="bg-gray-50 p-3 rounded overflow-auto max-h-48">
-                {JSON.stringify(latestBlueprint.entities_json, null, 2)}
-              </pre>
-            </div>
-            <div>
-              <h3 className="font-medium">Screens</h3>
-              <pre className="bg-gray-50 p-3 rounded overflow-auto max-h-48">
-                {JSON.stringify(latestBlueprint.screens_json, null, 2)}
-              </pre>
-            </div>
-            <div>
-              <h3 className="font-medium">Roles</h3>
-              <pre className="bg-gray-50 p-3 rounded overflow-auto max-h-48">
-                {JSON.stringify(latestBlueprint.roles_json, null, 2)}
-              </pre>
-            </div>
-            <div>
-              <h3 className="font-medium">Billing</h3>
-              <pre className="bg-gray-50 p-3 rounded overflow-auto max-h-48">
-                {JSON.stringify(latestBlueprint.billing_json, null, 2)}
-              </pre>
-            </div>
-            <div>
-              <h3 className="font-medium">Affiliate</h3>
-              <pre className="bg-gray-50 p-3 rounded overflow-auto max-h-48">
-                {JSON.stringify(latestBlueprint.affiliate_json, null, 2)}
-              </pre>
-            </div>
-          </div>
+          (() => {
+            const bp = extractBlueprintSummary(latestBlueprint);
+            return (
+              <div className="space-y-4 text-sm">
+                {/* Product Summary */}
+                <div className="border rounded-lg p-4 bg-blue-50 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold text-blue-900">Product Summary</h3>
+                    <span className="text-xs text-blue-600">v{bp.version}</span>
+                  </div>
+                  <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+                    <dt className="font-medium text-blue-800">Name</dt>
+                    <dd>{bp.product.name || <span className="text-gray-400 italic">未定</span>}</dd>
+                    <dt className="font-medium text-blue-800">Problem</dt>
+                    <dd>{bp.product.problem || <span className="text-gray-400 italic">未定</span>}</dd>
+                    <dt className="font-medium text-blue-800">Target</dt>
+                    <dd>{bp.product.target || <span className="text-gray-400 italic">未定</span>}</dd>
+                    <dt className="font-medium text-blue-800">Category</dt>
+                    <dd>{bp.product.category || <span className="text-gray-400 italic">未定</span>}</dd>
+                  </dl>
+                  <div className="flex gap-3 pt-1 text-xs">
+                    <span className={bp.billingEnabled ? "text-green-700 font-medium" : "text-gray-400"}>
+                      Billing: {bp.billingEnabled ? "ON" : "OFF"}
+                    </span>
+                    <span className={bp.affiliateEnabled ? "text-green-700 font-medium" : "text-gray-400"}>
+                      Affiliate: {bp.affiliateEnabled ? "ON" : "OFF"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Entities */}
+                <div>
+                  <h3 className="font-medium mb-1">Entities ({bp.entities.length})</h3>
+                  {bp.entities.length === 0 ? (
+                    <p className="text-gray-400 italic">なし</p>
+                  ) : (
+                    <div className="grid gap-1">
+                      {bp.entities.map((e, i) => (
+                        <div key={i} className="flex gap-2 bg-gray-50 rounded px-3 py-1.5">
+                          <span className="font-medium shrink-0">{e.name}</span>
+                          {e.description && (
+                            <span className="text-gray-500 truncate">{e.description}</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Roles */}
+                <div>
+                  <h3 className="font-medium mb-1">Roles ({bp.roles.length})</h3>
+                  {bp.roles.length === 0 ? (
+                    <p className="text-gray-400 italic">なし</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {bp.roles.map((r, i) => (
+                        <span key={i} className="inline-block bg-purple-50 text-purple-800 rounded px-2.5 py-1 text-xs font-medium">
+                          {r.name}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Screens */}
+                <div>
+                  <h3 className="font-medium mb-1">Screens ({bp.screens.length})</h3>
+                  {bp.screens.length === 0 ? (
+                    <p className="text-gray-400 italic">なし</p>
+                  ) : (
+                    <div className="grid gap-1">
+                      {bp.screens.map((s, i) => (
+                        <div key={i} className="flex items-center gap-2 bg-gray-50 rounded px-3 py-1.5">
+                          <span className="font-medium shrink-0">{s.name}</span>
+                          {s.path && (
+                            <code className="text-xs text-gray-500">{s.path}</code>
+                          )}
+                          {s.role_access.length > 0 && (
+                            <span className="text-xs text-gray-400 ml-auto">
+                              {s.role_access.join(", ")}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Raw JSON (collapsible) */}
+                <details className="mt-2">
+                  <summary className="text-xs text-gray-500 cursor-pointer hover:text-gray-700">
+                    Raw JSON を表示
+                  </summary>
+                  <div className="mt-2 space-y-2">
+                    {(["prd_json", "entities_json", "screens_json", "roles_json", "billing_json", "affiliate_json"] as const).map((key) => (
+                      <div key={key}>
+                        <p className="text-xs font-medium text-gray-600">{key}</p>
+                        <pre className="bg-gray-50 p-2 rounded overflow-auto max-h-36 text-xs">
+                          {JSON.stringify(latestBlueprint[key], null, 2)}
+                        </pre>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              </div>
+            );
+          })()
         )}
       </section>
+
+      {/* Blueprint Diff */}
+      {(() => {
+        const diff = computeBlueprintDiff(data.blueprints ?? []);
+        if (!diff) return null;
+        return (
+          <section className="border rounded-xl p-4 space-y-3">
+            <h2 className="font-semibold">
+              Blueprint Diff{" "}
+              <span className="text-xs text-gray-400 font-normal">
+                v{diff.previousVersion} → v{diff.latestVersion}
+              </span>
+            </h2>
+
+            {!diff.hasAnyChange ? (
+              <p className="text-sm text-gray-500">前回との差分はありません</p>
+            ) : (
+              <div className="space-y-3 text-sm">
+                {/* Product field changes */}
+                {diff.changedFields.length > 0 && (
+                  <div>
+                    <h3 className="font-medium text-gray-700 mb-1">Product Summary</h3>
+                    <div className="space-y-1">
+                      {diff.changedFields.map((cf) => (
+                        <div key={cf.field} className="bg-gray-50 rounded px-3 py-1.5">
+                          <span className="font-medium">{cf.field}: </span>
+                          <span className="text-red-600 line-through">{cf.from || "(空)"}</span>
+                          <span className="mx-1.5 text-gray-400">→</span>
+                          <span className="text-green-700">{cf.to || "(空)"}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Entities */}
+                {(diff.addedEntities.length > 0 || diff.removedEntities.length > 0) && (
+                  <div>
+                    <h3 className="font-medium text-gray-700 mb-1">Entities</h3>
+                    <div className="flex flex-wrap gap-1.5">
+                      {diff.addedEntities.map((n) => (
+                        <span key={`+${n}`} className="inline-block bg-green-100 text-green-800 rounded px-2 py-0.5 text-xs">
+                          + {n}
+                        </span>
+                      ))}
+                      {diff.removedEntities.map((n) => (
+                        <span key={`-${n}`} className="inline-block bg-red-100 text-red-800 rounded px-2 py-0.5 text-xs">
+                          - {n}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Roles */}
+                {(diff.addedRoles.length > 0 || diff.removedRoles.length > 0) && (
+                  <div>
+                    <h3 className="font-medium text-gray-700 mb-1">Roles</h3>
+                    <div className="flex flex-wrap gap-1.5">
+                      {diff.addedRoles.map((n) => (
+                        <span key={`+${n}`} className="inline-block bg-green-100 text-green-800 rounded px-2 py-0.5 text-xs">
+                          + {n}
+                        </span>
+                      ))}
+                      {diff.removedRoles.map((n) => (
+                        <span key={`-${n}`} className="inline-block bg-red-100 text-red-800 rounded px-2 py-0.5 text-xs">
+                          - {n}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Screens */}
+                {(diff.addedScreens.length > 0 || diff.removedScreens.length > 0) && (
+                  <div>
+                    <h3 className="font-medium text-gray-700 mb-1">Screens</h3>
+                    <div className="flex flex-wrap gap-1.5">
+                      {diff.addedScreens.map((n) => (
+                        <span key={`+${n}`} className="inline-block bg-green-100 text-green-800 rounded px-2 py-0.5 text-xs">
+                          + {n}
+                        </span>
+                      ))}
+                      {diff.removedScreens.map((n) => (
+                        <span key={`-${n}`} className="inline-block bg-red-100 text-red-800 rounded px-2 py-0.5 text-xs">
+                          - {n}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Billing / Affiliate */}
+                {(diff.billingChanged || diff.affiliateChanged) && (
+                  <div className="flex gap-3">
+                    {diff.billingChanged && (
+                      <span className="text-xs bg-amber-100 text-amber-800 rounded px-2 py-0.5">
+                        Billing 変更あり
+                      </span>
+                    )}
+                    {diff.affiliateChanged && (
+                      <span className="text-xs bg-amber-100 text-amber-800 rounded px-2 py-0.5">
+                        Affiliate 変更あり
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
+        );
+      })()}
 
       {/* Claude Generation Buttons */}
       <section className="border rounded-xl p-4 space-y-4">
@@ -549,6 +886,112 @@ export default function ProjectDetailPage() {
         </div>
       </section>
 
+      {/* Quality Progress (active run) */}
+      {(() => {
+        const latestQr = data.qualityRuns?.[0];
+        if (!latestQr) return null;
+        const qp = toQualityProgress(latestQr);
+        if (!qp.isActive && pollingTarget !== "quality" && generating !== "Run Quality Gate") return null;
+        return (
+          <section className="border-2 border-orange-300 rounded-xl p-4 space-y-3 bg-orange-50">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <h2 className="font-semibold">Quality Gate Progress</h2>
+                <span
+                  className={`inline-block px-2 py-0.5 text-xs font-medium rounded ${
+                    qp.overallStatus === "passed"
+                      ? "bg-green-100 text-green-800"
+                      : qp.overallStatus === "failed"
+                      ? "bg-red-100 text-red-800"
+                      : "bg-orange-100 text-orange-800"
+                  }`}
+                >
+                  {qp.overallStatus}
+                </span>
+              </div>
+              <span className="text-xs text-gray-500">
+                {qp.passedCount} / {qp.totalCount} checks
+              </span>
+            </div>
+
+            {/* Progress bar */}
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div
+                className={`h-2 rounded-full transition-all duration-500 ${
+                  qp.overallStatus === "failed"
+                    ? "bg-red-500"
+                    : qp.overallStatus === "passed"
+                    ? "bg-green-500"
+                    : "bg-orange-500"
+                }`}
+                style={{
+                  width: `${
+                    qp.totalCount > 0
+                      ? (qp.passedCount / qp.totalCount) * 100
+                      : 0
+                  }%`,
+                }}
+              />
+            </div>
+
+            {/* Checks */}
+            <div className="grid gap-1.5">
+              {qp.checks.map((check) => (
+                <div key={check.key} className="bg-white rounded px-3 py-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`inline-block w-2 h-2 rounded-full ${
+                          check.status === "passed"
+                            ? "bg-green-500"
+                            : check.status === "running"
+                            ? "bg-orange-500 animate-pulse"
+                            : check.status === "failed" || check.status === "error"
+                            ? "bg-red-500"
+                            : "bg-gray-300"
+                        }`}
+                      />
+                      <span className={check.status === "running" ? "font-medium" : ""}>
+                        {check.label}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {check.durationMs != null && check.durationMs > 0 && (
+                        <span className="text-xs text-gray-400">
+                          {(check.durationMs / 1000).toFixed(1)}s
+                        </span>
+                      )}
+                      <span
+                        className={`text-xs ${
+                          check.status === "passed"
+                            ? "text-green-600"
+                            : check.status === "running"
+                            ? "text-orange-600 font-medium"
+                            : check.status === "failed" || check.status === "error"
+                            ? "text-red-600"
+                            : "text-gray-400"
+                        }`}
+                      >
+                        {check.status}
+                      </span>
+                    </div>
+                  </div>
+                  {check.errorPreview && (
+                    <pre className="mt-1.5 bg-red-50 p-2 rounded text-xs text-red-700 whitespace-pre-wrap overflow-auto max-h-24">
+                      {check.errorPreview}
+                    </pre>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {qp.summary && (
+              <p className="text-sm text-gray-700">{qp.summary}</p>
+            )}
+          </section>
+        );
+      })()}
+
       {/* Quality Runs */}
       <section className="border rounded-xl p-4">
         <h2 className="font-semibold mb-3">Quality Runs</h2>
@@ -640,6 +1083,135 @@ export default function ProjectDetailPage() {
           </div>
         )}
       </section>
+
+      {/* Generated Project Summary */}
+      {(() => {
+        const summary = buildGeneratedProjectSummary(data);
+        if (!summary.hasResults) return null;
+        return (
+          <section className="border rounded-xl p-4 space-y-4">
+            <h2 className="font-semibold">Generated Project Summary</h2>
+
+            {/* Status row */}
+            <div className="flex gap-3 flex-wrap">
+              {summary.generationStatus && (
+                <div
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium ${
+                    summary.generationStatus === "completed"
+                      ? "bg-green-100 text-green-800"
+                      : summary.generationStatus === "failed"
+                      ? "bg-red-100 text-red-800"
+                      : "bg-blue-100 text-blue-800"
+                  }`}
+                >
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      summary.generationStatus === "completed"
+                        ? "bg-green-500"
+                        : summary.generationStatus === "failed"
+                        ? "bg-red-500"
+                        : "bg-blue-500"
+                    }`}
+                  />
+                  Generation: {summary.generationStatus}
+                </div>
+              )}
+              {summary.qualityStatus && (
+                <div
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium ${
+                    summary.qualityStatus === "passed"
+                      ? "bg-green-100 text-green-800"
+                      : summary.qualityStatus === "failed"
+                      ? "bg-red-100 text-red-800"
+                      : "bg-orange-100 text-orange-800"
+                  }`}
+                >
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      summary.qualityStatus === "passed"
+                        ? "bg-green-500"
+                        : summary.qualityStatus === "failed"
+                        ? "bg-red-500"
+                        : "bg-orange-500"
+                    }`}
+                  />
+                  Quality: {summary.qualityStatus}
+                </div>
+              )}
+              {summary.generationFinishedAt && (
+                <span className="text-xs text-gray-400 self-center">
+                  {summary.generationFinishedAt}
+                </span>
+              )}
+            </div>
+
+            {/* Counts grid */}
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+              {[
+                { label: "Blueprints", count: summary.blueprintCount },
+                { label: "Impl Runs", count: summary.implementationRunCount },
+                { label: "Files", count: summary.generatedFileCount },
+              ].map((item) => (
+                <div
+                  key={item.label}
+                  className="border rounded-lg p-3 text-center"
+                >
+                  <div className="text-2xl font-bold text-gray-800">
+                    {item.count}
+                  </div>
+                  <div className="text-xs text-gray-500">{item.label}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* File type breakdown */}
+            {summary.generatedFileCount > 0 && (
+              <div>
+                <h3 className="text-sm font-medium mb-2 text-gray-600">
+                  File Types
+                </h3>
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                  {[
+                    { label: "Pages", count: summary.pageCount, color: "bg-blue-50 text-blue-800" },
+                    { label: "API Routes", count: summary.apiRouteCount, color: "bg-purple-50 text-purple-800" },
+                    { label: "Components", count: summary.componentCount, color: "bg-green-50 text-green-800" },
+                    { label: "Tests", count: summary.testCount, color: "bg-orange-50 text-orange-800" },
+                    { label: "Lib/Utils", count: summary.libCount, color: "bg-cyan-50 text-cyan-800" },
+                    { label: "Other", count: summary.otherCount, color: "bg-gray-50 text-gray-800" },
+                  ].map((item) => (
+                    <div
+                      key={item.label}
+                      className={`rounded-lg p-2.5 text-center ${item.color}`}
+                    >
+                      <div className="text-lg font-bold">{item.count}</div>
+                      <div className="text-xs">{item.label}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Category breakdown */}
+            {summary.categoryBreakdown.length > 0 && (
+              <details>
+                <summary className="text-xs text-gray-500 cursor-pointer hover:text-gray-700">
+                  Category breakdown ({summary.categoryBreakdown.length} categories)
+                </summary>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {summary.categoryBreakdown.map((cb) => (
+                    <span
+                      key={cb.category}
+                      className="inline-block bg-gray-100 text-gray-700 rounded px-2 py-0.5 text-xs"
+                    >
+                      {cb.category}: {cb.count}
+                    </span>
+                  ))}
+                </div>
+              </details>
+            )}
+          </section>
+        );
+      })()}
 
       {/* Generated Files */}
       <section className="border rounded-xl p-4">

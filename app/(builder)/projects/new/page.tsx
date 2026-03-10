@@ -17,6 +17,13 @@ import {
   intakeToFormHints,
   type IntakeAnswers,
 } from "@/lib/projects/project-intake-questions";
+import {
+  buildProjectDraft,
+  previewDraft,
+} from "@/lib/projects/project-draft-builder";
+import { buildReviewSummary } from "@/lib/projects/project-review-summary";
+import { buildValidationSummary } from "@/lib/projects/project-validation-summary";
+import { getTemplateGuidance } from "@/lib/projects/template-validation-messages";
 
 const PRESET_MAP: Record<string, Record<string, unknown>> = {
   membership_content_affiliate: membershipContentAffiliatePreset,
@@ -29,6 +36,9 @@ export default function NewProjectPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [intake, setIntake] = useState<IntakeAnswers>(DEFAULT_INTAKE_ANSWERS);
   const [showDetails, setShowDetails] = useState(false);
+  const [draftApplied, setDraftApplied] = useState<string[] | null>(null);
+  const [rewriting, setRewriting] = useState(false);
+  const [rewriteError, setRewriteError] = useState<string | null>(null);
 
   const selectedCatalog = getCatalogEntry(form.templateKey);
 
@@ -52,6 +62,15 @@ export default function NewProjectPage() {
     ]
   );
 
+  const draftPreview = useMemo(() => {
+    const draft = buildProjectDraft(
+      intake,
+      form as unknown as Record<string, unknown>,
+      recommendations
+    );
+    return previewDraft(draft, (key) => getCatalogEntry(key)?.label);
+  }, [intake, form, recommendations]);
+
   const applyIntake = useCallback(
     (updated: IntakeAnswers) => {
       setIntake(updated);
@@ -74,6 +93,62 @@ export default function NewProjectPage() {
       setForm((prev) => ({ ...prev, templateKey }));
     }
   };
+
+  const handleDraft = () => {
+    const draft = buildProjectDraft(
+      intake,
+      form as unknown as Record<string, unknown>,
+      recommendations
+    );
+    if (draft.filledFields.length === 0) {
+      setDraftApplied([]);
+      return;
+    }
+    // Apply templateKey via handleTemplateChange to also load preset
+    if (draft.values.templateKey) {
+      handleTemplateChange(draft.values.templateKey as string);
+      const { templateKey: _, ...rest } = draft.values;
+      setForm((prev) => ({ ...prev, ...rest }));
+    } else {
+      setForm((prev) => ({ ...prev, ...draft.values }));
+    }
+    setDraftApplied(draft.filledFields);
+  };
+
+  const handleRewrite = async () => {
+    setRewriting(true);
+    setRewriteError(null);
+    try {
+      const res = await fetch("/api/projects/rewrite-brief", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          summary: form.summary,
+          problemToSolve: form.problemToSolve,
+          targetUsers: form.targetUsers,
+        }),
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        setRewriteError(json.error || "整形に失敗しました");
+        return;
+      }
+      const data = await res.json();
+      setForm((prev) => ({
+        ...prev,
+        summary: data.rewrittenSummary || prev.summary,
+        problemToSolve: data.rewrittenProblemToSolve || prev.problemToSolve,
+        targetUsers: data.rewrittenTargetUsers || prev.targetUsers,
+      }));
+    } catch {
+      setRewriteError("通信エラーが発生しました");
+    } finally {
+      setRewriting(false);
+    }
+  };
+
+  const canRewrite =
+    !!(form.summary || form.problemToSolve || form.targetUsers) && !rewriting;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -175,6 +250,51 @@ export default function NewProjectPage() {
               )}
             </div>
           ))}
+
+          {/* --- draft preview + button --- */}
+          {draftPreview.hasChanges && draftApplied === null && (
+            <div className="border border-amber-200 rounded p-3 bg-amber-50 text-sm space-y-1.5">
+              <p className="font-medium text-amber-800">
+                下書きで埋まる項目:
+              </p>
+              <ul className="list-disc list-inside text-amber-900 space-y-0.5">
+                {draftPreview.fields.map((f) => (
+                  <li key={f.key}>{f.label}</li>
+                ))}
+              </ul>
+              {draftPreview.suggestedTemplateLabel && (
+                <p className="text-amber-700 text-xs">
+                  おすすめテンプレート: {draftPreview.suggestedTemplateLabel}
+                </p>
+              )}
+              <p className="text-xs text-amber-600">
+                既存の入力は上書きしません
+              </p>
+            </div>
+          )}
+
+          <div className="flex items-center gap-3 pt-2">
+            <button
+              type="button"
+              className="rounded bg-blue-600 text-white px-4 py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+              onClick={handleDraft}
+              disabled={!draftPreview.hasChanges}
+            >
+              下書きを作る
+            </button>
+            {draftApplied !== null && (
+              <span className="text-sm text-gray-600">
+                {draftApplied.length > 0
+                  ? `${draftApplied.length}件の項目を自動入力しました`
+                  : "入力済みの項目が多いため、追加の自動入力はありません"}
+              </span>
+            )}
+            {draftApplied === null && !draftPreview.hasChanges && (
+              <span className="text-sm text-gray-400">
+                自動入力できる空欄がありません
+              </span>
+            )}
+          </div>
         </section>
 
         {/* --- テンプレ選択 + recommendation --- */}
@@ -309,7 +429,22 @@ export default function NewProjectPage() {
         {showDetails && (
           <>
             <section className="space-y-4">
-              <h2 className="text-lg font-semibold">基本情報（詳細）</h2>
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold">基本情報（詳細）</h2>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="rounded border border-purple-300 bg-purple-50 text-purple-700 px-3 py-1.5 text-xs font-medium hover:bg-purple-100 disabled:opacity-50"
+                    onClick={handleRewrite}
+                    disabled={!canRewrite}
+                  >
+                    {rewriting ? "整形中..." : "AIで整える"}
+                  </button>
+                  {rewriteError && (
+                    <span className="text-xs text-red-500">{rewriteError}</span>
+                  )}
+                </div>
+              </div>
 
               <div>
                 <label className="block mb-1">サービス概要</label>
@@ -432,6 +567,89 @@ export default function NewProjectPage() {
             </section>
           </>
         )}
+
+        {/* --- 作成前レビュー --- */}
+        <section className="border rounded-lg p-5 bg-gray-50 space-y-3">
+          <h2 className="text-lg font-semibold">この内容でプロジェクトを作成します</h2>
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
+            {buildReviewSummary(
+              form as unknown as Record<string, unknown>,
+              selectedCatalog?.label
+            ).items.map((ri) => (
+              <div key={ri.label} className="contents">
+                <dt className="font-medium text-gray-600">{ri.label}</dt>
+                <dd className={ri.empty ? "text-gray-400 italic" : "text-gray-900"}>
+                  {ri.value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+
+        {/* --- validation summary --- */}
+        {(() => {
+          const vs = buildValidationSummary(
+            form as unknown as Record<string, unknown>
+          );
+          if (vs.missingItems.length === 0) {
+            return (
+              <div className="border border-green-200 rounded-lg p-4 bg-green-50 text-sm text-green-800">
+                このまま作成できます
+              </div>
+            );
+          }
+          return (
+            <div
+              className={`border rounded-lg p-4 text-sm space-y-2 ${
+                vs.isReady
+                  ? "border-amber-200 bg-amber-50"
+                  : "border-red-200 bg-red-50"
+              }`}
+            >
+              <p
+                className={`font-medium ${
+                  vs.isReady ? "text-amber-800" : "text-red-800"
+                }`}
+              >
+                {vs.isReady
+                  ? "入力を推奨する項目があります"
+                  : "作成前に確認してください"}
+              </p>
+              <ul className="space-y-1">
+                {vs.missingItems.map((mi) => (
+                  <li
+                    key={mi.key}
+                    className={
+                      vs.isReady ? "text-amber-700" : "text-red-700"
+                    }
+                  >
+                    <span className="font-medium">{mi.label}:</span>{" "}
+                    {mi.message}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        })()}
+
+        {/* --- template guidance --- */}
+        {(() => {
+          const guidance = getTemplateGuidance(
+            form.templateKey,
+            form as unknown as Record<string, unknown>
+          );
+          if (!guidance || guidance.messages.length === 0) return null;
+          return (
+            <div className="border border-indigo-200 rounded-lg p-4 bg-indigo-50 text-sm space-y-1.5">
+              <p className="font-medium text-indigo-800">{guidance.title}</p>
+              <ul className="list-disc list-inside text-indigo-700 space-y-0.5">
+                {guidance.messages.map((msg, i) => (
+                  <li key={i}>{msg}</li>
+                ))}
+              </ul>
+            </div>
+          );
+        })()}
 
         <button
           type="submit"
