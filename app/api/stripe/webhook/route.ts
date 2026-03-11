@@ -41,13 +41,13 @@ async function upsertSubscriptionFromStripeSubscription(
         stripe_subscription_id: subscription.id,
         status: subscription.status,
         current_period_start: new Date(
-          subscription.items.data[0]?.current_period_start
-            ? subscription.items.data[0].current_period_start * 1000
+          subscription.current_period_start
+            ? subscription.current_period_start * 1000
             : Date.now()
         ).toISOString(),
         current_period_end: new Date(
-          subscription.items.data[0]?.current_period_end
-            ? subscription.items.data[0].current_period_end * 1000
+          subscription.current_period_end
+            ? subscription.current_period_end * 1000
             : Date.now()
         ).toISOString(),
         cancel_at_period_end: Boolean(subscription.cancel_at_period_end),
