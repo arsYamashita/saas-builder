@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { buildPromptWithRules } from "@/lib/ai/build-prompt-with-rules";
 import { getLatestBlueprintByProjectId } from "@/lib/db/blueprints";
 import { saveImplementationRun } from "@/lib/db/implementation-runs";
-import { runClaudeImplementation } from "@/lib/ai/claude-implementation";
+import { executeTask } from "@/lib/providers/task-router";
+import { buildStepMeta } from "@/lib/providers/step-meta";
 import { createAdminClient } from "@/lib/db/supabase/admin";
 import { resolveTemplatePrefixPath } from "@/lib/ai/template-prompt-resolver";
 
@@ -46,22 +47,30 @@ export async function POST(_req: NextRequest, { params }: Props) {
       { blueprint_normalized_json: blueprintJson }
     );
 
-    const result = await runClaudeImplementation({
-      blueprintJson,
-      promptTemplate,
-    });
+    // The prompt template already has blueprint_normalized_json replaced.
+    // For implementation, the full assembled prompt IS the prompt to send.
+    const prompt = promptTemplate;
+
+    const result = await executeTask("implementation", prompt);
+
+    const outputText =
+      result.normalized.format === "text"
+        ? result.normalized.text
+        : result.raw.text;
 
     const saved = await saveImplementationRun({
       projectId,
       blueprintId: blueprint.id,
       runType: "implementation_plan",
-      promptText: result.rawPrompt,
-      outputText: result.outputText,
+      promptText: prompt,
+      outputText,
+      source: result.raw.provider,
     });
 
     return NextResponse.json({
       implementationRun: saved,
-      outputText: result.outputText,
+      outputText,
+      _meta: buildStepMeta("implementation", result),
     });
   } catch (error) {
     const message =

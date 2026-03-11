@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createAdminClient } from "@/lib/db/supabase/admin";
 import { requireTenantRole } from "@/lib/rbac/guards";
+import { DeleteButton } from "@/components/domain/delete-button";
 
 export default async function ContentListPage() {
   const membership = await requireTenantRole("admin");
@@ -48,13 +49,17 @@ export default async function ContentListPage() {
                 <td className="px-4 py-3">
                   {content.published ? "true" : "false"}
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-4 py-3 flex gap-3">
                   <Link
                     href={`/content/${content.id}/edit`}
                     className="underline"
                   >
                     Edit
                   </Link>
+                  <DeleteButton
+                    endpoint={`/api/domain/content/${content.id}`}
+                    confirmMessage={`「${content.title}」を削除しますか？`}
+                  />
                 </td>
               </tr>
             ))}

@@ -8,6 +8,7 @@ import { computeBlueprintDiff } from "@/lib/projects/blueprint-diff";
 import { toGenerationProgress } from "@/lib/projects/generation-progress";
 import { toQualityProgress } from "@/lib/projects/quality-progress";
 import { buildGeneratedProjectSummary } from "@/lib/projects/generated-project-summary";
+import { computeGeneratedFilesDiff } from "@/lib/projects/generated-files-diff";
 
 type ImplementationRun = {
   id: string;
@@ -27,8 +28,29 @@ type GenerationRunData = {
     key: string;
     label: string;
     status: string;
+    meta?: {
+      taskKind?: string;
+      provider?: string;
+      model?: string;
+      expectedFormat?: string;
+      durationMs?: number;
+      warningCount?: number;
+      errorCount?: number;
+      resultSummary?: string;
+      reviewStatus?: string;
+      reviewedAt?: string;
+      rerunAt?: string;
+      rerunError?: string;
+      invalidatedAt?: string;
+      invalidatedByStep?: string;
+      rejectReason?: string;
+    };
   }>;
   error_message?: string | null;
+  review_status?: string;
+  reviewed_at?: string | null;
+  promoted_at?: string | null;
+  baseline_tag?: string | null;
   started_at: string;
   finished_at?: string | null;
 };
@@ -71,6 +93,8 @@ type ProjectData = {
     roles_json: unknown;
     billing_json: unknown;
     affiliate_json: unknown;
+    review_status?: string;
+    reviewed_at?: string | null;
   }>;
   implementationRuns: ImplementationRun[];
   generatedFiles: Array<{
@@ -109,6 +133,14 @@ export default function ProjectDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [pollingTarget, setPollingTarget] = useState<"generation" | "quality" | null>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: "success" | "info" | "warn" } | null>(null);
+  const toastRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function showToast(message: string, type: "success" | "info" | "warn" = "info") {
+    if (toastRef.current) clearTimeout(toastRef.current);
+    setToast({ message, type });
+    toastRef.current = setTimeout(() => setToast(null), 5000);
+  }
 
   const fetchProject = useCallback(async () => {
     try {
@@ -193,6 +225,116 @@ export default function ProjectDetailPage() {
     }
   }
 
+  const [approving, setApproving] = useState(false);
+  const [runAction, setRunAction] = useState<string | null>(null);
+  const [stepAction, setStepAction] = useState<string | null>(null);
+
+  async function handleApproveBlueprint() {
+    setApproving(true);
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/projects/${projectId}/approve-blueprint`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) }
+      );
+      if (!res.ok) {
+        const body = await res.json();
+        throw new Error(body.error || "Failed to approve blueprint");
+      }
+      await fetchProject();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unknown error");
+    } finally {
+      setApproving(false);
+    }
+  }
+
+  async function handleRunAction(runId: string, action: "approve" | "reject" | "promote") {
+    setRunAction(`${action}-${runId}`);
+    setError(null);
+    try {
+      const res = await fetch(`/api/generation-runs/${runId}/${action}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) {
+        const body = await res.json();
+        const msg = body.error || `Failed to ${action} run`;
+        if (action === "promote") {
+          showToast(msg, "warn");
+        }
+        throw new Error(msg);
+      }
+      if (action === "promote") {
+        showToast("Baseline に昇格しました", "success");
+      }
+      await fetchProject();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unknown error");
+    } finally {
+      setRunAction(null);
+    }
+  }
+
+  async function handleStepReview(runId: string, stepKey: string, action: "approved" | "rejected", reason?: string) {
+    const actionKey = `${action}-${runId}-${stepKey}`;
+    setStepAction(actionKey);
+    setError(null);
+    try {
+      const res = await fetch(`/api/generation-runs/${runId}/review-step`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stepKey, action, reason: reason || undefined }),
+      });
+      if (!res.ok) {
+        const body = await res.json();
+        throw new Error(body.error || `Failed to ${action} step`);
+      }
+      const resBody = await res.json();
+      if (resBody.runReviewChanged) {
+        if (resBody.runReviewStatus === "approved") {
+          showToast("全ステップ承認 → Run を自動承認しました", "success");
+        } else if (resBody.runReviewStatus === "pending" && resBody.previousRunReviewStatus === "approved") {
+          showToast("ステップ変更により Run の承認を取り消しました", "warn");
+        }
+      }
+      await fetchProject();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unknown error");
+    } finally {
+      setStepAction(null);
+    }
+  }
+
+  async function handleStepRerun(runId: string, stepKey: string) {
+    const actionKey = `rerun-${runId}-${stepKey}`;
+    setStepAction(actionKey);
+    setError(null);
+    try {
+      const res = await fetch(`/api/generation-runs/${runId}/rerun-step`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stepKey }),
+      });
+      if (!res.ok) {
+        const body = await res.json();
+        throw new Error(body.error || `Failed to rerun step`);
+      }
+      const resBody = await res.json();
+      if (resBody.runReviewChanged) {
+        if (resBody.runReviewStatus === "pending" && resBody.previousRunReviewStatus === "approved") {
+          showToast(`${stepKey} の再実行により Run の承認を取り消しました`, "warn");
+        }
+      }
+      await fetchProject();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unknown error");
+    } finally {
+      setStepAction(null);
+    }
+  }
+
   if (loading) {
     return (
       <main className="max-w-5xl mx-auto p-6">
@@ -220,6 +362,22 @@ export default function ProjectDetailPage() {
 
   return (
     <main className="max-w-5xl mx-auto p-6 space-y-6">
+      {/* Toast Notification */}
+      {toast && (
+        <div
+          className={`fixed top-4 right-4 z-50 px-4 py-2.5 rounded-lg shadow-lg text-sm font-medium transition-opacity ${
+            toast.type === "success"
+              ? "bg-green-600 text-white"
+              : toast.type === "warn"
+              ? "bg-amber-500 text-white"
+              : "bg-blue-600 text-white"
+          }`}
+          onClick={() => setToast(null)}
+          role="status"
+        >
+          {toast.message}
+        </div>
+      )}
       <header>
         <h1 className="text-2xl font-bold">{data.project.name}</h1>
         <p className="text-sm text-gray-500">
@@ -312,46 +470,64 @@ export default function ProjectDetailPage() {
 
             {/* Steps */}
             <div className="grid gap-1.5">
-              {progress.steps.map((step) => (
+              {progress.steps.map((step) => {
+                const rawStep = latestRun.steps_json?.find((s: { key: string }) => s.key === step.key);
+                const m = rawStep?.meta;
+                return (
                 <div
                   key={step.key}
-                  className="flex items-center justify-between text-sm bg-white rounded px-3 py-2"
+                  className="text-sm bg-white rounded px-3 py-2"
                 >
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`inline-block w-2 h-2 rounded-full ${
-                        step.status === "completed"
-                          ? "bg-green-500"
-                          : step.status === "running"
-                          ? "bg-blue-500 animate-pulse"
-                          : step.status === "failed"
-                          ? "bg-red-500"
-                          : "bg-gray-300"
-                      }`}
-                    />
-                    <span
-                      className={
-                        step.status === "running" ? "font-medium" : ""
-                      }
-                    >
-                      {step.label}
-                    </span>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`inline-block w-2 h-2 rounded-full ${
+                          step.status === "completed"
+                            ? "bg-green-500"
+                            : step.status === "running"
+                            ? "bg-blue-500 animate-pulse"
+                            : step.status === "failed"
+                            ? "bg-red-500"
+                            : "bg-gray-300"
+                        }`}
+                      />
+                      <span
+                        className={
+                          step.status === "running" ? "font-medium" : ""
+                        }
+                      >
+                        {step.label}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {m?.provider && step.status === "completed" && (
+                        <span className="text-xs font-mono text-gray-400">{m.provider}</span>
+                      )}
+                      {m?.durationMs != null && step.status === "completed" && (
+                        <span className="text-xs text-gray-400 tabular-nums">
+                          {m.durationMs >= 1000
+                            ? `${(m.durationMs / 1000).toFixed(1)}s`
+                            : `${m.durationMs}ms`}
+                        </span>
+                      )}
+                      <span
+                        className={`text-xs ${
+                          step.status === "completed"
+                            ? "text-green-600"
+                            : step.status === "running"
+                            ? "text-blue-600 font-medium"
+                            : step.status === "failed"
+                            ? "text-red-600"
+                            : "text-gray-400"
+                        }`}
+                      >
+                        {step.status}
+                      </span>
+                    </div>
                   </div>
-                  <span
-                    className={`text-xs ${
-                      step.status === "completed"
-                        ? "text-green-600"
-                        : step.status === "running"
-                        ? "text-blue-600 font-medium"
-                        : step.status === "failed"
-                        ? "text-red-600"
-                        : "text-gray-400"
-                    }`}
-                  >
-                    {step.status}
-                  </span>
                 </div>
-              ))}
+                );
+              })}
             </div>
 
             {progress.errorMessage && (
@@ -371,7 +547,15 @@ export default function ProjectDetailPage() {
           <p className="text-sm text-gray-500">まだ実行履歴はありません。</p>
         ) : (
           <div className="space-y-4">
-            {data.generationRuns.map((run) => (
+            {data.generationRuns.map((run) => {
+              const steps = run.steps_json ?? [];
+              const stepsWithMeta = steps.filter((s) => s.meta);
+              const totalDurationMs = steps.reduce((sum, s) => sum + (s.meta?.durationMs ?? 0), 0);
+              const providers = Array.from(new Set(steps.map((s) => s.meta?.provider).filter(Boolean)));
+              const totalWarnings = steps.reduce((sum, s) => sum + (s.meta?.warningCount ?? 0), 0);
+              const totalErrors = steps.reduce((sum, s) => sum + (s.meta?.errorCount ?? 0), 0);
+
+              return (
               <div key={run.id} className="border rounded-lg p-4">
                 <div className="flex items-center justify-between">
                   <div>
@@ -385,37 +569,300 @@ export default function ProjectDetailPage() {
                   </div>
                 </div>
 
-                <div className="mt-3 space-y-2">
-                  {(run.steps_json ?? []).map((step) => (
-                    <div
-                      key={step.key}
-                      className="flex items-center justify-between text-sm border rounded px-3 py-2"
-                    >
-                      <span>{step.label}</span>
-                      <span
-                        className={
-                          step.status === "completed"
-                            ? "text-green-600"
-                            : step.status === "running"
-                            ? "text-blue-600"
-                            : step.status === "failed"
-                            ? "text-red-600"
-                            : "text-gray-400"
-                        }
-                      >
-                        {step.status}
-                      </span>
+                {/* Run-level summary */}
+                {stepsWithMeta.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs bg-gray-50 rounded px-3 py-2">
+                    <span>
+                      <span className="text-gray-400">providers:</span>{" "}
+                      <span className="font-mono">{providers.join(", ") || "N/A"}</span>
+                    </span>
+                    <span>
+                      <span className="text-gray-400">total time:</span>{" "}
+                      {totalDurationMs >= 1000
+                        ? `${(totalDurationMs / 1000).toFixed(1)}s`
+                        : `${totalDurationMs}ms`}
+                    </span>
+                    <span>
+                      <span className="text-gray-400">steps with meta:</span>{" "}
+                      {stepsWithMeta.length}/{steps.length}
+                    </span>
+                    {totalWarnings > 0 && (
+                      <span className="text-amber-600">{totalWarnings} warnings</span>
+                    )}
+                    {totalErrors > 0 && (
+                      <span className="text-red-600">{totalErrors} errors</span>
+                    )}
+                  </div>
+                )}
+
+                {/* Step details table */}
+                {(() => {
+                  const approvedSteps = steps.filter((s) => s.meta?.reviewStatus === "approved").length;
+                  const rejectedSteps = steps.filter((s) => s.meta?.reviewStatus === "rejected").length;
+                  const completedSteps = steps.filter((s) => s.status === "completed").length;
+                  const reviewableSteps = completedSteps;
+                  const reviewedSteps = approvedSteps + rejectedSteps;
+
+                  return (
+                  <>
+                  {/* Step review summary */}
+                  {run.status === "completed" && reviewableSteps > 0 && (
+                    <div className="mt-2 flex items-center gap-3 text-xs text-gray-500">
+                      <span>Step Review:</span>
+                      <span className="text-green-600">{approvedSteps} approved</span>
+                      {rejectedSteps > 0 && <span className="text-red-600">{rejectedSteps} rejected</span>}
+                      <span className="text-gray-400">{reviewedSteps}/{reviewableSteps} reviewed</span>
                     </div>
-                  ))}
-                </div>
+                  )}
+
+                  <div className="mt-3 overflow-x-auto">
+                  <table className="w-full text-xs border-collapse">
+                    <thead>
+                      <tr className="text-left text-gray-400 border-b">
+                        <th className="py-1.5 pr-2 font-medium">Step</th>
+                        <th className="py-1.5 px-2 font-medium">Status</th>
+                        <th className="py-1.5 px-2 font-medium">TaskKind</th>
+                        <th className="py-1.5 px-2 font-medium">Provider</th>
+                        <th className="py-1.5 px-2 font-medium">Model</th>
+                        <th className="py-1.5 px-2 font-medium">Format</th>
+                        <th className="py-1.5 px-2 font-medium text-right">Duration</th>
+                        <th className="py-1.5 px-2 font-medium text-right">W/E</th>
+                        {run.status === "completed" && (
+                          <th className="py-1.5 pl-2 font-medium text-center">Review</th>
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {steps.map((step) => {
+                        const m = step.meta;
+                        const rs = m?.reviewStatus;
+                        return (
+                          <tr key={step.key} className="border-b border-gray-100 hover:bg-gray-50">
+                            <td className="py-1.5 pr-2 font-medium text-gray-700">
+                              {step.label}
+                              {m?.rerunAt && (
+                                <span className="ml-1 text-xs text-amber-500 font-normal" title={`Rerun at ${m.rerunAt}`}>
+                                  (rerun)
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-1.5 px-2">
+                              <span
+                                className={`inline-block px-1.5 py-0.5 rounded text-xs font-medium ${
+                                  step.status === "completed"
+                                    ? "bg-green-100 text-green-700"
+                                    : step.status === "running"
+                                    ? "bg-blue-100 text-blue-700 animate-pulse"
+                                    : step.status === "failed"
+                                    ? "bg-red-100 text-red-700"
+                                    : "bg-gray-100 text-gray-500"
+                                }`}
+                              >
+                                {step.status}
+                              </span>
+                            </td>
+                            <td className="py-1.5 px-2 font-mono text-gray-600">
+                              {m?.taskKind ?? <span className="text-gray-300">N/A</span>}
+                            </td>
+                            <td className="py-1.5 px-2 font-mono text-gray-600">
+                              {m?.provider ?? <span className="text-gray-300">N/A</span>}
+                            </td>
+                            <td className="py-1.5 px-2 font-mono text-gray-600 max-w-[140px] truncate" title={m?.model ?? ""}>
+                              {m?.model ?? <span className="text-gray-300">N/A</span>}
+                            </td>
+                            <td className="py-1.5 px-2 text-gray-600">
+                              {m?.expectedFormat ?? <span className="text-gray-300">N/A</span>}
+                            </td>
+                            <td className="py-1.5 px-2 text-right text-gray-600 tabular-nums">
+                              {m?.durationMs != null
+                                ? m.durationMs >= 1000
+                                  ? `${(m.durationMs / 1000).toFixed(1)}s`
+                                  : `${m.durationMs}ms`
+                                : <span className="text-gray-300">N/A</span>}
+                            </td>
+                            <td className="py-1.5 px-2 text-right tabular-nums">
+                              {m ? (
+                                <span>
+                                  {(m.warningCount ?? 0) > 0 ? (
+                                    <span className="text-amber-600">{m.warningCount}W</span>
+                                  ) : (
+                                    <span className="text-gray-300">0W</span>
+                                  )}
+                                  {" / "}
+                                  {(m.errorCount ?? 0) > 0 ? (
+                                    <span className="text-red-600">{m.errorCount}E</span>
+                                  ) : (
+                                    <span className="text-gray-300">0E</span>
+                                  )}
+                                </span>
+                              ) : (
+                                <span className="text-gray-300">N/A</span>
+                              )}
+                            </td>
+                            {run.status === "completed" && (
+                              <td className="py-1.5 pl-2 text-center whitespace-nowrap">
+                                {step.status !== "completed" ? (
+                                  <span className="text-gray-300">-</span>
+                                ) : rs === "approved" ? (
+                                  <span className="inline-block bg-green-100 text-green-700 rounded px-1.5 py-0.5 text-xs font-medium">
+                                    OK
+                                  </span>
+                                ) : rs === "rejected" ? (
+                                  <span className="inline-flex items-center gap-1 flex-wrap">
+                                    <span className="inline-block bg-red-100 text-red-700 rounded px-1.5 py-0.5 text-xs font-medium" title={m?.rejectReason || undefined}>
+                                      NG
+                                    </span>
+                                    {m?.rejectReason && (
+                                      <span className="text-xs text-red-400 max-w-[120px] truncate" title={m.rejectReason}>
+                                        {m.rejectReason}
+                                      </span>
+                                    )}
+                                    {["implementation", "schema", "api_design", "split_files"].includes(step.key) && (
+                                      <button
+                                        onClick={() => handleStepRerun(run.id, step.key)}
+                                        disabled={stepAction === `rerun-${run.id}-${step.key}`}
+                                        className="px-1.5 py-0.5 rounded bg-amber-600 text-white text-xs disabled:opacity-50 hover:bg-amber-700"
+                                        title="再実行"
+                                      >
+                                        {stepAction === `rerun-${run.id}-${step.key}` ? "..." : "Re-run"}
+                                      </button>
+                                    )}
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1">
+                                    {m?.invalidatedAt && (
+                                      <span
+                                        className="inline-block bg-amber-100 text-amber-700 rounded px-1 py-0.5 text-xs"
+                                        title={`Invalidated by ${m.invalidatedByStep ?? "upstream"} at ${m.invalidatedAt}`}
+                                      >
+                                        stale
+                                      </span>
+                                    )}
+                                    <button
+                                      onClick={() => handleStepReview(run.id, step.key, "approved")}
+                                      disabled={stepAction === `approved-${run.id}-${step.key}`}
+                                      className="px-1.5 py-0.5 rounded bg-green-600 text-white text-xs disabled:opacity-50 hover:bg-green-700"
+                                      title="承認"
+                                    >
+                                      {stepAction === `approved-${run.id}-${step.key}` ? "..." : "OK"}
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        const reason = window.prompt("却下理由（任意）:");
+                                        if (reason === null) return; // cancelled
+                                        handleStepReview(run.id, step.key, "rejected", reason || undefined);
+                                      }}
+                                      disabled={stepAction === `rejected-${run.id}-${step.key}`}
+                                      className="px-1.5 py-0.5 rounded bg-red-600 text-white text-xs disabled:opacity-50 hover:bg-red-700"
+                                      title="却下"
+                                    >
+                                      {stepAction === `rejected-${run.id}-${step.key}` ? "..." : "NG"}
+                                    </button>
+                                  </span>
+                                )}
+                                {m?.rerunError && (
+                                  <span className="block text-xs text-red-500 mt-0.5 max-w-[200px] truncate" title={m.rerunError}>
+                                    {m.rerunError}
+                                  </span>
+                                )}
+                              </td>
+                            )}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  </div>
+                  </>
+                  );
+                })()}
+
+                {/* Result summaries (collapsible) */}
+                {stepsWithMeta.some((s) => s.meta?.resultSummary) && (
+                  <details className="mt-2">
+                    <summary className="text-xs text-gray-400 cursor-pointer hover:text-gray-600">
+                      Result summaries ({stepsWithMeta.filter((s) => s.meta?.resultSummary).length} steps)
+                    </summary>
+                    <div className="mt-1.5 space-y-1">
+                      {steps.filter((s) => s.meta?.resultSummary).map((step) => (
+                        <div key={step.key} className="flex gap-2 text-xs">
+                          <span className="text-gray-400 shrink-0 w-28">{step.label}:</span>
+                          <span className="font-mono text-gray-500 break-all">{step.meta?.resultSummary}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                )}
 
                 {run.error_message && (
                   <pre className="mt-3 bg-red-50 p-3 rounded text-xs whitespace-pre-wrap overflow-auto">
                     {run.error_message}
                   </pre>
                 )}
+
+                {/* Review & Promotion */}
+                {run.status === "completed" && (
+                  <div className="mt-3 border-t pt-3 flex items-center gap-2 flex-wrap">
+                    {/* Review Status */}
+                    {run.review_status === "approved" ? (
+                      <span className="inline-block bg-green-100 text-green-800 rounded px-2 py-0.5 text-xs font-medium">
+                        承認済み
+                      </span>
+                    ) : run.review_status === "rejected" ? (
+                      <span className="inline-block bg-red-100 text-red-800 rounded px-2 py-0.5 text-xs font-medium">
+                        却下
+                      </span>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => handleRunAction(run.id, "approve")}
+                          disabled={runAction === `approve-${run.id}`}
+                          className="px-2.5 py-1 rounded bg-green-600 text-white text-xs disabled:opacity-50"
+                        >
+                          {runAction === `approve-${run.id}` ? "..." : "承認"}
+                        </button>
+                        <button
+                          onClick={() => handleRunAction(run.id, "reject")}
+                          disabled={runAction === `reject-${run.id}`}
+                          className="px-2.5 py-1 rounded bg-red-600 text-white text-xs disabled:opacity-50"
+                        >
+                          {runAction === `reject-${run.id}` ? "..." : "却下"}
+                        </button>
+                      </>
+                    )}
+
+                    {/* Promotion */}
+                    {run.baseline_tag ? (
+                      <span className="inline-block bg-indigo-100 text-indigo-800 rounded px-2 py-0.5 text-xs font-medium">
+                        {run.baseline_tag}
+                      </span>
+                    ) : run.review_status === "approved" ? (
+                      latestBlueprint?.review_status === "approved" ? (
+                        <button
+                          onClick={() => handleRunAction(run.id, "promote")}
+                          disabled={runAction === `promote-${run.id}`}
+                          className="px-2.5 py-1 rounded bg-indigo-600 text-white text-xs disabled:opacity-50"
+                        >
+                          {runAction === `promote-${run.id}` ? "..." : "Baseline に昇格"}
+                        </button>
+                      ) : (
+                        <span className="text-xs text-gray-400" title="Blueprint の承認が必要です">
+                          昇格不可（Blueprint 未承認）
+                        </span>
+                      )
+                    ) : null}
+
+                    {/* Timestamps */}
+                    {run.reviewed_at && (
+                      <span className="text-xs text-gray-400 ml-auto">
+                        {new Date(run.reviewed_at).toLocaleString("ja-JP")}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>
@@ -552,6 +999,30 @@ export default function ProjectDetailPage() {
                     ))}
                   </div>
                 </details>
+
+                {/* Blueprint Approval */}
+                <div className="mt-3 border-t pt-3">
+                  {latestBlueprint.review_status === "approved" ? (
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="inline-block bg-green-100 text-green-800 rounded px-2 py-0.5 text-xs font-medium">
+                        確認済み
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        {latestBlueprint.reviewed_at
+                          ? new Date(latestBlueprint.reviewed_at).toLocaleString("ja-JP")
+                          : ""}
+                      </span>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={handleApproveBlueprint}
+                      disabled={approving}
+                      className="px-3 py-1.5 rounded bg-green-600 text-white text-sm disabled:opacity-50"
+                    >
+                      {approving ? "確認中..." : "Blueprint を確認済みにする"}
+                    </button>
+                  )}
+                </div>
               </div>
             );
           })()
@@ -1208,6 +1679,94 @@ export default function ProjectDetailPage() {
                   ))}
                 </div>
               </details>
+            )}
+          </section>
+        );
+      })()}
+
+      {/* Generated Files Diff */}
+      {(() => {
+        if (!data.generatedFiles || data.generatedFiles.length === 0) return null;
+        const filesDiff = computeGeneratedFilesDiff(
+          data.generatedFiles.map((f: { file_path: string; version: number }) => ({
+            file_path: f.file_path,
+            version: f.version,
+          }))
+        );
+        if (!filesDiff) return null;
+        return (
+          <section className="border rounded-xl p-4 bg-indigo-50">
+            <h2 className="font-semibold mb-2">
+              Generated Files Diff{" "}
+              <span className="text-xs text-gray-500 font-normal">
+                v{filesDiff.previousVersion} → v{filesDiff.latestVersion}
+              </span>
+            </h2>
+
+            {!filesDiff.hasAnyChange ? (
+              <p className="text-sm text-gray-600">
+                前回との差分はありません（{filesDiff.totalLatest} files）
+              </p>
+            ) : (
+              <div className="space-y-2 text-sm">
+                <p className="text-xs text-gray-500">
+                  v{filesDiff.latestVersion}: {filesDiff.totalLatest} files / v{filesDiff.previousVersion}: {filesDiff.totalPrevious} files
+                </p>
+
+                {filesDiff.addedFiles.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-green-700 mb-1">
+                      Added ({filesDiff.addedFiles.length})
+                    </p>
+                    <div className="flex flex-wrap gap-1">
+                      {filesDiff.addedFiles.map((f) => (
+                        <span
+                          key={f}
+                          className="inline-block bg-green-100 text-green-800 rounded px-2 py-0.5 text-xs"
+                        >
+                          + {f}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {filesDiff.removedFiles.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-red-700 mb-1">
+                      Removed ({filesDiff.removedFiles.length})
+                    </p>
+                    <div className="flex flex-wrap gap-1">
+                      {filesDiff.removedFiles.map((f) => (
+                        <span
+                          key={f}
+                          className="inline-block bg-red-100 text-red-800 rounded px-2 py-0.5 text-xs"
+                        >
+                          - {f}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {filesDiff.unchangedFiles.length > 0 && (
+                  <details>
+                    <summary className="text-xs text-gray-500 cursor-pointer hover:text-gray-700">
+                      Unchanged ({filesDiff.unchangedFiles.length})
+                    </summary>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {filesDiff.unchangedFiles.map((f) => (
+                        <span
+                          key={f}
+                          className="inline-block bg-gray-100 text-gray-600 rounded px-2 py-0.5 text-xs"
+                        >
+                          {f}
+                        </span>
+                      ))}
+                    </div>
+                  </details>
+                )}
+              </div>
             )}
           </section>
         );

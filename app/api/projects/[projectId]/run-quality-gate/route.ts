@@ -17,7 +17,7 @@ type Props = {
 
 export async function POST(_req: NextRequest, { params }: Props) {
   const { projectId } = await params;
-  let qualityRunId: string | null = null;
+  let qualityRunId = "";
 
   try {
     const latestGenerationRun = await getLatestGenerationRun(projectId);

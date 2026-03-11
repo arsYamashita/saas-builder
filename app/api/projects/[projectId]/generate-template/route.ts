@@ -6,12 +6,16 @@ import {
   failGenerationRun,
 } from "@/lib/db/generation-runs";
 import { createAdminClient } from "@/lib/db/supabase/admin";
+import type { GenerationStepMeta } from "@/types/generation-run";
 
 type Props = {
   params: Promise<{ projectId: string }>;
 };
 
-async function postInternal(path: string) {
+async function postInternal(path: string): Promise<{
+  data: Record<string, unknown>;
+  meta: GenerationStepMeta | undefined;
+}> {
   const baseUrl =
     process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
@@ -30,12 +34,15 @@ async function postInternal(path: string) {
     );
   }
 
-  return res.json();
+  const json = await res.json();
+  const meta = json._meta as GenerationStepMeta | undefined;
+
+  return { data: json, meta };
 }
 
 export async function POST(_req: NextRequest, { params }: Props) {
   const { projectId } = await params;
-  let generationRunId: string | null = null;
+  let generationRunId = "";
   const baseUrl =
     process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
@@ -61,65 +68,45 @@ export async function POST(_req: NextRequest, { params }: Props) {
     );
     generationRunId = generationRun.id;
 
+    // Step 1: Blueprint
     await updateGenerationStep(generationRunId, "blueprint", "running");
-    await postInternal(
+    const blueprintRes = await postInternal(
       `/api/projects/${projectId}/generate-blueprint`
     );
-    await updateGenerationStep(generationRunId, "blueprint", "completed");
+    await updateGenerationStep(generationRunId, "blueprint", "completed", blueprintRes.meta);
 
-    await updateGenerationStep(
-      generationRunId,
-      "implementation",
-      "running"
-    );
-    await postInternal(
+    // Step 2: Implementation
+    await updateGenerationStep(generationRunId, "implementation", "running");
+    const implRes = await postInternal(
       `/api/projects/${projectId}/generate-implementation`
     );
-    await updateGenerationStep(
-      generationRunId,
-      "implementation",
-      "completed"
-    );
+    await updateGenerationStep(generationRunId, "implementation", "completed", implRes.meta);
 
+    // Step 3: Schema
     await updateGenerationStep(generationRunId, "schema", "running");
-    await postInternal(`/api/projects/${projectId}/generate-schema`);
-    await updateGenerationStep(generationRunId, "schema", "completed");
+    const schemaRes = await postInternal(
+      `/api/projects/${projectId}/generate-schema`
+    );
+    await updateGenerationStep(generationRunId, "schema", "completed", schemaRes.meta);
 
+    // Step 4: API Design
     await updateGenerationStep(generationRunId, "api_design", "running");
-    await postInternal(
+    const apiRes = await postInternal(
       `/api/projects/${projectId}/generate-api-design`
     );
-    await updateGenerationStep(
-      generationRunId,
-      "api_design",
-      "completed"
-    );
+    await updateGenerationStep(generationRunId, "api_design", "completed", apiRes.meta);
 
-    await updateGenerationStep(
-      generationRunId,
-      "split_files",
-      "running"
-    );
-    await postInternal(
+    // Step 5: Split Files
+    await updateGenerationStep(generationRunId, "split_files", "running");
+    const splitRes = await postInternal(
       `/api/projects/${projectId}/split-run-to-files`
     );
-    await updateGenerationStep(
-      generationRunId,
-      "split_files",
-      "completed"
-    );
+    await updateGenerationStep(generationRunId, "split_files", "completed", splitRes.meta);
 
-    await updateGenerationStep(
-      generationRunId,
-      "export_files",
-      "running"
-    );
+    // Step 6: Export Files (no AI — no _meta)
+    await updateGenerationStep(generationRunId, "export_files", "running");
     await postInternal(`/api/projects/${projectId}/export-files`);
-    await updateGenerationStep(
-      generationRunId,
-      "export_files",
-      "completed"
-    );
+    await updateGenerationStep(generationRunId, "export_files", "completed");
 
     await completeGenerationRun(generationRunId);
 

@@ -10,6 +10,7 @@ export type ProjectStatus =
 export type TemplateKey =
   | "membership_content_affiliate"
   | "reservation_saas"
+  | "simple_crm_saas"
   | "online_salon"
   | "custom";
 

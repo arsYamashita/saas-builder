@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/db/supabase/admin";
 import { readPrompt } from "@/lib/utils/read-prompt";
-import { runGeminiIntake } from "@/lib/ai/gemini-intake";
-import { runGeminiBlueprint } from "@/lib/ai/gemini-blueprint";
 import { normalizeBlueprint } from "@/lib/ai/blueprint-normalizer";
+import { blueprintSchema } from "@/lib/validation/blueprint";
+import { executeTask } from "@/lib/providers/task-router";
+import { extractJsonFromText } from "@/lib/providers/result-normalizer";
+import { buildStepMeta, mergeStepMetas } from "@/lib/providers/step-meta";
 
 type Props = {
   params: Promise<{ projectId: string }>;
@@ -58,22 +60,40 @@ export async function POST(_req: NextRequest, { params }: Props) {
       );
     }
 
-    const intakePrompt = await readPrompt("01-gemini-intake.md");
-    const blueprintPrompt = await readPrompt("02-gemini-blueprint.md");
+    const intakePromptTemplate = await readPrompt("01-gemini-intake.md");
+    const blueprintPromptTemplate = await readPrompt("02-gemini-blueprint.md");
 
     const userInput = buildUserInputFromProject(project);
 
-    const intakeResult = await runGeminiIntake({
-      userInput,
-      promptTemplate: intakePrompt,
-    });
+    // Step 1: Intake (text output)
+    const intakePrompt = intakePromptTemplate.replace("{{user_input}}", userInput);
+    const intakeResult = await executeTask("intake", intakePrompt);
+    const intakeText =
+      intakeResult.normalized.format === "text"
+        ? intakeResult.normalized.text
+        : intakeResult.raw.text;
 
-    const blueprintResult = await runGeminiBlueprint({
-      mvpSpec: intakeResult.outputText,
-      promptTemplate: blueprintPrompt,
-    });
+    // Step 2: Blueprint (json output)
+    const blueprintPrompt = blueprintPromptTemplate.replace("{{mvp_spec}}", intakeText);
+    const blueprintResult = await executeTask("blueprint", blueprintPrompt);
 
-    const normalized = normalizeBlueprint(blueprintResult.blueprint);
+    // Extract and validate blueprint JSON
+    let parsedBlueprint: unknown;
+    if (blueprintResult.normalized.format === "json") {
+      parsedBlueprint = blueprintResult.normalized.data;
+    } else {
+      const { data } = extractJsonFromText(blueprintResult.raw.text);
+      parsedBlueprint = data;
+    }
+
+    const validated = blueprintSchema.safeParse(parsedBlueprint);
+    if (!validated.success) {
+      throw new Error(
+        `Blueprint validation failed: ${JSON.stringify(validated.error.issues)}`
+      );
+    }
+
+    const normalized = normalizeBlueprint(validated.data);
 
     const { data: existing, error: existingError } = await supabase
       .from("blueprints")
@@ -111,8 +131,8 @@ export async function POST(_req: NextRequest, { params }: Props) {
         events_json: normalized.events ?? [],
         mvp_scope_json: normalized.mvp_scope ?? [],
         future_scope_json: normalized.future_scope ?? [],
-        raw_prompt: `${intakeResult.rawPrompt}\n\n---\n\n${blueprintResult.rawPrompt}`,
-        source: "gemini",
+        raw_prompt: `${intakePrompt}\n\n---\n\n${blueprintPrompt}`,
+        source: blueprintResult.raw.provider,
       })
       .select()
       .single();
@@ -124,10 +144,16 @@ export async function POST(_req: NextRequest, { params }: Props) {
       );
     }
 
+    const _meta = mergeStepMetas([
+      buildStepMeta("intake", intakeResult),
+      buildStepMeta("blueprint", blueprintResult),
+    ]);
+
     return NextResponse.json({
       project,
-      intake: intakeResult.outputText,
+      intake: intakeText,
       blueprint: inserted,
+      _meta,
     });
   } catch (error) {
     const message =

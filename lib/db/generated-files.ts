@@ -12,7 +12,7 @@ type SaveGeneratedFileArgs = {
   description?: string;
   contentText: string;
   contentJson?: unknown;
-  source: "claude" | "lovable" | "manual";
+  source: string;
 };
 
 export async function saveGeneratedFile({

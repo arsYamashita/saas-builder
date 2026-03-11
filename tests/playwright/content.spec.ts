@@ -1,11 +1,11 @@
 import { test, expect } from "@playwright/test";
 
-test("content list page renders", async ({ page }) => {
+test("content list page redirects to login without auth", async ({ page }) => {
   await page.goto("/content");
-  await expect(page.locator("h1")).toContainText("Contents");
+  await expect(page).toHaveURL(/\/auth\/login/);
 });
 
-test("new content page renders", async ({ page }) => {
+test("new content page redirects to login without auth", async ({ page }) => {
   await page.goto("/content/new");
-  await expect(page.locator("h1")).toContainText("New Content");
+  await expect(page).toHaveURL(/\/auth\/login/);
 });

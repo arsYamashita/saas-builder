@@ -8,6 +8,7 @@ type SaveImplementationRunInput = {
   promptText: string;
   outputText: string;
   outputJson?: unknown;
+  source?: string;
 };
 
 export async function saveImplementationRun({
@@ -17,6 +18,7 @@ export async function saveImplementationRun({
   promptText,
   outputText,
   outputJson,
+  source,
 }: SaveImplementationRunInput) {
   const supabase = createAdminClient();
 
@@ -43,7 +45,7 @@ export async function saveImplementationRun({
       prompt_text: promptText,
       output_text: outputText,
       output_json: outputJson ?? null,
-      source: "claude",
+      source: source ?? "claude",
     })
     .select()
     .single();

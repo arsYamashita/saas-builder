@@ -45,7 +45,7 @@ export async function POST(_req: NextRequest, { params }: Props) {
 
     const written: Array<{ filePath: string }> = [];
 
-    for (const [, file] of latestByPath.entries()) {
+    for (const [, file] of Array.from(latestByPath.entries())) {
       const fullPath = normalizeExportPath(projectId, file.file_path);
       await writeTextFile(fullPath, file.content_text);
       written.push({ filePath: file.file_path });

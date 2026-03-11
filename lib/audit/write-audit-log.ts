@@ -38,6 +38,6 @@ export async function writeAuditLog({
   });
 
   if (error) {
-    throw new Error(`Failed to write audit log: ${error.message}`);
+    console.error(`[audit] Failed to write audit log: ${error.message}`);
   }
 }

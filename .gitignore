@@ -8,5 +8,6 @@ out/
 next-env.d.ts
 test-results/
 playwright-report/
+tests/playwright/.auth/
 .DS_Store
 .claude/

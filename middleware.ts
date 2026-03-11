@@ -21,9 +21,9 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  const hasSupabaseCookie =
-    req.cookies.get("sb-access-token") ||
-    req.cookies.get("sb-refresh-token");
+  const hasSupabaseCookie = req.cookies
+    .getAll()
+    .some((c) => c.name.startsWith("sb-") && c.name.includes("auth-token"));
 
   if (!hasSupabaseCookie) {
     const loginUrl = new URL("/auth/login", req.url);

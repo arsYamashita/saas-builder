@@ -3,7 +3,8 @@ import { readPrompt } from "@/lib/utils/read-prompt";
 import { getLatestBlueprintByProjectId } from "@/lib/db/blueprints";
 import { saveImplementationRun } from "@/lib/db/implementation-runs";
 import { getLatestImplementationRun } from "@/lib/db/latest-run";
-import { runClaudeApi } from "@/lib/ai/claude-api";
+import { executeTask } from "@/lib/providers/task-router";
+import { buildStepMeta } from "@/lib/providers/step-meta";
 import { createAdminClient } from "@/lib/db/supabase/admin";
 import { resolveFinalPromptPath } from "@/lib/ai/template-prompt-resolver";
 
@@ -60,23 +61,30 @@ export async function POST(_req: NextRequest, { params }: Props) {
     const promptPath = resolveFinalPromptPath(templateKey, "api");
     const promptTemplate = await readPrompt(promptPath);
 
-    const result = await runClaudeApi({
-      schemaSql: schemaRun.output_text,
-      blueprintJson,
-      promptTemplate,
-    });
+    const prompt = promptTemplate
+      .replace("{{schema_sql}}", schemaRun.output_text)
+      .replace("{{blueprint_json}}", blueprintJson);
+
+    const result = await executeTask("api_design", prompt);
+
+    const outputText =
+      result.normalized.format === "text"
+        ? result.normalized.text
+        : result.raw.text;
 
     const saved = await saveImplementationRun({
       projectId,
       blueprintId: blueprint.id,
       runType: "api_design",
-      promptText: result.rawPrompt,
-      outputText: result.outputText,
+      promptText: prompt,
+      outputText,
+      source: result.raw.provider,
     });
 
     return NextResponse.json({
       implementationRun: saved,
-      outputText: result.outputText,
+      outputText,
+      _meta: buildStepMeta("api_design", result),
     });
   } catch (error) {
     const message =

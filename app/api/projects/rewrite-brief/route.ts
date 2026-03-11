@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readPrompt } from "@/lib/utils/read-prompt";
-import { generateWithGemini } from "@/lib/ai/gemini-request";
+import { executeTask } from "@/lib/providers/task-router";
+import { extractJsonFromText } from "@/lib/providers/result-normalizer";
 
 interface RewriteInput {
   summary: string;
@@ -40,19 +41,17 @@ export async function POST(req: NextRequest) {
 
     const prompt = promptTemplate.replace("{{INPUT_JSON}}", inputJson);
 
-    const result = await generateWithGemini({ prompt });
+    const result = await executeTask("brief_rewrite", prompt);
 
-    // Extract JSON from response (may be wrapped in ```json ... ```)
-    const jsonMatch = result.text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      console.error("[rewrite-brief] Failed to parse AI response:", result.text);
-      return NextResponse.json(
-        { error: "AIの応答を解析できませんでした" },
-        { status: 502 }
-      );
+    // Extract JSON from normalized result
+    let parsed: RewriteOutput;
+    if (result.normalized.format === "json") {
+      parsed = result.normalized.data as RewriteOutput;
+    } else {
+      // Fallback: try extracting from raw text
+      const { data } = extractJsonFromText(result.raw.text);
+      parsed = data as RewriteOutput;
     }
-
-    const parsed = JSON.parse(jsonMatch[0]) as RewriteOutput;
 
     return NextResponse.json({
       rewrittenSummary: parsed.rewrittenSummary ?? summary,

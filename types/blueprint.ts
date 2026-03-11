@@ -36,7 +36,7 @@ export type BlueprintBilling = {
 
 export type BlueprintAffiliate = {
   enabled: boolean;
-  commission_type?: "fixed" | "percentage";
+  commission_type?: "fixed" | "percentage" | "configurable" | "none";
   commission_value?: number;
   notes?: string;
 };

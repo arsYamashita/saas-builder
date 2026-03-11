@@ -12,9 +12,27 @@ export default defineConfig({
     trace: "on-first-retry",
   },
   projects: [
+    // Auth setup (runs first if TEST_USER_EMAIL is set)
+    {
+      name: "setup",
+      testMatch: /auth\.setup\.ts/,
+    },
+    // Public / unauthenticated tests
     {
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
+      testIgnore: [/auth\.setup\.ts/, /\.auth\.spec\.ts/],
+      dependencies: ["setup"],
+    },
+    // Authenticated tests (use saved storageState)
+    {
+      name: "logged-in",
+      use: {
+        ...devices["Desktop Chrome"],
+        storageState: "tests/playwright/.auth/user.json",
+      },
+      testMatch: /\.auth\.spec\.ts/,
+      dependencies: ["setup"],
     },
   ],
   webServer: {

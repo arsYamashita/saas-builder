@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { readPrompt } from "@/lib/utils/read-prompt";
 import { getLatestBlueprintByProjectId } from "@/lib/db/blueprints";
 import { saveImplementationRun } from "@/lib/db/implementation-runs";
-import { runClaudeSchema } from "@/lib/ai/claude-schema";
+import { executeTask } from "@/lib/providers/task-router";
+import { buildStepMeta } from "@/lib/providers/step-meta";
 import { createAdminClient } from "@/lib/db/supabase/admin";
 import { resolveFinalPromptPath } from "@/lib/ai/template-prompt-resolver";
 
@@ -42,22 +43,28 @@ export async function POST(_req: NextRequest, { params }: Props) {
     const promptPath = resolveFinalPromptPath(templateKey, "schema");
     const promptTemplate = await readPrompt(promptPath);
 
-    const result = await runClaudeSchema({
-      blueprintJson,
-      promptTemplate,
-    });
+    const prompt = promptTemplate.replace("{{blueprint_json}}", blueprintJson);
+
+    const result = await executeTask("schema", prompt);
+
+    const outputText =
+      result.normalized.format === "text"
+        ? result.normalized.text
+        : result.raw.text;
 
     const saved = await saveImplementationRun({
       projectId,
       blueprintId: blueprint.id,
       runType: "schema_sql",
-      promptText: result.rawPrompt,
-      outputText: result.outputText,
+      promptText: prompt,
+      outputText,
+      source: result.raw.provider,
     });
 
     return NextResponse.json({
       implementationRun: saved,
-      outputText: result.outputText,
+      outputText,
+      _meta: buildStepMeta("schema", result),
     });
   } catch (error) {
     const message =

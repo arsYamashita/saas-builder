@@ -22,6 +22,7 @@ import {
   previewDraft,
 } from "@/lib/projects/project-draft-builder";
 import { buildReviewSummary } from "@/lib/projects/project-review-summary";
+import type { TemplateKey } from "@/types/project";
 import { buildValidationSummary } from "@/lib/projects/project-validation-summary";
 import { getTemplateGuidance } from "@/lib/projects/template-validation-messages";
 
@@ -85,8 +86,9 @@ export default function NewProjectPage() {
     applyIntake(updated);
   };
 
-  const handleTemplateChange = (templateKey: string) => {
-    const preset = PRESET_MAP[templateKey];
+  const handleTemplateChange = (key: string) => {
+    const templateKey = key as TemplateKey;
+    const preset = PRESET_MAP[key];
     if (preset) {
       setForm((prev) => ({ ...prev, ...preset, templateKey }));
     } else {

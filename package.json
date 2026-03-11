@@ -8,7 +8,13 @@
     "start": "next start",
     "lint": "next lint",
     "test": "playwright test",
+    "test:unit": "vitest run",
+    "test:unit:watch": "vitest",
+    "test:e2e": "playwright test --project=chromium",
+    "test:e2e:auth": "playwright test --project=logged-in",
+    "test:e2e:all": "playwright test",
     "test:ui": "playwright test --ui",
+    "test:cleanup": "tsx scripts/cleanup-e2e-data.ts",
     "regression:mca": "bash scripts/run-mca-regression.sh",
     "regression:rsv": "bash scripts/run-rsv-regression.sh",
     "regression:crm": "bash scripts/run-crm-regression.sh"
@@ -39,6 +45,7 @@
     "autoprefixer": "^10.4.0",
     "postcss": "^8.4.0",
     "tailwindcss": "^3.4.0",
-    "typescript": "^5.5.0"
+    "typescript": "^5.5.0",
+    "vitest": "^3.2.4"
   }
 }

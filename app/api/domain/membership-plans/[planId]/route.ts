@@ -116,3 +116,65 @@ export async function PATCH(req: NextRequest, { params }: Props) {
     );
   }
 }
+
+export async function DELETE(_req: NextRequest, { params }: Props) {
+  try {
+    const { planId } = await params;
+    const membership = await requireTenantRole("admin");
+    const user = await requireCurrentUser();
+    const supabase = createAdminClient();
+
+    const { data: before, error: beforeError } = await supabase
+      .from("membership_plans")
+      .select("*")
+      .eq("id", planId)
+      .eq("tenant_id", membership.tenant_id)
+      .single();
+
+    if (beforeError) {
+      return NextResponse.json(
+        { error: "Plan not found", details: beforeError.message },
+        { status: 404 }
+      );
+    }
+
+    const { error } = await supabase
+      .from("membership_plans")
+      .delete()
+      .eq("id", planId)
+      .eq("tenant_id", membership.tenant_id);
+
+    if (error) {
+      const isFkViolation = error.code === "23503" || error.message?.includes("foreign key");
+      return NextResponse.json(
+        {
+          error: isFkViolation
+            ? "Cannot delete plan: it is referenced by other records"
+            : "Failed to delete plan",
+          details: error.message,
+        },
+        { status: isFkViolation ? 409 : 500 }
+      );
+    }
+
+    await writeAuditLog({
+      tenantId: membership.tenant_id,
+      actorUserId: user.id,
+      action: "membership_plan.delete",
+      resourceType: "membership_plan",
+      resourceId: planId,
+      beforeJson: before,
+      afterJson: null,
+    });
+
+    return NextResponse.json({ ok: true, deletedId: planId });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Unknown error";
+
+    return NextResponse.json(
+      { error: "Failed to delete plan", details: message },
+      { status: 500 }
+    );
+  }
+}

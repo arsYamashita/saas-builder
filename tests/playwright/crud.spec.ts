@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 
-test("content page renders", async ({ page }) => {
+test("content page redirects to login without auth", async ({ page }) => {
   await page.goto("/content");
-  await expect(page.locator("h1")).toContainText("Contents");
+  await expect(page).toHaveURL(/\/auth\/login/);
 });

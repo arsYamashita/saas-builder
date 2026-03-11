@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/db/supabase/admin";
-import { GenerationStep } from "@/types/generation-run";
+import { GenerationStep, GenerationStepMeta } from "@/types/generation-run";
 
 export async function createGenerationRun(
   projectId: string,
@@ -42,7 +42,8 @@ export async function createGenerationRun(
 export async function updateGenerationStep(
   generationRunId: string,
   stepKey: GenerationStep["key"],
-  status: GenerationStep["status"]
+  status: GenerationStep["status"],
+  meta?: GenerationStepMeta
 ) {
   const supabase = createAdminClient();
 
@@ -58,9 +59,14 @@ export async function updateGenerationStep(
     );
   }
 
-  const steps = (run.steps_json as GenerationStep[]).map((step) =>
-    step.key === stepKey ? { ...step, status } : step
-  );
+  const steps = (run.steps_json as GenerationStep[]).map((step) => {
+    if (step.key !== stepKey) return step;
+    const updated: GenerationStep = { ...step, status };
+    if (meta) {
+      updated.meta = { ...(step.meta ?? {}), ...meta };
+    }
+    return updated;
+  });
 
   const { error: updateError } = await supabase
     .from("generation_runs")
