@@ -48,6 +48,16 @@ export interface ProviderRawResult {
   text: string;
   raw: unknown;
   durationMs: number;
+  /** Token counts from provider API response */
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  /** True when fallback provider was used instead of primary */
+  fallbackUsed?: boolean;
+  /** The primary provider that failed (only set when fallbackUsed=true) */
+  fallbackFromProvider?: ProviderId;
+  /** Error message from primary provider failure (only set when fallbackUsed=true) */
+  fallbackReason?: string;
 }
 
 // ── Generation Request ──────────────────────────────────────

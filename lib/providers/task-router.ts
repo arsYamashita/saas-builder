@@ -22,6 +22,25 @@ import {
   validateNormalizedResult,
   type NormalizedResult,
 } from "./result-normalizer";
+import {
+  selectProvider,
+  buildRoutingLog,
+  type RoutingContext,
+  type RoutingDecision,
+} from "./provider-router";
+import {
+  chooseBudgetAwareProvider,
+  buildCostGuardrailLog,
+  type BudgetContext,
+  type CostGuardrailDecision,
+} from "./cost-guardrail";
+import {
+  applyLearnedPreferenceAdjustment,
+  getLearnedPreferences,
+  getPreferencesByCategory,
+  buildProviderLearningLog,
+  type LearnedPreferences,
+} from "./provider-learning";
 
 // ── Static Route Table ──────────────────────────────────────
 
@@ -112,6 +131,20 @@ export interface TaskResult {
   normalized: NormalizedResult;
   warnings: string[];
   validationErrors: Array<{ field: string; message: string }>;
+  /** Routing Intelligence v1: decision metadata (when routing context provided) */
+  routingDecision?: RoutingDecision;
+  /** Cost Guardrail v1: budget decision metadata */
+  costGuardrailDecision?: CostGuardrailDecision;
+  /** Provider Learning Loop v1: learning metadata for step-meta */
+  learningMeta?: {
+    applied: boolean;
+    confidence?: number;
+    preferredProviders?: string[];
+    avoidedProviders?: string[];
+    reasonSummary?: string;
+    baseOrder?: string[];
+    finalOrder?: string[];
+  };
 }
 
 /**
@@ -130,6 +163,14 @@ export async function executeTask(
     system?: string;
     maxTokens?: number;
     forceProvider?: ProviderId;
+    /** Routing Intelligence v1: provide scoreboard metrics for data-driven selection */
+    routingContext?: RoutingContext;
+    /** Cost Guardrail v1: budget constraints for the run */
+    budgetContext?: BudgetContext;
+    /** Cost Guardrail v1: accumulated cost from previous steps */
+    accumulatedCost?: number;
+    /** Provider Learning Loop v1: learned preferences for routing adjustment */
+    learnedPreferences?: LearnedPreferences;
   }
 ): Promise<TaskResult> {
   const route = ROUTE_TABLE[taskKind];
@@ -137,9 +178,131 @@ export async function executeTask(
 
   // Resolve provider
   let providerId: ProviderId;
+  let routingDecision: RoutingDecision | undefined;
+  let costGuardrailDecision: CostGuardrailDecision | undefined;
+
+  // Provider Learning Loop v1: metadata for step-meta
+  let learningMeta: {
+    applied: boolean;
+    confidence?: number;
+    preferredProviders?: string[];
+    avoidedProviders?: string[];
+    reasonSummary?: string;
+    baseOrder?: string[];
+    finalOrder?: string[];
+  } | undefined;
+
   if (options?.forceProvider) {
     providerId = options.forceProvider;
+  } else if (options?.routingContext) {
+    // Routing Intelligence v1: data-driven provider selection
+    routingDecision = selectProvider(taskKind, options.routingContext);
+
+    // Provider Learning Loop v1: apply learned preference adjustments
+    if (options.learnedPreferences) {
+      const baseOrder = [routingDecision.provider, ...routingDecision.fallbacks];
+      const baseScores = routingDecision.providerScores;
+
+      const adjusted = applyLearnedPreferenceAdjustment(
+        baseScores,
+        taskKind,
+        options.learnedPreferences
+      );
+
+      // Re-sort by adjusted score
+      adjusted.sort((a, b) => b.score - a.score);
+
+      const taskPrefs = getLearnedPreferences(options.learnedPreferences, taskKind);
+      const { preferredProviders, avoidedProviders } = getPreferencesByCategory(
+        options.learnedPreferences,
+        taskKind
+      );
+
+      const hasAdjustment = adjusted.some((a) => a.adjustment !== 0);
+
+      if (hasAdjustment) {
+        // Update routing decision with learning-adjusted scores
+        routingDecision = {
+          ...routingDecision,
+          provider: adjusted[0].provider,
+          score: adjusted[0].score,
+          fallbacks: adjusted.slice(1).map((a) => a.provider),
+          providerScores: adjusted.map((a) => ({ provider: a.provider, score: a.score })),
+        };
+
+        const learningLog = buildProviderLearningLog(
+          taskKind,
+          taskPrefs,
+          adjusted,
+          baseScores
+        );
+        console.log(`[provider-learning] ${JSON.stringify(learningLog)}`);
+      }
+
+      // Build max confidence from task preferences
+      const maxConfidence = taskPrefs.length > 0
+        ? Math.max(...taskPrefs.map((p) => p.confidence))
+        : 0;
+
+      learningMeta = {
+        applied: hasAdjustment,
+        confidence: maxConfidence,
+        preferredProviders,
+        avoidedProviders,
+        reasonSummary: taskPrefs.map((p) => p.reasonSummary).join(" | "),
+        baseOrder,
+        finalOrder: adjusted.map((a) => a.provider),
+      };
+    }
+
+    // Cost Guardrail v1: budget-aware filtering (if budget context provided)
+    if (options.budgetContext && (options.budgetContext.maxCostPerRun != null || options.budgetContext.maxCostPerStep?.[taskKind] != null)) {
+      const allRanked = [routingDecision.provider, ...routingDecision.fallbacks];
+      costGuardrailDecision = chooseBudgetAwareProvider({
+        taskKind,
+        rankedProviders: allRanked,
+        metrics: options.routingContext.metrics,
+        accumulatedCost: options.accumulatedCost ?? 0,
+        budget: options.budgetContext,
+      });
+
+      const guardrailLog = buildCostGuardrailLog(taskKind, allRanked, costGuardrailDecision);
+      console.log(`[cost-guardrail] ${JSON.stringify(guardrailLog)}`);
+
+      if (costGuardrailDecision.result === "blocked") {
+        throw new Error(
+          `[cost-guardrail] Step blocked: ${costGuardrailDecision.reason}`
+        );
+      }
+
+      // Use the guardrail-approved provider
+      providerId = costGuardrailDecision.selectedProvider!;
+    } else {
+      // No budget constraints — use routing decision directly
+      const candidate = adapters[routingDecision.provider];
+      if (candidate.isAvailable()) {
+        providerId = routingDecision.provider;
+      } else {
+        const available = routingDecision.fallbacks.find(
+          (fb) => adapters[fb].isAvailable()
+        );
+        if (available) {
+          console.log(
+            `[task-router] Routed provider ${routingDecision.provider} unavailable for ${taskKind}, using fallback ${available}`
+          );
+          providerId = available;
+        } else {
+          throw new Error(
+            `No available provider for taskKind=${taskKind} (routed=${routingDecision.provider}, fallbacks=${routingDecision.fallbacks.join(",")})`
+          );
+        }
+      }
+    }
+
+    const log = buildRoutingLog(taskKind, routingDecision);
+    console.log(`[routing-intelligence] ${JSON.stringify(log)}`);
   } else {
+    // Static routing (original behavior)
     const primary = adapters[route.primary];
     if (primary.isAvailable()) {
       providerId = route.primary;
@@ -155,16 +318,49 @@ export async function executeTask(
     }
   }
 
-  const adapter = adapters[providerId];
+  let adapter = adapters[providerId];
   const system = options?.system ?? route.system;
 
-  // Execute
-  const raw = await adapter.generate({
-    prompt,
-    system,
-    taskKind,
-    maxTokens: options?.maxTokens,
-  });
+  // Execute with fallback on retryable errors (429, 503)
+  let raw: ProviderRawResult;
+  let fallbackUsed = false;
+  let fallbackFromProvider: ProviderId | undefined;
+  try {
+    raw = await adapter.generate({
+      prompt,
+      system,
+      taskKind,
+      maxTokens: options?.maxTokens,
+    });
+  } catch (err) {
+    const isRetryable =
+      err instanceof Error && /\b(429|503|RESOURCE_EXHAUSTED|quota)\b/i.test(err.message);
+    const fallbackId = route.fallback;
+
+    if (isRetryable && fallbackId && !options?.forceProvider && adapters[fallbackId].isAvailable()) {
+      console.log(
+        `[task-router] ${providerId} returned retryable error for ${taskKind}, falling back to ${fallbackId}`
+      );
+      fallbackFromProvider = providerId;
+      providerId = fallbackId;
+      adapter = adapters[fallbackId];
+      fallbackUsed = true;
+      raw = await adapter.generate({
+        prompt,
+        system,
+        taskKind,
+        maxTokens: options?.maxTokens,
+      });
+    } else {
+      throw err;
+    }
+  }
+
+  // Tag the result with fallback metadata
+  if (fallbackUsed) {
+    raw.fallbackUsed = true;
+    raw.fallbackFromProvider = fallbackFromProvider;
+  }
 
   // Normalize
   const normalized = normalizeResult(raw, expectedFormat);
@@ -177,6 +373,9 @@ export async function executeTask(
     normalized,
     warnings: normalized.warnings,
     validationErrors,
+    routingDecision,
+    costGuardrailDecision,
+    learningMeta,
   };
 }
 
