@@ -1,0 +1,58 @@
+{
+  "name": "コミュニティ会員制SaaS テスト",
+  "summary": "会員制コミュニティ向けのコンテンツ配信・課金プラットフォーム。プランベース・購入ベース・タグベースのアクセス制御に対応。",
+  "targetUsers": "コミュニティ運営者、オンライン教育事業者、コンテンツクリエイター",
+  "problemToSolve": "複数の公開範囲とアクセスルールを持つコンテンツを、一つのプラットフォームで管理・販売したい",
+  "referenceServices": "Patreon, Teachable, Circle",
+  "brandTone": "modern",
+
+  "templateKey": "community_membership_saas",
+  "requiredFeatures": [
+    "member_management",
+    "content_management",
+    "subscription_billing",
+    "one_time_purchase",
+    "tag_based_access",
+    "admin_dashboard"
+  ],
+  "managedData": [
+    "tenants",
+    "memberships",
+    "contents",
+    "membership_plans",
+    "subscriptions",
+    "purchases",
+    "tags",
+    "user_tags",
+    "content_access_rules",
+    "audit_logs"
+  ],
+  "endUserCreatedData": ["profile"],
+  "roles": ["owner", "admin", "member"],
+  "billingModel": "hybrid",
+  "affiliateEnabled": false,
+  "visibilityRule": "public | members_only | rules_based",
+  "mvpScope": [
+    "auth",
+    "tenant",
+    "roles",
+    "content_crud",
+    "content_access_control",
+    "subscription_billing",
+    "one_time_purchase",
+    "tag_management",
+    "audit_log"
+  ],
+  "excludedInitialScope": [
+    "invite_token_flow",
+    "membership_update_delete",
+    "last_owner_protection",
+    "self_downgrade",
+    "advanced_analytics",
+    "mobile_app"
+  ],
+
+  "stackPreference": "Next.js + Supabase + Stripe",
+  "notes": "v1 green template candidate. 1 user = 1 tenant. OR-only access rule evaluation.",
+  "priority": "high"
+}

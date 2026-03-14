@@ -1,0 +1,94 @@
+{
+  "baselineTag": "baseline/iao-green-v1",
+  "templateKey": "internal_admin_ops_saas",
+  "fixturePath": "tests/fixtures/internal-admin-ops-first-run.json",
+
+  "template_key": "internal_admin_ops_saas",
+  "version": "1.0.0",
+  "short_name": "iao",
+  "generation_steps": 6,
+
+  "expectedGenerationSteps": {
+    "blueprint": "completed",
+    "implementation": "completed",
+    "schema": "completed",
+    "api_design": "completed",
+    "split_files": "completed",
+    "export_files": "completed"
+  },
+
+  "expectedQualityStatuses": {
+    "lint": "passed",
+    "typecheck": "passed",
+    "playwright": "passed"
+  },
+
+  "quality_gates": [
+    "lint",
+    "typecheck",
+    "playwright",
+    "role_consistency",
+    "unit_tests"
+  ],
+
+  "minimumCounts": {
+    "blueprints": 1,
+    "implementation_runs": 1,
+    "generated_files": 1
+  },
+
+  "export_counts": {
+    "tables_min": 5,
+    "api_endpoints_min": 6,
+    "scaffold_files_min": 8
+  },
+
+  "roles": [
+    "owner",
+    "admin",
+    "operator"
+  ],
+
+  "required_entities": [
+    "operation_requests",
+    "approvals",
+    "categories"
+  ],
+
+  "approval_flow": {
+    "states": [
+      "draft",
+      "pending",
+      "approved",
+      "rejected",
+      "completed"
+    ],
+    "self_approval_forbidden": true
+  },
+
+  "requiredExportChecks": [
+    { "description": "schema SQL files", "dir": "supabase", "extension": ".sql", "minCount": 1 },
+    { "description": "type definition files", "dir": "src/types", "extension": ".ts", "minCount": 2 },
+    { "description": "validation schema files", "dir": "src/lib/validations", "extension": ".ts", "minCount": 3 },
+    { "description": "shared lib files", "dir": "src/lib", "extension": ".ts", "minCount": 4 }
+  ],
+
+  "requiredScaffoldFilePaths": [
+    "package.json",
+    "tsconfig.json",
+    "next.config.ts",
+    "eslint.config.mjs",
+    "playwright.config.ts",
+    "middleware.ts",
+    "app/layout.tsx",
+    "app/page.tsx",
+    "src/lib/supabase/server.ts",
+    "src/lib/supabase/client.ts",
+    "src/lib/permissions.ts",
+    "src/types/database.ts",
+    "src/types/internal-admin-ops-saas.ts",
+    "supabase/schema.sql",
+    "tests/playwright/auth.spec.ts",
+    "tests/playwright/smoke.spec.ts"
+  ]
+}
