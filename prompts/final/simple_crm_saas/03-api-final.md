@@ -25,11 +25,17 @@ These modules already exist and must be referenced, not reinvented:
 
 ## Allowed API Surface
 
-### Customers
-- GET /api/domain/customers
-- POST /api/domain/customers
-- GET /api/domain/customers/[customerId]
-- PATCH /api/domain/customers/[customerId]
+### Contacts
+- GET /api/domain/contacts
+- POST /api/domain/contacts
+- GET /api/domain/contacts/[contactId]
+- PATCH /api/domain/contacts/[contactId]
+
+### Companies
+- GET /api/domain/companies
+- POST /api/domain/companies
+- GET /api/domain/companies/[companyId]
+- PATCH /api/domain/companies/[companyId]
 
 ### Deals
 - GET /api/domain/deals
@@ -37,16 +43,17 @@ These modules already exist and must be referenced, not reinvented:
 - GET /api/domain/deals/[dealId]
 - PATCH /api/domain/deals/[dealId]
 
-### Tasks
-- GET /api/domain/tasks
-- POST /api/domain/tasks
-- GET /api/domain/tasks/[taskId]
-- PATCH /api/domain/tasks/[taskId]
+### Activities
+- GET /api/domain/activities
+- POST /api/domain/activities
+- GET /api/domain/activities/[activityId]
+- PATCH /api/domain/activities/[activityId]
 
 ## Required Behavior Rules
 - all mutating domain routes must require admin or stronger
-- staff may update task status and deal stage only
+- sales may update activity status and deal stage only
 - all domain reads must be tenant-scoped
+- CRITICAL: use role names "owner", "admin", "sales" only — never use "member", "operator", or "staff"
 - all inputs must be validated with zod
 - all responses must be JSON
 - all successful mutations must write audit logs

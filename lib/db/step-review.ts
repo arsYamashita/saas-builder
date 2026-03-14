@@ -220,11 +220,15 @@ export type PromotionEligibility =
 
 /**
  * Checks if a generation run is eligible for baseline promotion.
- * Requires both generation run and blueprint to be approved.
+ * Requires:
+ *   1. Generation run review_status = approved (all steps approved)
+ *   2. Blueprint review_status = approved
+ *   3. Quality gate status = passed (all checks: lint + typecheck + playwright)
  */
 export function checkPromotionEligibility(
   runReviewStatus: string,
-  blueprintReviewStatus: string | null | undefined
+  blueprintReviewStatus: string | null | undefined,
+  qualityStatus?: string | null
 ): PromotionEligibility {
   const reasons: string[] = [];
 
@@ -234,6 +238,11 @@ export function checkPromotionEligibility(
 
   if (!blueprintReviewStatus || blueprintReviewStatus !== "approved") {
     reasons.push(`Blueprint is not approved (status: ${blueprintReviewStatus ?? "none"})`);
+  }
+
+  // qualityStatus is optional for backward compat — but required for promotion
+  if (qualityStatus !== undefined && qualityStatus !== "passed") {
+    reasons.push(`Quality gates not passed (status: ${qualityStatus ?? "none"})`);
   }
 
   if (reasons.length > 0) {

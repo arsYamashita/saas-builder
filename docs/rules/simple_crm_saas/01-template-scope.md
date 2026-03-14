@@ -2,28 +2,32 @@
 
 ## Purpose
 This template is for:
-- customer relationship management
+- contact relationship management
+- company management
 - deal / opportunity tracking
-- task management
-- notes (optional in MVP)
+- activity tracking
 
 ## Included Domain Objects
-- customers
+- contacts
+- companies
 - deals
-- tasks
-- notes (optional)
+- activities
 
 ## Included Screens
 - /dashboard
-- /customers
-- /customers/new
-- /customers/[customerId]/edit
+- /contacts
+- /contacts/new
+- /contacts/[contactId]/edit
+- /companies
+- /companies/new
+- /companies/[companyId]/edit
 - /deals
 - /deals/new
 - /deals/[dealId]/edit
-- /tasks
-- /tasks/new
-- /tasks/[taskId]/edit
+- /activities
+- /activities/new
+- /activities/[activityId]/edit
+- /settings
 
 ## Included Core Modules
 - auth
@@ -44,3 +48,4 @@ This template is for:
 - calendar sync
 - payment processing
 - notification system
+- approval workflow

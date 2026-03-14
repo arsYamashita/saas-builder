@@ -1,40 +1,41 @@
 {
   "name": "CRMFlow First Run",
-  "summary": "中小企業向けに顧客管理、案件管理、タスク管理をまとめて扱えるシンプルなCRM SaaS",
+  "summary": "中小企業向けに連絡先管理、企業管理、案件管理、活動管理をまとめて扱えるシンプルなCRM SaaS",
   "targetUsers": "中小企業の営業チーム・マネージャー",
-  "problemToSolve": "顧客情報・商談・タスクがスプレッドシートやメールに散在していて管理が煩雑",
+  "problemToSolve": "連絡先・企業情報・商談・活動がスプレッドシートやメールに散在していて管理が煩雑",
   "referenceServices": "HubSpot, Pipedrive",
   "brandTone": "professional",
   "templateKey": "simple_crm_saas",
   "requiredFeatures": [
-    "customer_management",
+    "contact_management",
+    "company_management",
     "deal_management",
-    "task_management",
+    "activity_management",
     "admin_dashboard"
   ],
   "managedData": [
-    "customers",
+    "contacts",
+    "companies",
     "deals",
-    "tasks"
+    "activities"
   ],
-  "endUserCreatedData": [
-    "notes"
-  ],
+  "endUserCreatedData": [],
   "roles": [
     "owner",
     "admin",
-    "staff"
+    "sales"
   ],
   "billingModel": "none",
   "affiliateEnabled": false,
-  "visibilityRule": "staff_and_admin",
+  "visibilityRule": "sales_and_admin",
   "mvpScope": [
     "auth",
     "tenant",
     "roles",
-    "customer_crud",
+    "contact_crud",
+    "company_crud",
     "deal_crud",
-    "task_crud"
+    "activity_crud"
   ],
   "excludedInitialScope": [
     "advanced_analytics",

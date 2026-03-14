@@ -3,6 +3,11 @@
   "templateKey": "simple_crm_saas",
   "fixturePath": "tests/fixtures/simple-crm-first-run.json",
 
+  "template_key": "simple_crm_saas",
+  "version": "1.0.0",
+  "short_name": "crm",
+  "generation_steps": 6,
+
   "expectedGenerationSteps": {
     "blueprint": "completed",
     "implementation": "completed",
@@ -18,14 +23,55 @@
     "playwright": "passed"
   },
 
+  "quality_gates": [
+    "lint",
+    "typecheck",
+    "playwright",
+    "role_consistency",
+    "unit_tests"
+  ],
+
   "minimumCounts": {
     "blueprints": 1,
     "implementation_runs": 1,
     "generated_files": 1
   },
 
+  "export_counts": {
+    "tables_min": 8,
+    "api_endpoints_min": 8,
+    "scaffold_files_min": 8
+  },
+
+  "roles": [
+    "owner",
+    "admin",
+    "sales"
+  ],
+
+  "required_entities": [
+    "contacts",
+    "companies",
+    "deals",
+    "activities",
+    "audit_logs"
+  ],
+
+  "deal_pipeline": {
+    "stages": [
+      "lead",
+      "qualified",
+      "proposal",
+      "negotiation",
+      "closed_won",
+      "closed_lost"
+    ]
+  },
+
   "requiredExportChecks": [
-    { "description": "at least one .sql file under supabase/", "dir": "supabase", "extension": ".sql", "minCount": 1 }
+    { "description": "schema SQL files", "dir": "supabase", "extension": ".sql", "minCount": 1 },
+    { "description": "type definition files", "dir": "src/types", "extension": ".ts", "minCount": 1 },
+    { "description": "shared lib files", "dir": "src/lib", "extension": ".ts", "minCount": 2 }
   ],
 
   "requiredScaffoldFilePaths": [
@@ -39,6 +85,8 @@
     "app/page.tsx",
     "src/lib/supabase/server.ts",
     "src/lib/supabase/client.ts",
+    "supabase/schema.sql",
+    "src/types/crm.ts",
     "tests/playwright/auth.spec.ts",
     "tests/playwright/smoke.spec.ts"
   ]

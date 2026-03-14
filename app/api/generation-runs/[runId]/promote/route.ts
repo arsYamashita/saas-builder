@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/db/supabase/admin";
+import { getTemplateShortName } from "@/lib/templates/template-registry";
 
 type Props = {
   params: Promise<{ runId: string }>;
@@ -68,6 +69,38 @@ export async function POST(req: NextRequest, { params }: Props) {
       );
     }
 
+    // Check quality gates passed
+    const { data: qualityRun } = await supabase
+      .from("quality_runs")
+      .select("id, status, checks_json")
+      .eq("generation_run_id", runId)
+      .order("started_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!qualityRun || qualityRun.status !== "passed") {
+      return NextResponse.json(
+        {
+          error: "Quality gates must pass before promotion",
+          quality_status: qualityRun?.status ?? "none",
+        },
+        { status: 400 }
+      );
+    }
+
+    // Verify individual checks
+    const checks = (qualityRun.checks_json ?? []) as Array<{ key: string; status: string }>;
+    const failedChecks = checks.filter((c) => c.status !== "passed");
+    if (failedChecks.length > 0) {
+      return NextResponse.json(
+        {
+          error: "Not all quality checks passed",
+          failed_checks: failedChecks.map((c) => c.key),
+        },
+        { status: 400 }
+      );
+    }
+
     // Build baseline tag
     const templateShort = getTemplateShortName(run.template_key);
     const versionLabel = body.versionLabel || `v${Date.now()}`;
@@ -118,11 +151,4 @@ export async function POST(req: NextRequest, { params }: Props) {
   }
 }
 
-function getTemplateShortName(templateKey: string): string {
-  const map: Record<string, string> = {
-    membership_content_affiliate: "mca",
-    reservation_saas: "rsv",
-    simple_crm_saas: "crm",
-  };
-  return map[templateKey] ?? templateKey.slice(0, 6);
-}
+// getTemplateShortName is now imported from template-registry
