@@ -3,9 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { defaultProjectFormValues } from "./defaultValues";
 import { projectFormSchema } from "@/lib/validation/project-form";
-import { membershipContentAffiliatePreset } from "@/lib/templates/membership-content-affiliate";
-import { reservationSaasPreset } from "@/lib/templates/reservation-saas";
-import { simpleCrmSaasPreset } from "@/lib/templates/simple-crm-saas";
+import { PRESET_MAP } from "@/lib/templates/preset-map";
 import {
   TEMPLATE_CATALOG,
   getCatalogEntry,
@@ -25,12 +23,6 @@ import { buildReviewSummary } from "@/lib/projects/project-review-summary";
 import type { TemplateKey } from "@/types/project";
 import { buildValidationSummary } from "@/lib/projects/project-validation-summary";
 import { getTemplateGuidance } from "@/lib/projects/template-validation-messages";
-
-const PRESET_MAP: Record<string, Record<string, unknown>> = {
-  membership_content_affiliate: membershipContentAffiliatePreset,
-  reservation_saas: reservationSaasPreset,
-  simple_crm_saas: simpleCrmSaasPreset,
-};
 
 export default function NewProjectPage() {
   const [form, setForm] = useState(defaultProjectFormValues);

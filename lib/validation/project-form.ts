@@ -1,4 +1,12 @@
 import { z } from "zod";
+import { getRegisteredTemplateKeys } from "@/lib/templates/template-registry";
+
+/** Template keys from registry + non-registry placeholders. */
+const TEMPLATE_KEY_ENUM = [
+  ...getRegisteredTemplateKeys(),
+  "online_salon",
+  "custom",
+] as [string, ...string[]];
 
 export const projectFormSchema = z.object({
   name: z.string().min(2, "サービス名は2文字以上で入力してください"),
@@ -15,21 +23,15 @@ export const projectFormSchema = z.object({
     "playful",
   ]),
 
-  templateKey: z.enum([
-    "membership_content_affiliate",
-    "reservation_saas",
-    "simple_crm_saas",
-    "online_salon",
-    "custom",
-  ]),
+  templateKey: z.enum(TEMPLATE_KEY_ENUM),
 
   requiredFeatures: z.array(z.string()).min(1),
   managedData: z.array(z.string()).min(1),
-  endUserCreatedData: z.array(z.string()).min(1),
+  endUserCreatedData: z.array(z.string()),
 
   roles: z
     .array(
-      z.enum(["owner", "admin", "staff", "member", "affiliate_manager"])
+      z.enum(["owner", "admin", "editor", "staff", "member", "affiliate_manager", "sales", "operator"])
     )
     .min(1),
 

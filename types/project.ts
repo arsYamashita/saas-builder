@@ -1,3 +1,5 @@
+import type { RegisteredTemplateKey } from "@/lib/templates/template-registry";
+
 export type ProjectStatus =
   | "draft"
   | "blueprint_ready"
@@ -7,12 +9,12 @@ export type ProjectStatus =
   | "deployed"
   | "error";
 
-export type TemplateKey =
-  | "membership_content_affiliate"
-  | "reservation_saas"
-  | "simple_crm_saas"
-  | "online_salon"
-  | "custom";
+/**
+ * Template key — derived from registry + non-registry placeholders.
+ * Adding a template to TEMPLATE_KEYS in template-registry.ts
+ * automatically includes it here.
+ */
+export type TemplateKey = RegisteredTemplateKey | "online_salon" | "custom";
 
 export type BillingModel = "subscription" | "one_time" | "hybrid" | "none";
 
@@ -27,9 +29,12 @@ export type BrandTone =
 export type ProjectRole =
   | "owner"
   | "admin"
+  | "editor"
   | "staff"
   | "member"
-  | "affiliate_manager";
+  | "affiliate_manager"
+  | "sales"
+  | "operator";
 
 export type ProjectFormValues = {
   name: string;
@@ -81,29 +86,3 @@ export type GeneratedModule = {
   updated_at: string;
 };
 
-export type TemplateConfig = {
-  key: string;
-  name: string;
-  description: string;
-  domain_tables: string[];
-  domain_screens: string[];
-};
-
-export const TEMPLATES: Record<string, TemplateConfig> = {
-  membership_content_affiliate: {
-    key: "membership_content_affiliate",
-    name: "会員サイト + コンテンツ販売 + アフィリエイト",
-    description:
-      "会員サイト / コンテンツ販売 / 月額課金 / 紹介制度 を持つSaaSテンプレ",
-    domain_tables: ["contents", "membership_plans"],
-    domain_screens: [
-      "/content",
-      "/content/new",
-      "/content/[id]",
-      "/plans",
-      "/plans/new",
-      "/members",
-      "/members/[id]",
-    ],
-  },
-};

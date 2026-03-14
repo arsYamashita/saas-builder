@@ -92,6 +92,38 @@ const RULES: Rule[] = [
     },
   },
 
+  // --- community_membership_saas ---
+  {
+    templateKey: "community_membership_saas",
+    weight: 3,
+    reason: "コンテンツアクセス制御 (public/members_only/rules_based) を含む",
+    match: (i) => {
+      const f = features(i);
+      return f.includes("content_access") || f.includes("access_control") || f.includes("visibility");
+    },
+  },
+  {
+    templateKey: "community_membership_saas",
+    weight: 2,
+    reason: "サブスク + 単品購入のハイブリッド課金",
+    match: (i) => i.billingModel === "hybrid",
+  },
+  {
+    templateKey: "community_membership_saas",
+    weight: 2,
+    reason: "タグベースのアクセス管理を含む",
+    match: (i) => features(i).includes("tag"),
+  },
+  {
+    templateKey: "community_membership_saas",
+    weight: 1,
+    reason: "コミュニティ・会員制の記述あり",
+    match: (i) => {
+      const t = text(i);
+      return t.includes("コミュニティ") || t.includes("community") || t.includes("会員制") || t.includes("membership");
+    },
+  },
+
   // --- simple_crm_saas ---
   {
     templateKey: "simple_crm_saas",
@@ -102,10 +134,10 @@ const RULES: Rule[] = [
   {
     templateKey: "simple_crm_saas",
     weight: 2,
-    reason: "顧客管理・タスク管理を含む",
+    reason: "連絡先・企業・活動管理を含む",
     match: (i) => {
       const f = features(i);
-      return f.includes("customer") && f.includes("task");
+      return f.includes("contact") || f.includes("company") || f.includes("activity");
     },
   },
   {
@@ -114,13 +146,48 @@ const RULES: Rule[] = [
     reason: "CRM・営業向けの記述あり",
     match: (i) => {
       const t = text(i);
-      return t.includes("crm") || t.includes("営業") || t.includes("顧客管理") || t.includes("商談") || t.includes("案件");
+      return t.includes("crm") || t.includes("営業") || t.includes("顧客管理") || t.includes("商談") || t.includes("案件") || t.includes("連絡先");
     },
   },
   {
     templateKey: "simple_crm_saas",
     weight: 1,
     reason: "課金・アフィリエイト不要のシンプル構成",
+    match: (i) => i.billingModel === "none" && !i.affiliateEnabled,
+  },
+
+  // --- internal_admin_ops_saas ---
+  {
+    templateKey: "internal_admin_ops_saas",
+    weight: 3,
+    reason: "承認ワークフロー機能を含む",
+    match: (i) => {
+      const f = features(i);
+      return f.includes("approval") || f.includes("workflow");
+    },
+  },
+  {
+    templateKey: "internal_admin_ops_saas",
+    weight: 2,
+    reason: "作業依頼・タスク管理を含む",
+    match: (i) => {
+      const f = features(i);
+      return f.includes("request") || f.includes("operation");
+    },
+  },
+  {
+    templateKey: "internal_admin_ops_saas",
+    weight: 1,
+    reason: "社内管理・バックオフィス向けの記述あり",
+    match: (i) => {
+      const t = text(i);
+      return t.includes("社内") || t.includes("管理部") || t.includes("バックオフィス") || t.includes("承認") || t.includes("申請") || t.includes("internal") || t.includes("back office");
+    },
+  },
+  {
+    templateKey: "internal_admin_ops_saas",
+    weight: 1,
+    reason: "課金不要の内部ツール構成",
     match: (i) => i.billingModel === "none" && !i.affiliateEnabled,
   },
 ];
