@@ -98,6 +98,24 @@ Must support:
 - created_at
 - updated_at
 
+## Row Level Security (RLS) Requirements
+- ENABLE RLS on every table
+- Create helper functions: is_tenant_member(tenant_id), has_tenant_role(tenant_id, min_role)
+- has_tenant_role hierarchy: owner > admin > staff
+- All helper functions must be SECURITY DEFINER STABLE
+- Every domain table must have explicit per-operation policies (SELECT/INSERT/UPDATE)
+- Tenant isolation: all policies must check tenant_id membership
+- Role-based access:
+  - services: SELECT=all members, INSERT/UPDATE=admin+
+  - customers: SELECT=all members, INSERT=all members, UPDATE=admin+ or own created_by
+  - reservations: SELECT/UPDATE=admin+ or staff_id=auth.uid(), INSERT=all members
+  - activity_logs: SELECT=admin+, INSERT=all members, no UPDATE/DELETE
+  - subscriptions: SELECT=admin+, INSERT/UPDATE=owner only
+  - tenant_users: SELECT=all members, INSERT/UPDATE=admin+, DELETE=owner only
+  - tenants: SELECT=members, INSERT=authenticated, UPDATE=owner only
+- Do NOT use placeholder comments like "implement same pattern"
+- Every policy must be a complete CREATE POLICY statement
+
 ## Quality Requirements
 - schema should be directly saveable as a migration candidate
 - keep it minimal and implementation-friendly

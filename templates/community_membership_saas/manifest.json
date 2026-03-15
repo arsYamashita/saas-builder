@@ -1,0 +1,144 @@
+{
+  "template_key": "community_membership_saas",
+  "version": "1.0.0",
+  "category": "community",
+  "status": "GREEN",
+
+  "target_use_cases": [
+    "会員制コミュニティのコンテンツ配信",
+    "オンライン教育プラットフォーム",
+    "有料ニュースレター / ファンクラブ",
+    "クリエイター向け課金コンテンツサイト"
+  ],
+
+  "required_integrations": [
+    { "name": "supabase", "purpose": "Auth + DB + RLS", "version": ">=2.0" },
+    { "name": "stripe", "purpose": "Subscription + One-time payment", "version": ">=2024-12" }
+  ],
+
+  "optional_integrations": [
+    { "name": "resend", "purpose": "Transactional email (invite, receipt)" },
+    { "name": "cloudflare_r2", "purpose": "Content file storage" }
+  ],
+
+  "entities": [
+    { "name": "tenants", "description": "マルチテナント基盤" },
+    { "name": "users", "description": "auth.users と 1:1 のプロフィール" },
+    { "name": "memberships", "description": "tenant ごとの role/status 管理" },
+    { "name": "membership_plans", "description": "サブスクリプションプラン定義" },
+    { "name": "subscriptions", "description": "Stripe subscription の同期レコード" },
+    { "name": "contents", "description": "記事/動画/音声/ファイル" },
+    { "name": "content_access_rules", "description": "rules_based 時のアクセス条件 (OR評価)" },
+    { "name": "purchases", "description": "単品購入レコード" },
+    { "name": "tags", "description": "テナント内タグ定義" },
+    { "name": "user_tags", "description": "ユーザーへのタグ割当" },
+    { "name": "audit_logs", "description": "監査ログ (immutable)" }
+  ],
+
+  "roles": [
+    { "name": "owner", "priority": 100, "description": "テナントオーナー。全権限。" },
+    { "name": "admin", "priority": 80, "description": "メンバー・プラン・タグ管理。" },
+    { "name": "editor", "priority": 60, "description": "コンテンツ CRUD。" },
+    { "name": "member", "priority": 10, "description": "コンテンツ閲覧 (アクセスルール準拠)。" }
+  ],
+
+  "access_model": {
+    "type": "visibility_mode + access_rule_type",
+    "visibility_modes": ["public", "members_only", "rules_based"],
+    "access_rule_types": ["plan_based", "purchase_based", "tag_based"],
+    "evaluation": "OR (いずれか 1 つ満たせばアクセス可)",
+    "enforcement": {
+      "primary": "API layer (service_role, guards.ts + access.ts)",
+      "secondary": "RLS (defense-in-depth)"
+    }
+  },
+
+  "billing_model": {
+    "type": "hybrid",
+    "subscription": {
+      "provider": "stripe",
+      "checkout_route": "POST /api/stripe/checkout/subscription",
+      "webhook_events": ["checkout.session.completed", "customer.subscription.updated", "customer.subscription.deleted"]
+    },
+    "one_time_purchase": {
+      "provider": "stripe",
+      "checkout_route": "POST /api/stripe/checkout/purchase",
+      "webhook_events": ["checkout.session.completed"]
+    }
+  },
+
+  "task_kinds": [
+    "blueprint",
+    "implementation",
+    "schema",
+    "api_design",
+    "file_split",
+    "export_files"
+  ],
+
+  "quality_gates": [
+    { "key": "lint", "tool": "eslint", "required": true, "timeout_ms": 120000, "expected_status": "passed" },
+    { "key": "typecheck", "tool": "tsc --noEmit", "required": true, "timeout_ms": 120000, "expected_status": "passed" },
+    { "key": "playwright", "tool": "playwright test", "required": true, "timeout_ms": 180000, "expected_status": "passed",
+      "expected_tests": {
+        "min_total": 2,
+        "required_specs": ["auth.spec.ts", "smoke.spec.ts"]
+      }
+    }
+  ],
+
+  "known_limitations": [
+    "v1 は 1 user = 1 tenant (マルチテナント移籍は非対応)",
+    "invite テーブルなし — tenantId を知っていれば参加可能",
+    "membership の UPDATE / DELETE API は未実装",
+    "最後の owner 保護は未実装",
+    "self-downgrade は未対応",
+    "アクセスルールは OR 評価のみ (AND / NOT は非対応)",
+    "drip content / scheduled release は非対応",
+    "stripe_event_id による完全な冪等性は未実装 (subscription は upsert で冪等、purchase は PI 重複チェック)"
+  ],
+
+  "v2_backlog": [
+    { "id": "v2-001", "title": "invite トークンフロー", "description": "invites テーブル + トークン + 有効期限 + invited_role", "priority": "high" },
+    { "id": "v2-002", "title": "membership UPDATE/DELETE API", "description": "role 変更、メンバー削除、status 変更", "priority": "high" },
+    { "id": "v2-003", "title": "最後の owner 保護", "description": "owner が 1 人の場合は削除/降格を拒否", "priority": "high" },
+    { "id": "v2-004", "title": "self-downgrade", "description": "自分自身の role を下げる機能", "priority": "medium" },
+    { "id": "v2-005", "title": "AND/NOT アクセスルール", "description": "rules_based で AND 条件・否定条件をサポート", "priority": "medium" },
+    { "id": "v2-006", "title": "drip content", "description": "join 日からの経過日数ベースのコンテンツ解放", "priority": "medium" },
+    { "id": "v2-007", "title": "scheduled release", "description": "公開日時指定によるコンテンツ自動公開", "priority": "medium" },
+    { "id": "v2-008", "title": "Stripe event_id 冪等性", "description": "processed_events テーブルで完全な重複排除", "priority": "low" },
+    { "id": "v2-009", "title": "マルチテナント移籍", "description": "1 user が複数 tenant に所属", "priority": "low" },
+    { "id": "v2-010", "title": "affiliate 機能", "description": "紹介リンク・コミッション管理", "priority": "low" }
+  ],
+
+  "generation_inputs": {
+    "validation_schema": "lib/validation/generation-inputs.ts#cmsGenerationInputsSchema",
+    "json_schema_api": "getGenerationInputsJsonSchema('community_membership_saas')",
+    "required": [
+      { "key": "tenantName", "type": "string", "label": "テナント名", "description": "テナント表示名", "min_length": 1, "placeholder": "My Community" },
+      { "key": "tenantSlug", "type": "string", "label": "URL スラグ", "description": "テナント URL スラグ (UNIQUE)", "pattern": "^[a-z0-9][a-z0-9-]*[a-z0-9]$", "min_length": 2, "max_length": 63, "placeholder": "my-community" },
+      { "key": "ownerEmail", "type": "email", "label": "オーナーメール", "description": "オーナーのメールアドレス" },
+      { "key": "defaultCurrency", "type": "string", "label": "通貨", "description": "ISO 4217 通貨コード", "default": "jpy", "enum": ["jpy", "usd", "eur"], "pattern": "^[a-z]{3}$" }
+    ],
+    "optional": [
+      { "key": "brandTone", "type": "select", "label": "ブランドトーン", "default": "modern", "enum": ["modern", "minimal", "luxury", "friendly", "professional", "playful"] },
+      { "key": "initialPlans", "type": "array", "label": "初期プラン", "item_schema": { "name": "string", "description": "string?", "priceAmount": "integer>=0", "currency": "string", "features": "string[]", "sortOrder": "integer>=0" } },
+      { "key": "initialTags", "type": "array", "label": "初期タグ", "item_schema": { "name": "string", "slug": "string(slug)", "color": "string(#hex6)?" } },
+      { "key": "stripeAccountId", "type": "string", "label": "Stripe Account ID", "description": "Stripe Connect アカウント ID" },
+      { "key": "customDomain", "type": "string", "label": "カスタムドメイン", "description": "独自ドメイン" }
+    ]
+  },
+
+  "promotion_rule": {
+    "prerequisites": [
+      "All 6 generation steps completed",
+      "Blueprint review_status = approved",
+      "Generation run review_status = approved (all steps approved)",
+      "Quality gate: lint = passed",
+      "Quality gate: typecheck = passed",
+      "Quality gate: playwright = passed"
+    ],
+    "baseline_tag_format": "baseline/cms-green-v{version}",
+    "promotion_api": "POST /api/generation-runs/[runId]/promote"
+  }
+}

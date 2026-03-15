@@ -1,17 +1,40 @@
 import { createAdminClient } from "@/lib/db/supabase/admin";
-import { QualityCheck, QualityCheckKey } from "@/types/quality-run";
+import { QualityCheck, QualityCheckKey, COMMON_QUALITY_GATES } from "@/types/quality-run";
+import { TEMPLATE_REGISTRY } from "@/lib/templates/template-registry";
 
-const DEFAULT_CHECKS: QualityCheck[] = [
-  { key: "lint", label: "ESLint", status: "pending" },
-  { key: "typecheck", label: "TypeScript Check", status: "pending" },
-  { key: "playwright", label: "Playwright E2E", status: "pending" },
-];
+const DEFAULT_CHECKS: QualityCheck[] = COMMON_QUALITY_GATES.map((g) => ({
+  key: g.key,
+  label: g.label,
+  status: "pending" as const,
+}));
+
+/**
+ * Resolve quality checks for a template.
+ * Returns common gates + any template-specific extra gates.
+ */
+export function resolveQualityChecks(templateKey?: string | null): QualityCheck[] {
+  const common = [...DEFAULT_CHECKS];
+  if (!templateKey) return common;
+
+  const manifest = TEMPLATE_REGISTRY[templateKey];
+  if (!manifest?.extraQualityGates?.length) return common;
+
+  const extras: QualityCheck[] = manifest.extraQualityGates.map((g) => ({
+    key: g.key,
+    label: g.label,
+    status: "pending" as const,
+  }));
+
+  return [...common, ...extras];
+}
 
 export async function createQualityRun(
   projectId: string,
-  generationRunId?: string | null
+  generationRunId?: string | null,
+  templateKey?: string | null
 ) {
   const supabase = createAdminClient();
+  const checks = resolveQualityChecks(templateKey);
 
   const { data, error } = await supabase
     .from("quality_runs")
@@ -19,7 +42,7 @@ export async function createQualityRun(
       project_id: projectId,
       generation_run_id: generationRunId ?? null,
       status: "running",
-      checks_json: DEFAULT_CHECKS,
+      checks_json: checks,
     })
     .select()
     .single();

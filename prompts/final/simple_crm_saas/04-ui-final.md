@@ -15,20 +15,25 @@ Generate saveable UI file objects for the approved admin-first pages and compone
 
 ## Allowed Pages
 - app/(generated)/dashboard/page.tsx
-- app/(generated)/customers/page.tsx
-- app/(generated)/customers/new/page.tsx
-- app/(generated)/customers/[customerId]/edit/page.tsx
+- app/(generated)/contacts/page.tsx
+- app/(generated)/contacts/new/page.tsx
+- app/(generated)/contacts/[contactId]/edit/page.tsx
+- app/(generated)/companies/page.tsx
+- app/(generated)/companies/new/page.tsx
+- app/(generated)/companies/[companyId]/edit/page.tsx
 - app/(generated)/deals/page.tsx
 - app/(generated)/deals/new/page.tsx
 - app/(generated)/deals/[dealId]/edit/page.tsx
-- app/(generated)/tasks/page.tsx
-- app/(generated)/tasks/new/page.tsx
-- app/(generated)/tasks/[taskId]/edit/page.tsx
+- app/(generated)/activities/page.tsx
+- app/(generated)/activities/new/page.tsx
+- app/(generated)/activities/[activityId]/edit/page.tsx
+- app/(generated)/settings/page.tsx
 
 ## Allowed Components
-- components/domain/customer-form.tsx
+- components/domain/contact-form.tsx
+- components/domain/company-form.tsx
 - components/domain/deal-form.tsx
-- components/domain/task-form.tsx
+- components/domain/activity-form.tsx
 - components/admin/admin-nav.tsx
 - components/admin/logout-button.tsx
 
@@ -54,9 +59,10 @@ Do not generate:
 
 ## Form Rules
 - one form per entity
-- customer form should map to customer validation structure
+- contact form should map to contact validation structure
+- company form should map to company validation structure
 - deal form should map to deal validation structure
-- task form should map to task validation structure
+- activity form should map to activity validation structure
 - no multi-step wizard
 - no drag-and-drop
 - no theme switcher

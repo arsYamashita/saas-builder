@@ -1,0 +1,50 @@
+{
+  "name": "社内オペレーション管理 テスト",
+  "summary": "社内の作業依頼・承認ワークフローを一元管理するバックオフィスツール。カテゴリ分類と承認フローで業務を効率化。",
+  "targetUsers": "バックオフィス担当者、管理部門リーダー、総務・経理チーム",
+  "problemToSolve": "社内の作業依頼や承認がメール・チャットに散在しており、ステータス管理や承認履歴の追跡が困難",
+  "referenceServices": "Jira Service Management, ServiceNow",
+  "brandTone": "professional",
+
+  "templateKey": "internal_admin_ops_saas",
+  "requiredFeatures": [
+    "request_management",
+    "approval_workflow",
+    "category_management",
+    "admin_dashboard"
+  ],
+  "managedData": [
+    "tenants",
+    "operation_requests",
+    "approvals",
+    "categories",
+    "audit_logs"
+  ],
+  "endUserCreatedData": ["comments"],
+  "roles": ["owner", "admin", "staff"],
+  "billingModel": "none",
+  "affiliateEnabled": false,
+  "visibilityRule": "staff_and_admin",
+  "mvpScope": [
+    "auth",
+    "tenant",
+    "roles",
+    "request_crud",
+    "approval_workflow",
+    "category_crud",
+    "audit_log"
+  ],
+  "excludedInitialScope": [
+    "advanced_analytics",
+    "mobile_app",
+    "multi_language",
+    "email_notification",
+    "file_attachment",
+    "sla_tracking",
+    "calendar_integration"
+  ],
+
+  "stackPreference": "Next.js + Supabase + Stripe",
+  "notes": "v1 green template candidate. Internal ops tool — no billing, no public-facing content. Approval flow is core differentiator.",
+  "priority": "high"
+}

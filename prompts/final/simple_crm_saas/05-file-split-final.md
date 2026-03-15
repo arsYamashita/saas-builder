@@ -35,6 +35,7 @@ Split the provided implementation output into valid file objects that match the 
 - do not emit duplicate alternative versions for the same path
 - if content is unsuitable for a file, omit it
 - prefer fewer high-confidence files over many weak files
+- CRITICAL: all role references in generated code/types/schemas must use 'owner' | 'admin' | 'sales' — never 'member', 'operator', or 'staff'
 
 ## Output Format
 Return JSON array only.

@@ -542,4 +542,38 @@ describe("checkPromotionEligibility", () => {
     if (result.eligible) return;
     expect(result.reasons[0]).toContain("rejected");
   });
+
+  // quality gate tests (third arg)
+  it("eligible when all three conditions met", () => {
+    const result = checkPromotionEligibility("approved", "approved", "passed");
+    expect(result.eligible).toBe(true);
+  });
+
+  it("ineligible when quality gates failed", () => {
+    const result = checkPromotionEligibility("approved", "approved", "failed");
+    expect(result.eligible).toBe(false);
+    if (result.eligible) return;
+    expect(result.reasons).toHaveLength(1);
+    expect(result.reasons[0]).toContain("Quality gates");
+  });
+
+  it("ineligible when quality gates not run (null)", () => {
+    const result = checkPromotionEligibility("approved", "approved", null);
+    expect(result.eligible).toBe(false);
+    if (result.eligible) return;
+    expect(result.reasons[0]).toContain("Quality gates");
+  });
+
+  it("backward compat: omitted quality arg does not block", () => {
+    // Existing 2-arg calls should still work
+    const result = checkPromotionEligibility("approved", "approved");
+    expect(result.eligible).toBe(true);
+  });
+
+  it("accumulates all three reasons", () => {
+    const result = checkPromotionEligibility("pending", null, "failed");
+    expect(result.eligible).toBe(false);
+    if (result.eligible) return;
+    expect(result.reasons).toHaveLength(3);
+  });
 });

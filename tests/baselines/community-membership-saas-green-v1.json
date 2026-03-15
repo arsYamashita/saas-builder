@@ -1,0 +1,60 @@
+{
+  "baselineTag": "baseline/cms-green-v1",
+  "templateKey": "community_membership_saas",
+  "fixturePath": "tests/fixtures/community-membership-saas-first-run.json",
+
+  "expectedGenerationSteps": {
+    "blueprint": "completed",
+    "implementation": "completed",
+    "schema": "completed",
+    "api_design": "completed",
+    "split_files": "completed",
+    "export_files": "completed"
+  },
+
+  "expectedQualityStatuses": {
+    "lint": "passed",
+    "typecheck": "passed",
+    "playwright": "passed"
+  },
+
+  "minimumCounts": {
+    "blueprints": 1,
+    "implementation_runs": 1,
+    "generated_files": 1
+  },
+
+  "requiredExportChecks": [
+    { "description": "migration SQL files", "dir": "supabase/migrations", "extension": ".sql", "minCount": 2 },
+    { "description": "seed data", "dir": "supabase", "extension": ".sql", "minCount": 1 },
+    { "description": "API route files", "dir": "src/app/api", "extension": ".ts", "minCount": 15 },
+    { "description": "shared lib files", "dir": "src/lib", "extension": ".ts", "minCount": 4 }
+  ],
+
+  "requiredScaffoldFilePaths": [
+    "package.json",
+    "tsconfig.json",
+    "next.config.ts",
+    "eslint.config.mjs",
+    "playwright.config.ts",
+    "middleware.ts",
+    "app/layout.tsx",
+    "app/page.tsx",
+    "src/lib/supabase/server.ts",
+    "src/lib/supabase/client.ts",
+    "src/lib/guards.ts",
+    "src/lib/access.ts",
+    "src/lib/audit.ts",
+    "src/lib/stripe.ts",
+    "src/types/database.ts",
+    "supabase/migrations/00001_schema.sql",
+    "supabase/migrations/00002_rls.sql",
+    "supabase/seed.sql",
+    "src/app/api/auth/signup/route.ts",
+    "src/app/api/auth/login/route.ts",
+    "src/app/api/me/route.ts",
+    "src/app/api/stripe/webhook/route.ts",
+    "tests/playwright/auth.spec.ts",
+    "tests/playwright/smoke.spec.ts"
+  ]
+}

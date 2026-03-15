@@ -25,10 +25,10 @@ You must not redesign those tables unless the prompt explicitly says they are mi
 Focus on domain-specific tables and safe additions.
 
 ## Allowed Domain Tables
-- customers
+- contacts
+- companies
 - deals
-- tasks
-- notes
+- activities
 
 ## Hard Rules
 - Use PostgreSQL syntax
@@ -38,6 +38,8 @@ Focus on domain-specific tables and safe additions.
 - Include created_at and updated_at
 - Do not rename existing tables
 - Do not introduce unrelated tables
+- If any CHECK constraint references roles, use EXACTLY: 'owner', 'admin', 'sales'
+- Do NOT use 'member', 'operator', or 'staff' as role names — this template uses 'sales' for the lowest-privilege role
 
 ## If a table already exists conceptually
 Prefer additive or compatible schema.
@@ -50,14 +52,28 @@ Do not include explanation before or after.
 
 ## Table Requirements
 
-### customers
+### companies
 Must support:
 - id
 - tenant_id
 - name
+- industry
+- website
+- phone
+- address
+- notes
+- created_at
+- updated_at
+
+### contacts
+Must support:
+- id
+- tenant_id
+- first_name
+- last_name
 - email
 - phone
-- company
+- company_id (nullable, references companies)
 - status
 - notes
 - created_at
@@ -67,7 +83,8 @@ Must support:
 Must support:
 - id
 - tenant_id
-- customer_id
+- contact_id (references contacts)
+- company_id (nullable, references companies)
 - title
 - amount
 - stage
@@ -76,29 +93,20 @@ Must support:
 - created_at
 - updated_at
 
-### tasks
+### activities
 Must support:
 - id
 - tenant_id
 - title
 - description
-- assigned_to (nullable, references tenant_users)
+- activity_type (call, email, meeting, task)
 - due_date (nullable)
-- status
-- deal_id (nullable)
-- customer_id (nullable)
+- completed_at (nullable)
+- contact_id (nullable, references contacts)
+- deal_id (nullable, references deals)
+- assigned_to (nullable, references tenant_users)
 - created_at
 - updated_at
-
-### notes (optional)
-If included, must support:
-- id
-- tenant_id
-- content
-- notable_type (e.g. "customer", "deal", "task")
-- notable_id
-- created_by
-- created_at
 
 ## Quality Requirements
 - schema should be directly saveable as a migration candidate

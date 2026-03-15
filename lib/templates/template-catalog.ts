@@ -43,16 +43,40 @@ export const TEMPLATE_CATALOG: TemplateCatalogEntry[] = [
     recommendedFor: "予約ベースのサービス業を運営している方",
   },
   {
+    templateKey: "community_membership_saas",
+    label: "コミュニティ会員制SaaS",
+    shortDescription:
+      "マルチロール会員管理、コンテンツアクセス制御、サブスク+単品課金を備えたコミュニティSaaS",
+    targetUsers: "コミュニティ運営者、クリエイター、教育事業者",
+    coreEntities: ["tenants", "memberships", "contents", "plans", "tags"],
+    includesBilling: true,
+    includesAffiliate: false,
+    statusBadge: "GREEN",
+    recommendedFor: "会員制コミュニティやコンテンツ配信サービスを構築したい方",
+  },
+  {
     templateKey: "simple_crm_saas",
     label: "シンプルCRM SaaS",
     shortDescription:
-      "顧客管理、案件管理、タスク管理を備えたシンプルなCRM",
+      "連絡先管理、企業管理、案件管理、活動管理を備えたシンプルなCRM",
     targetUsers: "中小企業の営業チーム、マネージャー",
-    coreEntities: ["customers", "deals", "tasks"],
+    coreEntities: ["contacts", "companies", "deals", "activities"],
     includesBilling: false,
     includesAffiliate: false,
     statusBadge: "GREEN",
     recommendedFor: "営業プロセスをシンプルに管理したい方",
+  },
+  {
+    templateKey: "internal_admin_ops_saas",
+    label: "社内管理オペレーションSaaS",
+    shortDescription:
+      "作業依頼管理、承認ワークフロー、カテゴリ管理を備えた社内向けオペレーション管理ツール",
+    targetUsers: "バックオフィス担当者、管理部門リーダー、総務・経理チーム",
+    coreEntities: ["operation_requests", "approvals", "categories"],
+    includesBilling: false,
+    includesAffiliate: false,
+    statusBadge: "GREEN",
+    recommendedFor: "社内オペレーションや申請・承認の管理を効率化したい方",
   },
 ];
 

@@ -30,10 +30,10 @@ The following already exist and must be assumed, not redesigned:
 
 ## Allowed Domain Scope
 Only these domain objects are allowed:
-- customers
+- contacts
+- companies
 - deals
-- tasks
-- notes (optional)
+- activities
 
 ## Required Output
 Return JSON only.
@@ -99,20 +99,30 @@ Use exactly this JSON shape:
   "future_scope": []
 }
 
-## Role Restrictions
-Only allowed roles:
+## Role Restrictions (CRITICAL)
+The roles for this template are EXACTLY:
 - owner
 - admin
-- staff
+- sales
 
-Do not output any other roles.
+These three roles must appear in the "roles" array and "permissions" array.
+Do NOT output any other role names.
+Do NOT use "member" — that belongs to community_membership_saas, not this template.
+Do NOT use "operator" — that belongs to internal_admin_ops_saas, not this template.
+Do NOT use "staff", "editor", "viewer", "moderator", or any other role name.
+
+If you are uncertain, use "sales" for the lowest-privilege role.
+The word "member" appearing anywhere in the output makes it invalid.
+The word "staff" appearing anywhere in the output makes it invalid.
 
 ## Screen Restrictions
 Only allowed screen families:
 - dashboard
-- customers list/new/edit
+- contacts list/new/edit
+- companies list/new/edit
 - deals list/new/edit
-- tasks list/new/edit
+- activities list/new/edit
+- settings
 
 Do not output any other screen families.
 
@@ -130,51 +140,69 @@ Do not add:
 - feed
 - services
 - reservations
+- tasks
+- notes
+- customers
 
 ## Naming Rules
 Use these exact entity names when needed:
-- customer
+- contact
+- company
 - deal
-- task
-- note
+- activity
 
 Use these exact screen names when needed:
 - dashboard
-- customers_list
-- customers_new
-- customers_edit
+- contacts_list
+- contacts_new
+- contacts_edit
+- companies_list
+- companies_new
+- companies_edit
 - deals_list
 - deals_new
 - deals_edit
-- tasks_list
-- tasks_new
-- tasks_edit
+- activities_list
+- activities_new
+- activities_edit
+- settings
 
 ## Field Rules
-For customer, prefer these fields:
-- name
+For contact, prefer these fields:
+- first_name
+- last_name
 - email
 - phone
-- company
+- company_id (nullable, references companies)
 - status
 - notes
 
+For company, prefer these fields:
+- name
+- industry
+- website
+- phone
+- address
+- notes
+
 For deal, prefer these fields:
-- customer_id
+- contact_id
+- company_id (nullable)
 - title
 - amount
 - stage
 - expected_close_date
 - notes
 
-For task, prefer these fields:
+For activity, prefer these fields:
 - title
 - description
-- assigned_to
+- activity_type (call, email, meeting, task)
 - due_date
-- status
+- completed_at (nullable)
+- contact_id (nullable)
 - deal_id (nullable)
-- customer_id (nullable)
+- assigned_to
 
 Do not invent highly dynamic metadata unless necessary.
 

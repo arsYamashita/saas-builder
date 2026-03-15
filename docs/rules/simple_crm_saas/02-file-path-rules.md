@@ -4,28 +4,35 @@ AI must only generate files in the following allowed paths.
 
 ## Allowed App Paths
 - app/(generated)/dashboard/page.tsx
-- app/(generated)/customers/page.tsx
-- app/(generated)/customers/new/page.tsx
-- app/(generated)/customers/[customerId]/edit/page.tsx
+- app/(generated)/contacts/page.tsx
+- app/(generated)/contacts/new/page.tsx
+- app/(generated)/contacts/[contactId]/edit/page.tsx
+- app/(generated)/companies/page.tsx
+- app/(generated)/companies/new/page.tsx
+- app/(generated)/companies/[companyId]/edit/page.tsx
 - app/(generated)/deals/page.tsx
 - app/(generated)/deals/new/page.tsx
 - app/(generated)/deals/[dealId]/edit/page.tsx
-- app/(generated)/tasks/page.tsx
-- app/(generated)/tasks/new/page.tsx
-- app/(generated)/tasks/[taskId]/edit/page.tsx
+- app/(generated)/activities/page.tsx
+- app/(generated)/activities/new/page.tsx
+- app/(generated)/activities/[activityId]/edit/page.tsx
+- app/(generated)/settings/page.tsx
 
 ## Allowed API Paths
-- app/api/domain/customers/route.ts
-- app/api/domain/customers/[customerId]/route.ts
+- app/api/domain/contacts/route.ts
+- app/api/domain/contacts/[contactId]/route.ts
+- app/api/domain/companies/route.ts
+- app/api/domain/companies/[companyId]/route.ts
 - app/api/domain/deals/route.ts
 - app/api/domain/deals/[dealId]/route.ts
-- app/api/domain/tasks/route.ts
-- app/api/domain/tasks/[taskId]/route.ts
+- app/api/domain/activities/route.ts
+- app/api/domain/activities/[activityId]/route.ts
 
 ## Allowed Component Paths
-- components/domain/customer-form.tsx
+- components/domain/contact-form.tsx
+- components/domain/company-form.tsx
 - components/domain/deal-form.tsx
-- components/domain/task-form.tsx
+- components/domain/activity-form.tsx
 - components/admin/admin-nav.tsx
 - components/admin/logout-button.tsx
 
@@ -35,9 +42,10 @@ AI must only generate files in the following allowed paths.
 - types/auth.ts
 
 ## Allowed Validation Paths
-- lib/validation/customer.ts
+- lib/validation/contact.ts
+- lib/validation/company.ts
 - lib/validation/deal.ts
-- lib/validation/task.ts
+- lib/validation/activity.ts
 - lib/validation/auth.ts
 
 ## Allowed Core Paths

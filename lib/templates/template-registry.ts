@@ -24,12 +24,30 @@
 export type PromptKind = "blueprint" | "schema" | "api" | "ui" | "file_split";
 
 // ---------------------------------------------------------------------------
+// Canonical template key list — THE single source of truth for key literals
+// ---------------------------------------------------------------------------
+
+/** Add new template keys here. Everything else derives from this. */
+const TEMPLATE_KEYS = [
+  "membership_content_affiliate",
+  "reservation_saas",
+  "community_membership_saas",
+  "simple_crm_saas",
+  "internal_admin_ops_saas",
+] as const;
+
+/** Registered template key literal union — derived from TEMPLATE_KEYS. */
+export type RegisteredTemplateKey = (typeof TEMPLATE_KEYS)[number];
+
+// ---------------------------------------------------------------------------
 // Template Manifest — pure data, no logic
 // ---------------------------------------------------------------------------
 
 export interface TemplateManifest {
-  /** Unique identifier stored in DB. e.g. "membership_content_affiliate" */
-  templateKey: string;
+  /** Unique identifier stored in DB. Must be a member of TEMPLATE_KEYS. */
+  templateKey: RegisteredTemplateKey;
+  /** Short name for baseline tags. e.g. "mca", "cms" */
+  shortName: string;
   /** Human-readable label for UI. */
   label: string;
 
@@ -54,6 +72,14 @@ export interface TemplateManifest {
   compareScriptPath: string;
   /** Preset module path (reference only, not imported) */
   presetModule: string;
+  /** Extra quality gates beyond COMMON_QUALITY_GATES (optional). */
+  extraQualityGates?: Array<{
+    key: string;
+    label: string;
+    tool: string;
+    required: boolean;
+    timeoutMs: number;
+  }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -75,6 +101,7 @@ const FINAL_PROMPT_FILENAMES: Record<PromptKind, string> = {
 export const TEMPLATE_MANIFESTS: TemplateManifest[] = [
   {
     templateKey: "membership_content_affiliate",
+    shortName: "mca",
     label: "会員サイト + コンテンツ販売 + アフィリエイト",
     finalPromptDir: "final",
     finalPrompts: FINAL_PROMPT_FILENAMES,
@@ -89,6 +116,7 @@ export const TEMPLATE_MANIFESTS: TemplateManifest[] = [
   },
   {
     templateKey: "reservation_saas",
+    shortName: "rsv",
     label: "予約管理SaaS",
     finalPromptDir: "final/reservation_saas",
     finalPrompts: FINAL_PROMPT_FILENAMES,
@@ -100,20 +128,78 @@ export const TEMPLATE_MANIFESTS: TemplateManifest[] = [
     regressionCommand: "npm run regression:rsv",
     compareScriptPath: "scripts/compare-rsv-baseline.sh",
     presetModule: "lib/templates/reservation-saas.ts",
+    extraQualityGates: [
+      {
+        key: "role_consistency",
+        label: "Role Consistency (staff, not member)",
+        tool: "role-consistency-check",
+        required: true,
+        timeoutMs: 10_000,
+      },
+    ],
+  },
+  {
+    templateKey: "community_membership_saas",
+    shortName: "cms",
+    label: "コミュニティ会員制SaaS",
+    finalPromptDir: "final/community_membership_saas",
+    finalPrompts: FINAL_PROMPT_FILENAMES,
+    prefixPrompt: "12-claude-membership-template-prefix.md", // TODO: community-specific prefix
+    rulesRoot: "docs/rules/community_membership_saas",
+    fixturePath: "tests/fixtures/community-membership-saas-first-run.json",
+    baselineDocPath: "docs/baselines/community-membership-saas-green-v1.md",
+    baselineJsonPath: "tests/baselines/community-membership-saas-green-v1.json",
+    regressionCommand: "npm run regression:cms",
+    compareScriptPath: "scripts/compare-cms-baseline.sh",
+    presetModule: "lib/templates/community-membership-saas.ts",
   },
   {
     templateKey: "simple_crm_saas",
+    shortName: "crm",
     label: "シンプルCRM SaaS",
     finalPromptDir: "final/simple_crm_saas",
     finalPrompts: FINAL_PROMPT_FILENAMES,
-    prefixPrompt: "12-claude-membership-template-prefix.md", // TODO: CRM-specific prefix
+    prefixPrompt: "12-claude-membership-template-prefix.md",
     rulesRoot: "docs/rules/simple_crm_saas",
     fixturePath: "tests/fixtures/simple-crm-first-run.json",
     baselineDocPath: "docs/baselines/simple-crm-green-v1.md",
     baselineJsonPath: "tests/baselines/simple-crm-green-v1.json",
-    regressionCommand: "", // TODO: create after first GREEN
-    compareScriptPath: "", // TODO: create after first GREEN
+    regressionCommand: "",
+    compareScriptPath: "",
     presetModule: "lib/templates/simple-crm-saas.ts",
+    extraQualityGates: [
+      {
+        key: "role_consistency",
+        label: "Role Consistency (sales, not member)",
+        tool: "role-consistency-check",
+        required: true,
+        timeoutMs: 10_000,
+      },
+    ],
+  },
+  {
+    templateKey: "internal_admin_ops_saas",
+    shortName: "iao",
+    label: "社内管理オペレーションSaaS",
+    finalPromptDir: "final/internal_admin_ops_saas",
+    finalPrompts: FINAL_PROMPT_FILENAMES,
+    prefixPrompt: "12-claude-membership-template-prefix.md",
+    rulesRoot: "docs/rules/internal_admin_ops_saas",
+    fixturePath: "tests/fixtures/internal-admin-ops-first-run.json",
+    baselineDocPath: "docs/baselines/internal-admin-ops-green-v1.md",
+    baselineJsonPath: "tests/baselines/internal-admin-ops-green-v1.json",
+    regressionCommand: "",
+    compareScriptPath: "",
+    presetModule: "lib/templates/internal-admin-ops-saas.ts",
+    extraQualityGates: [
+      {
+        key: "role_consistency",
+        label: "Role Consistency (operator, not member)",
+        tool: "role-consistency-check",
+        required: true,
+        timeoutMs: 10_000,
+      },
+    ],
   },
 ];
 
@@ -121,8 +207,8 @@ export const TEMPLATE_MANIFESTS: TemplateManifest[] = [
 // Derived types and indexed registry
 // ---------------------------------------------------------------------------
 
-/** Union of all registered template keys */
-export type TemplateKey = (typeof TEMPLATE_MANIFESTS)[number]["templateKey"];
+/** Union of all registered template keys (re-export for convenience) */
+export type TemplateKey = RegisteredTemplateKey;
 
 /** Indexed lookup table built from manifests */
 export const TEMPLATE_REGISTRY: Record<string, TemplateManifest> =
@@ -159,4 +245,17 @@ export function getTemplateOptions(): { key: string; label: string }[] {
     key: m.templateKey,
     label: m.label,
   }));
+}
+
+/** Resolve short name from template key. Used for baseline tags. */
+export function getTemplateShortName(templateKey: string): string {
+  const entry = TEMPLATE_REGISTRY[templateKey];
+  return entry?.shortName ?? templateKey.slice(0, 6);
+}
+
+/** All registered template keys as a string array (for zod enum derivation). */
+export function getRegisteredTemplateKeys(): [string, ...string[]] {
+  const keys = TEMPLATE_MANIFESTS.map((m) => m.templateKey);
+  if (keys.length === 0) throw new Error("No templates registered");
+  return keys as [string, ...string[]];
 }
