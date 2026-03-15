@@ -8,20 +8,22 @@ export interface TemplateGuidance {
   messages: string[];
 }
 
+type GuidanceFn = (form: Record<string, unknown>) => TemplateGuidance;
+
+const GUIDANCE_MAP: Record<string, GuidanceFn> = {
+  membership_content_affiliate: mcaGuidance,
+  community_membership_saas: cmsGuidance,
+  reservation_saas: rsvGuidance,
+  simple_crm_saas: crmGuidance,
+  internal_admin_ops_saas: iaoGuidance,
+};
+
 export function getTemplateGuidance(
   templateKey: string,
   form: Record<string, unknown>
 ): TemplateGuidance | null {
-  switch (templateKey) {
-    case "membership_content_affiliate":
-      return mcaGuidance(form);
-    case "reservation_saas":
-      return rsvGuidance(form);
-    case "simple_crm_saas":
-      return crmGuidance(form);
-    default:
-      return null;
-  }
+  const fn = GUIDANCE_MAP[templateKey];
+  return fn ? fn(form) : null;
 }
 
 function mcaGuidance(form: Record<string, unknown>): TemplateGuidance {
@@ -39,6 +41,22 @@ function mcaGuidance(form: Record<string, unknown>): TemplateGuidance {
 
   return {
     title: "会員サイト + コンテンツ販売テンプレ向けのヒント",
+    messages,
+  };
+}
+
+function cmsGuidance(form: Record<string, unknown>): TemplateGuidance {
+  const messages: string[] = [];
+
+  if (!hasText(form.summary, "コミュニティ") && !hasText(form.summary, "会員")) {
+    messages.push("サービス概要にコミュニティや会員向けサービスの内容を書くと生成精度が上がります");
+  }
+  if (!hasText(form.summary, "コンテンツ") && !hasText(form.summary, "配信")) {
+    messages.push("コンテンツ配信や有料記事など、提供コンテンツの種類を記載すると精度が上がります");
+  }
+
+  return {
+    title: "コミュニティ会員制 SaaS テンプレ向けのヒント",
     messages,
   };
 }
@@ -77,6 +95,22 @@ function crmGuidance(form: Record<string, unknown>): TemplateGuidance {
 
   return {
     title: "シンプル CRM テンプレ向けのヒント",
+    messages,
+  };
+}
+
+function iaoGuidance(form: Record<string, unknown>): TemplateGuidance {
+  const messages: string[] = [];
+
+  if (!hasText(form.summary, "申請") && !hasText(form.summary, "承認") && !hasText(form.summary, "稟議")) {
+    messages.push("サービス概要に申請・承認ワークフローの用途を書くと生成精度が上がります");
+  }
+  if (!hasText(form.targetUsers, "社内") && !hasText(form.targetUsers, "管理")) {
+    messages.push("ターゲットユーザーに社内利用者の役割を記載すると具体的な画面が生成されます");
+  }
+
+  return {
+    title: "社内管理オペレーション SaaS テンプレ向けのヒント",
     messages,
   };
 }
