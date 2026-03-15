@@ -8,6 +8,7 @@ import {
   computeRunReviewStatus,
 } from "@/lib/db/step-review";
 import type { GenerationRunReviewStatus } from "@/types/generation-run";
+import { writeAuditLog } from "@/lib/audit/write-audit-log";
 
 type Props = {
   params: Promise<{ runId: string }>;
@@ -164,6 +165,23 @@ export async function POST(req: NextRequest, { params }: Props) {
       .from("generation_runs")
       .update(updatePayload)
       .eq("id", runId);
+
+    // Audit log (non-blocking)
+    const { data: proj } = await supabase
+      .from("projects")
+      .select("tenant_id")
+      .eq("id", run.project_id)
+      .single();
+
+    if (proj) {
+      writeAuditLog({
+        tenantId: proj.tenant_id,
+        action: "step.rerun",
+        resourceType: "generation_step",
+        resourceId: `${runId}/${stepKey}`,
+        afterJson: { stepKey, meta: meta ?? null },
+      });
+    }
 
     return NextResponse.json({
       ok: true,

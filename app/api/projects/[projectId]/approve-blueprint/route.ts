@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/db/supabase/admin";
+import { writeAuditLog } from "@/lib/audit/write-audit-log";
 
 type Props = {
   params: Promise<{ projectId: string }>;
@@ -47,6 +48,23 @@ export async function POST(req: NextRequest, { params }: Props) {
         { error: "Failed to approve blueprint", details: updateErr.message },
         { status: 500 }
       );
+    }
+
+    // Audit log (non-blocking)
+    const { data: proj } = await supabase
+      .from("projects")
+      .select("tenant_id")
+      .eq("id", projectId)
+      .single();
+
+    if (proj) {
+      writeAuditLog({
+        tenantId: proj.tenant_id,
+        action: "blueprint.approve",
+        resourceType: "blueprint",
+        resourceId: blueprintId!,
+        afterJson: { review_status: "approved" },
+      });
     }
 
     return NextResponse.json({ ok: true, blueprintId });

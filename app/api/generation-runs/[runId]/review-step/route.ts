@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/db/supabase/admin";
 import type { GenerationStep, StepReviewStatus } from "@/types/generation-run";
 import { applyStepReview, computeRunReviewStatus } from "@/lib/db/step-review";
 import type { GenerationRunReviewStatus } from "@/types/generation-run";
+import { writeAuditLog } from "@/lib/audit/write-audit-log";
 
 type Props = {
   params: Promise<{ runId: string }>;
@@ -31,7 +32,7 @@ export async function POST(req: NextRequest, { params }: Props) {
 
     const { data: run, error: fetchErr } = await supabase
       .from("generation_runs")
-      .select("id, status, review_status, steps_json")
+      .select("id, project_id, status, review_status, steps_json")
       .eq("id", runId)
       .single();
 
@@ -81,6 +82,23 @@ export async function POST(req: NextRequest, { params }: Props) {
         { error: "Failed to update step review", details: updateErr.message },
         { status: 500 }
       );
+    }
+
+    // Audit log (non-blocking)
+    const { data: proj } = await supabase
+      .from("projects")
+      .select("tenant_id")
+      .eq("id", run.project_id)
+      .single();
+
+    if (proj) {
+      writeAuditLog({
+        tenantId: proj.tenant_id,
+        action: `step.${action}`,
+        resourceType: "generation_step",
+        resourceId: `${runId}/${stepKey}`,
+        afterJson: { stepKey, action, reason: reason ?? null },
+      });
     }
 
     return NextResponse.json({

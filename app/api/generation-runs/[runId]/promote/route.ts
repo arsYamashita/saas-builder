@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/db/supabase/admin";
 import { getTemplateShortName } from "@/lib/templates/template-registry";
+import { writeAuditLog } from "@/lib/audit/write-audit-log";
 
 type Props = {
   params: Promise<{ runId: string }>;
@@ -135,6 +136,23 @@ export async function POST(req: NextRequest, { params }: Props) {
         baseline_tag: baselineTag,
       })
       .eq("id", runId);
+
+    // Audit log (non-blocking)
+    const { data: proj } = await supabase
+      .from("projects")
+      .select("tenant_id")
+      .eq("id", run.project_id)
+      .single();
+
+    if (proj) {
+      writeAuditLog({
+        tenantId: proj.tenant_id,
+        action: "generation_run.promote",
+        resourceType: "generation_run",
+        resourceId: runId,
+        afterJson: { baselineTag, versionLabel, promotionId: promotion.id },
+      });
+    }
 
     return NextResponse.json({
       ok: true,

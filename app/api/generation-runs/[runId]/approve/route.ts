@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/db/supabase/admin";
+import { writeAuditLog } from "@/lib/audit/write-audit-log";
 
 type Props = {
   params: Promise<{ runId: string }>;
@@ -12,7 +13,7 @@ export async function POST(_req: NextRequest, { params }: Props) {
 
     const { data: run, error: fetchErr } = await supabase
       .from("generation_runs")
-      .select("id, status")
+      .select("id, status, project_id")
       .eq("id", runId)
       .single();
 
@@ -43,6 +44,24 @@ export async function POST(_req: NextRequest, { params }: Props) {
         { error: "Failed to approve run", details: updateErr.message },
         { status: 500 }
       );
+    }
+
+    // Audit log (non-blocking)
+    const { data: proj } = await supabase
+      .from("projects")
+      .select("tenant_id")
+      .eq("id", run.project_id)
+      .single();
+
+    if (proj) {
+      writeAuditLog({
+        tenantId: proj.tenant_id,
+        action: "generation_run.approve",
+        resourceType: "generation_run",
+        resourceId: runId,
+        beforeJson: { review_status: "pending" },
+        afterJson: { review_status: "approved" },
+      });
     }
 
     return NextResponse.json({ ok: true, runId, review_status: "approved" });
