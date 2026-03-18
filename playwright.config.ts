@@ -21,7 +21,7 @@ export default defineConfig({
     {
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
-      testIgnore: [/auth\.setup\.ts/, /\.auth\.spec\.ts/],
+      testIgnore: [/auth\.setup\.ts/, /\.auth\.spec\.ts/, /\.smoke\.spec\.ts/],
       dependencies: ["setup"],
     },
     // Authenticated tests (use saved storageState)

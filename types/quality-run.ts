@@ -2,10 +2,13 @@ export type QualityCheckKey = "lint" | "typecheck" | "playwright" | (string & {}
 
 export type QualityCheckStatus = "pending" | "running" | "passed" | "failed" | "error";
 
+export type QualityCheckCategory = "common" | "extra";
+
 export type QualityCheck = {
   key: QualityCheckKey;
   label: string;
   status: QualityCheckStatus;
+  category?: QualityCheckCategory;
   stdout?: string | null;
   stderr?: string | null;
   exitCode?: number | null;

@@ -15,14 +15,20 @@
     "test:e2e:all": "playwright test",
     "test:ui": "playwright test --ui",
     "test:cleanup": "tsx scripts/cleanup-e2e-data.ts",
-    "regression:mca": "bash scripts/run-mca-regression.sh",
-    "regression:rsv": "bash scripts/run-rsv-regression.sh",
-    "regression:crm": "bash scripts/run-crm-regression.sh"
+    "regression": "tsx scripts/run-template-regression.ts",
+    "regression:all": "tsx scripts/run-template-regression.ts --all-green",
+    "regression:mca": "tsx scripts/run-template-regression.ts --template membership_content_affiliate",
+    "regression:rsv": "tsx scripts/run-template-regression.ts --template reservation_saas",
+    "regression:crm": "tsx scripts/run-template-regression.ts --template simple_crm_saas",
+    "regression:cms": "tsx scripts/run-template-regression.ts --template community_membership_saas",
+    "regression:iao": "tsx scripts/run-template-regression.ts --template internal_admin_ops_saas",
+    "regression:nightly": "bash scripts/run-nightly-regression.sh"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.30.0",
     "@google/generative-ai": "^0.21.0",
     "@hookform/resolvers": "^3.9.0",
+    "@rollup/rollup-linux-arm64-gnu": "^4.59.0",
     "@supabase/ssr": "^0.5.0",
     "@supabase/supabase-js": "^2.45.0",
     "class-variance-authority": "^0.7.0",

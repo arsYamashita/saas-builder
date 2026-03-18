@@ -1,11 +1,13 @@
 import { createAdminClient } from "@/lib/db/supabase/admin";
 import { QualityCheck, QualityCheckKey, COMMON_QUALITY_GATES } from "@/types/quality-run";
 import { TEMPLATE_REGISTRY } from "@/lib/templates/template-registry";
+import { hasTemplateSmokeTests } from "@/lib/quality/template-smoke-registry";
 
 const DEFAULT_CHECKS: QualityCheck[] = COMMON_QUALITY_GATES.map((g) => ({
   key: g.key,
   label: g.label,
   status: "pending" as const,
+  category: "common" as const,
 }));
 
 /**
@@ -23,9 +25,29 @@ export function resolveQualityChecks(templateKey?: string | null): QualityCheck[
     key: g.key,
     label: g.label,
     status: "pending" as const,
+    category: "extra" as const,
   }));
 
-  return [...common, ...extras];
+  const smoke: QualityCheck[] = hasTemplateSmokeTests(templateKey)
+    ? [{
+        key: "template_smoke",
+        label: "Template Smoke Tests",
+        status: "pending" as const,
+        category: "extra" as const,
+      }]
+    : [];
+
+  return [...common, ...extras, ...smoke];
+}
+
+/**
+ * Resolve extra quality gate definitions from template manifest.
+ * Returns empty array for templates with no extra gates.
+ */
+export function resolveExtraGateDefinitions(templateKey?: string | null) {
+  if (!templateKey) return [];
+  const manifest = TEMPLATE_REGISTRY[templateKey];
+  return manifest?.extraQualityGates ?? [];
 }
 
 export async function createQualityRun(

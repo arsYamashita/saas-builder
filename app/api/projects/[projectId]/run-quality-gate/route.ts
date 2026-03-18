@@ -3,6 +3,7 @@ import {
   createQualityRun,
   updateQualityStep,
   finishQualityRun,
+  resolveExtraGateDefinitions,
 } from "@/lib/db/quality-runs";
 import { getLatestGenerationRun } from "@/lib/db/generation-runs";
 import { getProjectExportPath } from "@/lib/utils/project-export-path";
@@ -10,6 +11,9 @@ import { runInstall } from "@/lib/quality/run-install";
 import { runLint } from "@/lib/quality/run-lint";
 import { runTypecheck } from "@/lib/quality/run-typecheck";
 import { runPlaywright } from "@/lib/quality/run-playwright";
+import { runExtraGate } from "@/lib/quality/run-extra-gate";
+import { runTemplateSmoke, buildSmokeSummaryLog } from "@/lib/quality/run-template-smoke";
+import { hasTemplateSmokeTests } from "@/lib/quality/template-smoke-registry";
 
 type Props = {
   params: Promise<{ projectId: string }>;
@@ -21,14 +25,20 @@ export async function POST(_req: NextRequest, { params }: Props) {
 
   try {
     const latestGenerationRun = await getLatestGenerationRun(projectId);
+    const templateKey = latestGenerationRun?.template_key ?? null;
+
     const qualityRun = await createQualityRun(
       projectId,
-      latestGenerationRun?.id ?? null
+      latestGenerationRun?.id ?? null,
+      templateKey
     );
     qualityRunId = qualityRun.id;
 
     const projectDir = getProjectExportPath(projectId);
 
+    // ---------------------------------------------------------------
+    // Common gates
+    // ---------------------------------------------------------------
     const installResult = await runInstall(projectDir);
 
     await updateQualityStep(qualityRunId, "lint", "running");
@@ -77,11 +87,79 @@ export async function POST(_req: NextRequest, { params }: Props) {
       playwrightResult.combined
     );
 
-    const overallPassed =
+    let commonPassed =
       installResult.success &&
       lintResult.success &&
       typecheckResult.success &&
       playwrightResult.success;
+
+    // ---------------------------------------------------------------
+    // Extra gates (template-specific)
+    // ---------------------------------------------------------------
+    const extraGates = resolveExtraGateDefinitions(templateKey);
+    const extraResults: Record<string, { success: boolean; combined: string }> = {};
+    let extraPassed = true;
+
+    for (const gate of extraGates) {
+      await updateQualityStep(qualityRunId, gate.key, "running");
+
+      const result = await runExtraGate(gate, projectDir, templateKey ?? "");
+      extraResults[gate.key] = result;
+
+      await updateQualityStep(
+        qualityRunId,
+        gate.key,
+        result.success ? "passed" : "failed",
+        result.combined
+      );
+
+      if (!result.success) {
+        extraPassed = false;
+      }
+    }
+
+    // ---------------------------------------------------------------
+    // Template-specific smoke tests
+    // ---------------------------------------------------------------
+    let smokePassed = true;
+    if (templateKey && hasTemplateSmokeTests(templateKey) && installResult.success) {
+      await updateQualityStep(qualityRunId, "template_smoke", "running");
+
+      const smokeResult = await runTemplateSmoke(projectDir, templateKey);
+      extraResults["template_smoke"] = smokeResult;
+
+      await updateQualityStep(
+        qualityRunId,
+        "template_smoke",
+        smokeResult.success ? "passed" : "failed",
+        smokeResult.combined
+      );
+
+      smokePassed = smokeResult.success;
+      console.log(buildSmokeSummaryLog(templateKey, smokeResult.success));
+    }
+
+    // ---------------------------------------------------------------
+    // Logging
+    // ---------------------------------------------------------------
+    const commonKeys = ["lint", "typecheck", "playwright"];
+    const extraKeys = extraGates.map((g) => g.key);
+    const allFailed = [
+      ...(lintResult.success ? [] : ["lint"]),
+      ...(typecheckResult.success ? [] : ["typecheck"]),
+      ...(playwrightResult.success ? [] : ["playwright"]),
+      ...extraGates.filter((g) => !extraResults[g.key]?.success).map((g) => g.key),
+      ...(!smokePassed ? ["template_smoke"] : []),
+    ];
+
+    console.log(
+      `[quality-gates] template=${templateKey ?? "unknown"} common=[${commonKeys.join(",")}] extra=[${extraKeys.join(",")}] failed=[${allFailed.join(",")}]`
+    );
+
+    // ---------------------------------------------------------------
+    // Finish
+    // ---------------------------------------------------------------
+    const overallPassed = commonPassed && extraPassed && smokePassed;
 
     await finishQualityRun(qualityRunId, overallPassed ? "passed" : "failed");
 
@@ -92,6 +170,7 @@ export async function POST(_req: NextRequest, { params }: Props) {
       lint: lintResult,
       typecheck: typecheckResult,
       playwright: playwrightResult,
+      ...extraResults,
     });
   } catch (error) {
     const message =

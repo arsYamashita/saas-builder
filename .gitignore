@@ -10,6 +10,7 @@ test-results/
 playwright-report/
 regression-results/
 exports/
+data/
 tests/playwright/.auth/
 .DS_Store
 .claude/
