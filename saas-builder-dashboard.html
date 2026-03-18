@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SaaS Builder — プロジェクトダッシュボード</title>
+<style>
+  :root {
+    --bg: #0f172a; --surface: #1e293b; --surface2: #334155;
+    --text: #e2e8f0; --text2: #94a3b8; --accent: #3b82f6;
+    --green: #22c55e; --yellow: #eab308; --red: #ef4444; --purple: #a855f7;
+    --orange: #f97316; --cyan: #06b6d4;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); padding: 24px; }
+  .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; }
+  .header h1 { font-size: 28px; font-weight: 700; }
+  .header .meta { color: var(--text2); font-size: 14px; }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+  .badge-green { background: #16a34a22; color: var(--green); border: 1px solid #16a34a55; }
+  .badge-blue { background: #3b82f622; color: var(--accent); border: 1px solid #3b82f655; }
+  .badge-yellow { background: #eab30822; color: var(--yellow); border: 1px solid #eab30855; }
+  .badge-purple { background: #a855f722; color: var(--purple); border: 1px solid #a855f755; }
+  .badge-red { background: #ef444422; color: var(--red); border: 1px solid #ef444455; }
+  .badge-orange { background: #f9731622; color: var(--orange); border: 1px solid #f9731655; }
+
+  /* Stats Row */
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 32px; }
+  .stat-card { background: var(--surface); border-radius: 12px; padding: 20px; border: 1px solid var(--surface2); }
+  .stat-card .label { color: var(--text2); font-size: 13px; margin-bottom: 4px; }
+  .stat-card .value { font-size: 32px; font-weight: 700; }
+  .stat-card .sub { color: var(--text2); font-size: 12px; margin-top: 4px; }
+
+  /* Section */
+  .section { margin-bottom: 32px; }
+  .section-title { font-size: 18px; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+
+  /* Core Features */
+  .core-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+  .core-card { background: var(--surface); border-radius: 10px; padding: 16px; border: 1px solid var(--surface2); }
+  .core-card .name { font-weight: 600; font-size: 15px; margin-bottom: 6px; display: flex; justify-content: space-between; }
+  .core-card .desc { color: var(--text2); font-size: 13px; line-height: 1.5; }
+
+  /* Pipeline */
+  .pipeline { display: flex; gap: 0; overflow-x: auto; padding: 8px 0; }
+  .pipe-step { flex: 1; min-width: 140px; background: var(--surface); border: 1px solid var(--surface2); padding: 14px 12px; text-align: center; position: relative; }
+  .pipe-step:first-child { border-radius: 10px 0 0 10px; }
+  .pipe-step:last-child { border-radius: 0 10px 10px 0; }
+  .pipe-step .step-num { font-size: 11px; color: var(--text2); }
+  .pipe-step .step-name { font-size: 13px; font-weight: 600; margin: 4px 0; }
+  .pipe-step .step-tool { font-size: 11px; color: var(--accent); }
+  .pipe-step.done { border-color: var(--green); }
+  .pipe-step.done::after { content: "✓"; position: absolute; top: 6px; right: 8px; color: var(--green); font-size: 14px; font-weight: 700; }
+  .pipe-arrow { display: flex; align-items: center; color: var(--text2); font-size: 18px; padding: 0 2px; }
+
+  /* Templates */
+  .tmpl-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+  .tmpl-card { background: var(--surface); border-radius: 10px; padding: 16px; border: 1px solid var(--surface2); border-top: 3px solid var(--green); }
+  .tmpl-card .tmpl-name { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+  .tmpl-card .tmpl-roles { font-size: 12px; color: var(--text2); margin-bottom: 8px; }
+  .tmpl-card .tmpl-features { display: flex; gap: 6px; flex-wrap: wrap; }
+
+  /* New Features Proposal */
+  .proposal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 768px) { .proposal-grid { grid-template-columns: 1fr; } }
+  .proposal-card { background: var(--surface); border-radius: 12px; padding: 20px; border: 1px solid var(--surface2); border-left: 4px solid var(--accent); }
+  .proposal-card.idea { border-left-color: var(--purple); }
+  .proposal-card.ui { border-left-color: var(--cyan); }
+  .proposal-card h3 { font-size: 16px; margin-bottom: 8px; }
+  .proposal-card p { font-size: 13px; color: var(--text2); line-height: 1.6; }
+  .proposal-card .phase { margin-top: 12px; display: flex; align-items: center; gap: 8px; }
+
+  /* Phase Timeline */
+  .timeline { position: relative; padding-left: 28px; }
+  .timeline::before { content: ''; position: absolute; left: 8px; top: 0; bottom: 0; width: 2px; background: var(--surface2); }
+  .tl-item { position: relative; margin-bottom: 20px; }
+  .tl-item::before { content: ''; position: absolute; left: -24px; top: 4px; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--accent); background: var(--bg); }
+  .tl-item.done::before { background: var(--green); border-color: var(--green); }
+  .tl-item.current::before { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 8px var(--accent); }
+  .tl-item .tl-title { font-weight: 600; font-size: 14px; }
+  .tl-item .tl-desc { color: var(--text2); font-size: 13px; margin-top: 2px; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 4px; margin-bottom: 20px; background: var(--surface); border-radius: 10px; padding: 4px; width: fit-content; }
+  .tab { padding: 8px 20px; border-radius: 8px; cursor: pointer; font-size: 14px; color: var(--text2); transition: all .2s; border: none; background: none; }
+  .tab.active { background: var(--accent); color: white; font-weight: 600; }
+  .tab:hover:not(.active) { color: var(--text); }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  .progress-bar { width: 100%; height: 8px; background: var(--surface2); border-radius: 4px; overflow: hidden; margin: 8px 0; }
+  .progress-fill { height: 100%; background: var(--green); border-radius: 4px; transition: width .3s; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>SaaS Builder</h1>
+    <div class="meta">AI SaaS Builder — SaaSに必要な共通機能を固定し、業務固有部分だけを生成する</div>
+  </div>
+  <div style="text-align:right">
+    <span class="badge badge-green">作成中</span>
+    <div class="meta" style="margin-top:6px">最終コミット: 2026-03-18</div>
+    <div class="meta">ea7d275 — audit log統合</div>
+  </div>
+</div>
+
+<!-- Tabs -->
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('overview')">概要</button>
+  <button class="tab" onclick="switchTab('pipeline')">パイプライン</button>
+  <button class="tab" onclick="switchTab('templates')">テンプレート</button>
+  <button class="tab" onclick="switchTab('proposal')">新機能提案</button>
+</div>
+
+<!-- OVERVIEW TAB -->
+<div id="tab-overview" class="tab-content active">
+
+<div class="stats">
+  <div class="stat-card">
+    <div class="label">共通コア機能</div>
+    <div class="value" style="color:var(--green)">8/8</div>
+    <div class="sub">Auth / Tenant / RBAC / Billing / Affiliate / Audit / Notify / Admin</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">テンプレート</div>
+    <div class="value" style="color:var(--green)">5</div>
+    <div class="sub">全テンプレート GREEN（全テスト通過）</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">生成済みプロジェクト</div>
+    <div class="value">12</div>
+    <div class="sub">exports/projects/ にエクスポート済み</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">パイプライン</div>
+    <div class="value" style="color:var(--green)">6/6</div>
+    <div class="sub">全ステップ稼働中</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">APIエンドポイント</div>
+    <div class="value">30+</div>
+    <div class="sub">認証・生成・課金・管理</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">テスト</div>
+    <div class="value">68+</div>
+    <div class="sub">50+ Unit / 18 E2E Playwright</div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">共通コア機能</div>
+  <div class="core-grid">
+    <div class="core-card"><div class="name">Auth 認証 <span class="badge badge-green">完了</span></div><div class="desc">Supabase Auth / signup・login・logout / セッション管理 / OAuth対応 / アフィリエイトコード追跡</div></div>
+    <div class="core-card"><div class="name">Multi-Tenant <span class="badge badge-green">完了</span></div><div class="desc">テナント分離 / RLS / tenant_users / オーナー追跡 / ユニーク制約</div></div>
+    <div class="core-card"><div class="name">RBAC <span class="badge badge-green">完了</span></div><div class="desc">テンプレート別ロール定義 / 権限マトリクス / ガード / ロール継承 / DB・APIレベル強制</div></div>
+    <div class="core-card"><div class="name">Stripe Billing <span class="badge badge-green">完了</span></div><div class="desc">Checkout / Portal / Webhook / サブスク管理 / 期間追跡 / トライアル対応</div></div>
+    <div class="core-card"><div class="name">Affiliate <span class="badge badge-green">完了</span></div><div class="desc">コード追跡 / Cookie / リファラル / コンバージョン / コミッション計算（%/固定/なし）</div></div>
+    <div class="core-card"><div class="name">Audit Logs <span class="badge badge-green">完了</span></div><div class="desc">承認API統合済 / アクター・エンティティ追跡 / メタデータ / タイムスタンプ</div></div>
+    <div class="core-card"><div class="name">Notifications <span class="badge badge-green">完了</span></div><div class="desc">重要度別ルーティング / エスカレーション / ポリシー管理 / Factory Hooks連携</div></div>
+    <div class="core-card"><div class="name">Admin Layout <span class="badge badge-green">完了</span></div><div class="desc">Factory Dashboard / Provider Scoreboard / プロジェクト管理 / 承認ワークフローUI</div></div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">全体完成度</div>
+  <div style="background:var(--surface);border-radius:12px;padding:20px;border:1px solid var(--surface2)">
+    <div style="display:flex;justify-content:space-between;margin-bottom:8px"><span>共通コア</span><span style="color:var(--green)">100%</span></div>
+    <div class="progress-bar"><div class="progress-fill" style="width:100%"></div></div>
+    <div style="display:flex;justify-content:space-between;margin-bottom:8px;margin-top:16px"><span>AIパイプライン</span><span style="color:var(--green)">100%</span></div>
+    <div class="progress-bar"><div class="progress-fill" style="width:100%"></div></div>
+    <div style="display:flex;justify-content:space-between;margin-bottom:8px;margin-top:16px"><span>テンプレート（5種GREEN）</span><span style="color:var(--green)">100%</span></div>
+    <div class="progress-bar"><div class="progress-fill" style="width:100%"></div></div>
+    <div style="display:flex;justify-content:space-between;margin-bottom:8px;margin-top:16px"><span>Builder UI</span><span style="color:var(--green)">90%</span></div>
+    <div class="progress-bar"><div class="progress-fill" style="width:90%"></div></div>
+    <div style="display:flex;justify-content:space-between;margin-bottom:8px;margin-top:16px"><span>テスト・品質</span><span style="color:var(--green)">85%</span></div>
+    <div class="progress-bar"><div class="progress-fill" style="width:85%"></div></div>
+    <div style="display:flex;justify-content:space-between;margin-bottom:8px;margin-top:16px"><span>ユーザー向けUX（LP・オンボーディング）</span><span style="color:var(--yellow)">20%</span></div>
+    <div class="progress-bar"><div class="progress-fill" style="width:20%;background:var(--yellow)"></div></div>
+    <div style="display:flex;justify-content:space-between;margin-bottom:8px;margin-top:16px"><span>アイデア発見機能（Reddit/SNS連携）</span><span style="color:var(--red)">0%</span></div>
+    <div class="progress-bar"><div class="progress-fill" style="width:0%"></div></div>
+  </div>
+</div>
+</div>
+
+<!-- PIPELINE TAB -->
+<div id="tab-pipeline" class="tab-content">
+<div class="section">
+  <div class="section-title">生成パイプライン</div>
+  <div class="pipeline">
+    <div class="pipe-step done"><div class="step-num">Step 1</div><div class="step-name">要件ヒアリング</div><div class="step-tool">Gemini Flash</div></div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-step done"><div class="step-num">Step 2</div><div class="step-name">Blueprint生成</div><div class="step-tool">Gemini Flash</div></div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-step done"><div class="step-num">Step 3</div><div class="step-name">実装設計</div><div class="step-tool">Claude Sonnet</div></div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-step done"><div class="step-num">Step 4</div><div class="step-name">Schema/API生成</div><div class="step-tool">Claude Sonnet</div></div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-step done"><div class="step-num">Step 5</div><div class="step-name">UI統合</div><div class="step-tool">Lovable + Claude</div></div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-step done"><div class="step-num">Step 6</div><div class="step-name">E2Eテスト</div><div class="step-tool">Playwright</div></div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">提案: パイプライン拡張</div>
+  <div class="pipeline" style="opacity:0.85">
+    <div class="pipe-step" style="border-color:var(--purple);border-top:3px solid var(--purple)"><div class="step-num">NEW</div><div class="step-name">アイデア発見</div><div class="step-tool">X / はてブ / Reddit</div></div>
+    <div class="pipe-arrow" style="color:var(--purple)">→</div>
+    <div class="pipe-step" style="border-color:var(--purple);border-top:3px solid var(--purple)"><div class="step-num">NEW</div><div class="step-name">ニーズ分析</div><div class="step-tool">Gemini / Claude</div></div>
+    <div class="pipe-arrow" style="color:var(--purple)">→</div>
+    <div class="pipe-step done"><div class="step-num">Step 1</div><div class="step-name">要件ヒアリング</div><div class="step-tool">Gemini Flash</div></div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-step done"><div class="step-num">Step 2-6</div><div class="step-name">既存パイプライン</div><div class="step-tool">完成済み</div></div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">プロバイダー構成</div>
+  <div class="core-grid">
+    <div class="core-card"><div class="name">Gemini 2.0 Flash <span class="badge badge-blue">Intake/Blueprint</span></div><div class="desc">$0.075/1M input — 要件ヒアリング・Blueprint生成・正規化に使用</div></div>
+    <div class="core-card"><div class="name">Claude Sonnet 4.5 <span class="badge badge-purple">Implementation</span></div><div class="desc">$3/1K input — Schema・API・権限・ファイル分割に使用</div></div>
+    <div class="core-card"><div class="name">Lovable <span class="badge badge-orange">UI</span></div><div class="desc">プロンプト経由でUI生成 — フロントエンドコンポーネント生成</div></div>
+    <div class="core-card"><div class="name">OpenAI <span class="badge badge-yellow">利用可能</span></div><div class="desc">プロバイダーとして登録済みだが現在非メイン</div></div>
+  </div>
+</div>
+</div>
+
+<!-- TEMPLATES TAB -->
+<div id="tab-templates" class="tab-content">
+<div class="section">
+  <div class="section-title">テンプレートカタログ（全5種 GREEN）</div>
+  <div class="tmpl-grid">
+    <div class="tmpl-card">
+      <div class="tmpl-name">simple_crm_saas</div>
+      <div class="tmpl-roles">owner / admin / sales</div>
+      <div class="tmpl-features">
+        <span class="badge badge-green">GREEN v1</span>
+        <span class="badge badge-blue">顧客管理</span>
+        <span class="badge badge-blue">商談</span>
+        <span class="badge badge-blue">タスク</span>
+      </div>
+    </div>
+    <div class="tmpl-card">
+      <div class="tmpl-name">reservation_saas</div>
+      <div class="tmpl-roles">owner / admin / host / guest</div>
+      <div class="tmpl-features">
+        <span class="badge badge-green">GREEN v1</span>
+        <span class="badge badge-blue">予約</span>
+        <span class="badge badge-purple">Stripe</span>
+        <span class="badge badge-orange">Affiliate</span>
+      </div>
+    </div>
+    <div class="tmpl-card">
+      <div class="tmpl-name">membership_content_affiliate</div>
+      <div class="tmpl-roles">owner / admin / creator / member / affiliate</div>
+      <div class="tmpl-features">
+        <span class="badge badge-green">GREEN v1</span>
+        <span class="badge badge-blue">会員</span>
+        <span class="badge badge-purple">Stripe</span>
+        <span class="badge badge-orange">Affiliate</span>
+      </div>
+    </div>
+    <div class="tmpl-card">
+      <div class="tmpl-name">community_membership_saas</div>
+      <div class="tmpl-roles">owner / admin / moderator / member</div>
+      <div class="tmpl-features">
+        <span class="badge badge-green">GREEN v1</span>
+        <span class="badge badge-blue">コミュニティ</span>
+        <span class="badge badge-purple">Stripe</span>
+        <span class="badge badge-orange">Affiliate</span>
+      </div>
+    </div>
+    <div class="tmpl-card">
+      <div class="tmpl-name">internal_admin_ops_saas</div>
+      <div class="tmpl-roles">owner / admin / manager</div>
+      <div class="tmpl-features">
+        <span class="badge badge-green">GREEN v1</span>
+        <span class="badge badge-blue">社内管理</span>
+        <span class="badge badge-blue">チーム</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">テスト・品質ゲート</div>
+  <div style="background:var(--surface);border-radius:12px;padding:20px;border:1px solid var(--surface2)">
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <tr style="border-bottom:1px solid var(--surface2)">
+        <th style="text-align:left;padding:8px;color:var(--text2)">テンプレート</th>
+        <th style="padding:8px;color:var(--text2)">npm install</th>
+        <th style="padding:8px;color:var(--text2)">Lint</th>
+        <th style="padding:8px;color:var(--text2)">TypeCheck</th>
+        <th style="padding:8px;color:var(--text2)">Playwright</th>
+        <th style="padding:8px;color:var(--text2)">Baseline</th>
+      </tr>
+      <tr style="border-bottom:1px solid var(--surface2)"><td style="padding:8px">simple_crm_saas</td><td style="text-align:center;padding:8px;color:var(--green)">✓</td><td style="text-align:center;padding:8px;color:var(--green)">✓</td><td style="text-align:center;padding:8px;color:var(--green)">✓</td><td style="text-align:center;padding:8px;color:var(--green)">✓</td><td style="text-align:center;padding:8px;color:var(--green)">v1</td></tr>
+      <tr style="border-bottom:1px solid var(--surface2)"><td style="padding:8px">reservation_saas</td><td style="text-align:center;padding:8px;color:var(--green)">✓</td><td style="text-align:center;padding:8px;color:var(--green)">✓</td><td style="text-align:center;padding:8px;color:var(--green)">✓</td><td style="text-align:center;padding:8px;color:var(--green)">✓</td><td style="text-align:center;padding:8px;color:var(--green)">v1</td></tr>
+      <tr style="border-bottom:1px solid var(--surface2)"><td style="padding:8px">membership_content_affiliate</td><td style="text-align:center;padding:8px;color:var(--green)">✓</td><td style="text-align:center;padding:8px;color:var(--green)">✓</td><td style="text-align:center;padding:8px;color:var(--green)">✓</td><td style="text-align:center;padding:8px;color:var(--green)">✓</td><td style="text-align:center;padding:8px;color:var(--green)">v1</td></tr>
+      <tr style="border-bottom:1px solid var(--surface2)"><td style="padding:8px">community_membership_saas</td><td style="text-align:center;padding:8px;color:var(--green)">✓</td><td style="text-align:center;padding:8px;color:var(--green)">✓</td><td style="text-align:center;padding:8px;color:var(--green)">✓</td><td style="text-align:center;padding:8px;color:var(--green)">✓</td><td style="text-align:center;padding:8px;color:var(--green)">v1</td></tr>
+      <tr><td style="padding:8px">internal_admin_ops_saas</td><td style="text-align:center;padding:8px;color:var(--green)">✓</td><td style="text-align:center;padding:8px;color:var(--green)">✓</td><td style="text-align:center;padding:8px;color:var(--green)">✓</td><td style="text-align:center;padding:8px;color:var(--green)">✓</td><td style="text-align:center;padding:8px;color:var(--green)">v1</td></tr>
+    </table>
+  </div>
+</div>
+</div>
+
+<!-- PROPOSAL TAB -->
+<div id="tab-proposal" class="tab-content">
+<div class="section">
+  <div class="section-title">新機能提案 — blink.new競合対策 × 日本市場特化</div>
+
+  <div class="proposal-grid">
+    <div class="proposal-card idea">
+      <h3>🔍 アイデア発見エンジン</h3>
+      <p>X（旧Twitter）・はてなブックマーク・Yahoo!知恵袋・Reddit等からSaaSニーズを自動収集。「こういうツールがあれば」「〇〇に困っている」という投稿をAIで分析し、テンプレートマッチングまで自動化。</p>
+      <div class="phase"><span class="badge badge-purple">Phase 2</span><span style="font-size:12px;color:var(--text2)">パイプラインの前段に追加</span></div>
+    </div>
+
+    <div class="proposal-card ui">
+      <h3>💬 チャットベースUI（blink.new方式）</h3>
+      <p>現在のフォーム式Intakeを、チャット会話形式に置き換え。ユーザーが自然言語で「予約管理SaaSを作りたい」と書くだけで、テンプレート推薦→Blueprint生成→プレビューまで一気通貫。</p>
+      <div class="phase"><span class="badge badge-orange">Phase 3</span><span style="font-size:12px;color:var(--text2)">UX層のリデザイン</span></div>
+    </div>
+
+    <div class="proposal-card ui">
+      <h3>👁️ リアルタイムプレビュー</h3>
+      <p>blink.newの強み。生成の各ステップでリアルタイムにUIプレビューを更新。WebSocket接続で、コード生成中にライブでアプリの見た目が変わっていく体験。</p>
+      <div class="phase"><span class="badge badge-orange">Phase 3</span><span style="font-size:12px;color:var(--text2)">WebSocket + Preview iframe</span></div>
+    </div>
+
+    <div class="proposal-card idea">
+      <h3>🇯🇵 日本市場特化</h3>
+      <p>日本語UI / インボイス制度対応 / 特定商取引法表示自動生成 / GMOペイメント・PAY.JP対応 / LINE連携 / 日本語テンプレート名・ロール名</p>
+      <div class="phase"><span class="badge badge-yellow">Phase 2-3</span><span style="font-size:12px;color:var(--text2)">段階的に追加</span></div>
+    </div>
+
+    <div class="proposal-card idea">
+      <h3>🏪 テンプレートマーケットプレイス</h3>
+      <p>ユーザーが作成したテンプレートを公開・販売できるマーケット。既にtemplate-marketplace.tsの基盤あり。日本の業種別テンプレートで差別化。</p>
+      <div class="phase"><span class="badge badge-yellow">Phase 4</span><span style="font-size:12px;color:var(--text2)">既存基盤を活用</span></div>
+    </div>
+
+    <div class="proposal-card ui">
+      <h3>🚀 ワンクリックデプロイ</h3>
+      <p>Vercel / Cloudflare Pagesへのワンクリックデプロイ。現在はexportベースだが、デプロイまでの自動化でblink.newと同等のUXを実現。</p>
+      <div class="phase"><span class="badge badge-orange">Phase 3</span><span style="font-size:12px;color:var(--text2)">Vercel API統合</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">実装ロードマップ</div>
+  <div style="background:var(--surface);border-radius:12px;padding:24px;border:1px solid var(--surface2)">
+    <div class="timeline">
+      <div class="tl-item done">
+        <div class="tl-title">Phase 1: コア完成 <span class="badge badge-green">完了</span></div>
+        <div class="tl-desc">共通コア8機能 / AIパイプライン6ステップ / テンプレート5種GREEN / テスト基盤</div>
+      </div>
+      <div class="tl-item current">
+        <div class="tl-title">Phase 2: 日本特化 + アイデア発見 <span class="badge badge-blue">次フェーズ</span></div>
+        <div class="tl-desc">SNSニーズ収集エンジン / 日本語UI / 日本決済対応 / インボイス制度 / 特商法表示</div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-title">Phase 3: UXリデザイン（blink.new対抗）</div>
+        <div class="tl-desc">チャットUI / リアルタイムプレビュー / ワンクリックデプロイ / LP・オンボーディング</div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-title">Phase 4: マーケットプレイス</div>
+        <div class="tl-desc">テンプレート公開・販売 / ユーザーコミュニティ / 業種別テンプレート拡充</div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<script>
+function switchTab(id) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  event.target.classList.add('active');
+}
+</script>
+</body>
+</html>
