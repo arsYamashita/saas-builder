@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { defaultProjectFormValues } from "./defaultValues";
 import { projectFormSchema } from "@/lib/validation/project-form";
 import { PRESET_MAP } from "@/lib/templates/preset-map";
@@ -25,6 +26,7 @@ import { buildValidationSummary } from "@/lib/projects/project-validation-summar
 import { getTemplateGuidance } from "@/lib/projects/template-validation-messages";
 
 export default function NewProjectPage() {
+  const searchParams = useSearchParams();
   const [form, setForm] = useState(defaultProjectFormValues);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [intake, setIntake] = useState<IntakeAnswers>(DEFAULT_INTAKE_ANSWERS);
@@ -32,6 +34,73 @@ export default function NewProjectPage() {
   const [draftApplied, setDraftApplied] = useState<string[] | null>(null);
   const [rewriting, setRewriting] = useState(false);
   const [rewriteError, setRewriteError] = useState<string | null>(null);
+  const [ideaSource, setIdeaSource] = useState<{
+    ideaId: string;
+    source: string;
+    sourceUrl: string;
+  } | null>(null);
+
+  // --- Build This: Pre-fill from idea discovery ---
+  useEffect(() => {
+    const ideaId = searchParams.get("ideaId");
+    if (!ideaId) return;
+
+    const problemStatement = searchParams.get("problemStatement") || "";
+    const targetUsers = searchParams.get("targetUsers") || "";
+    const billingModel = searchParams.get("billingModel") || "subscription";
+    const affiliateEnabled = searchParams.get("affiliateEnabled") === "true";
+    const templateKey = searchParams.get("templateKey") || "";
+    const requiredFeatures = searchParams.get("requiredFeatures")?.split(",").filter(Boolean) || [];
+    const mainUseCases = searchParams.get("mainUseCases")?.split(",").filter(Boolean) || [];
+    const domain = searchParams.get("domain") || "";
+    const source = searchParams.get("source") || "";
+    const sourceUrl = searchParams.get("sourceUrl") || "";
+
+    setIdeaSource({ ideaId, source, sourceUrl });
+
+    // Build form values from idea
+    const ideaFormValues: Partial<typeof defaultProjectFormValues> = {
+      summary: problemStatement,
+      targetUsers,
+      problemToSolve: mainUseCases.length > 0
+        ? `${problemStatement}\n\nユースケース: ${mainUseCases.join("、")}`
+        : problemStatement,
+      billingModel: (["subscription", "one_time", "hybrid", "none"].includes(billingModel)
+        ? billingModel
+        : "subscription") as typeof defaultProjectFormValues.billingModel,
+      affiliateEnabled,
+      notes: `[Idea Discovery] ${source} から発見\n${sourceUrl ? `元URL: ${sourceUrl}` : ""}\nドメイン: ${domain}`,
+    };
+
+    // Apply required features if available
+    if (requiredFeatures.length > 0) {
+      ideaFormValues.requiredFeatures = requiredFeatures;
+    }
+
+    // Apply template if it's a valid catalog entry
+    if (templateKey && getCatalogEntry(templateKey)) {
+      const preset = PRESET_MAP[templateKey];
+      if (preset) {
+        setForm((prev) => ({
+          ...prev,
+          ...preset,
+          ...ideaFormValues,
+          templateKey: templateKey as TemplateKey,
+        }));
+      } else {
+        setForm((prev) => ({
+          ...prev,
+          ...ideaFormValues,
+          templateKey: templateKey as TemplateKey,
+        }));
+      }
+    } else {
+      setForm((prev) => ({ ...prev, ...ideaFormValues }));
+    }
+
+    // Auto-open details since we have data
+    setShowDetails(true);
+  }, [searchParams]);
 
   const selectedCatalog = getCatalogEntry(form.templateKey);
 
@@ -180,6 +249,29 @@ export default function NewProjectPage() {
   return (
     <main className="max-w-4xl mx-auto p-6">
       <h1 className="text-2xl font-bold mb-6">新規プロジェクト作成</h1>
+
+      {/* Idea Discovery source banner */}
+      {ideaSource && (
+        <div className="mb-6 border border-green-200 rounded-lg p-4 bg-green-50 text-sm">
+          <p className="font-medium text-green-800 mb-1">
+            Idea Discovery からの自動入力
+          </p>
+          <p className="text-green-700">
+            {ideaSource.source} で発見されたアイデアを元にフォームを自動入力しました。
+            内容を確認・編集して、プロジェクトを作成してください。
+          </p>
+          {ideaSource.sourceUrl && (
+            <a
+              href={ideaSource.sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-green-600 underline hover:text-green-800 text-xs mt-1 inline-block"
+            >
+              元の投稿を見る
+            </a>
+          )}
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-8">
         {/* --- かんたん入力 --- */}

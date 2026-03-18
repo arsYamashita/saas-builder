@@ -58,6 +58,9 @@ export async function GET(
 /**
  * POST /api/idea-discovery/[ideaId]
  * Create a project from an idea
+ *
+ * This API creates a real project via /api/projects, pre-filling
+ * form data from the idea's analysis results.
  */
 export async function POST(
   request: NextRequest,
@@ -72,8 +75,7 @@ export async function POST(
       return NextResponse.json(
         {
           success: false,
-          error:
-            "projectName and templateKey are required",
+          error: "projectName and templateKey are required",
         },
         { status: 400 },
       );
@@ -90,26 +92,70 @@ export async function POST(
       );
     }
 
-    // Create project metadata from idea
-    const projectMetadata = {
-      projectId: `project-${ideaId}-${Date.now()}`,
-      projectName,
+    const needs = idea.needsAnalysis;
+
+    // Build project form data from idea analysis
+    const projectFormData = {
+      name: projectName,
+      summary: needs.problemStatement || "",
+      targetUsers: needs.targetUsers || "",
+      problemToSolve: needs.mainUseCases?.length
+        ? `${needs.problemStatement}\n\nユースケース: ${needs.mainUseCases.join("、")}`
+        : needs.problemStatement || "",
+      referenceServices: "",
+      brandTone: "modern" as const,
       templateKey,
-      sourceIdeaId: ideaId,
-      sourceIdea: {
-        problemStatement: idea.needsAnalysis.problemStatement,
-        targetUsers: idea.needsAnalysis.targetUsers,
-        requiredFeatures: idea.needsAnalysis.requiredFeatures,
-      },
-      createdAt: new Date().toISOString(),
+      requiredFeatures: needs.requiredFeatures || [],
+      managedData: needs.coreEntities || [],
+      endUserCreatedData: ["profile"],
+      roles: needs.suggestedRoles || ["user"],
+      billingModel: needs.billingModel || "subscription",
+      affiliateEnabled: needs.affiliateEnabled ?? false,
+      visibilityRule: "members_only" as const,
+      mvpScope: ["auth", "tenant", "roles"],
+      excludedInitialScope: ["advanced_analytics", "mobile_app"],
+      stackPreference: "Next.js + Supabase + Stripe",
+      notes: `[Idea Discovery] アイデアID: ${ideaId}\nソース: ${idea.source}\n${idea.sourceUrl ? `URL: ${idea.sourceUrl}` : ""}`,
+      priority: "high" as const,
     };
 
-    // In a real implementation, this would create the project in the database
-    // For now, we just return the metadata
+    // Create the project via internal API call
+    const origin = request.nextUrl.origin;
+    const projectRes = await fetch(`${origin}/api/projects`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        cookie: request.headers.get("cookie") || "",
+      },
+      body: JSON.stringify(projectFormData),
+    });
+
+    if (!projectRes.ok) {
+      const errorData = await projectRes.json().catch(() => ({}));
+      return NextResponse.json(
+        {
+          success: false,
+          error: errorData.error || `Project creation failed (${projectRes.status})`,
+          sourceIdeaId: ideaId,
+        },
+        { status: projectRes.status },
+      );
+    }
+
+    const projectData = await projectRes.json();
+
     return NextResponse.json({
       success: true,
-      project: projectMetadata,
-      message: "Project creation initiated. Complete setup in dashboard.",
+      project: {
+        ...projectData.project,
+        sourceIdeaId: ideaId,
+        sourceIdea: {
+          problemStatement: needs.problemStatement,
+          targetUsers: needs.targetUsers,
+          requiredFeatures: needs.requiredFeatures,
+        },
+      },
+      message: "プロジェクトが作成されました。ダッシュボードで確認してください。",
     });
   } catch (error) {
     console.error("[idea-discovery] POST project error:", error);
