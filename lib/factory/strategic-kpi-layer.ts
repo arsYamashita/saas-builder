@@ -126,6 +126,8 @@ export interface KpiInputs {
   portfolioReport: PortfolioStrategyReport;
   scenarioReport: ScenarioReport;
   recommendationReport: RecommendationReport;
+  /** Optional: Idea Discovery KPIs injected from discovery-kpi-bridge */
+  discoveryKpis?: KpiRecord[];
 }
 
 // ---------------------------------------------------------------------------
@@ -814,17 +816,21 @@ export function buildStrategicKpiReport(overrides?: Partial<KpiInputs>): Strateg
   const releaseKpis = computeReleaseRuntimeKpis(inputs);
   const strategyKpis = computeStrategyScenarioKpis(inputs);
 
+  // Merge Idea Discovery KPIs into strategy_scenario category
+  const discoveryKpis = inputs.discoveryKpis ?? [];
+  const combinedStrategyKpis = [...strategyKpis, ...discoveryKpis];
+
   const categories: KpiCategorySummary[] = [
     buildCategorySummary("portfolio", portfolioKpis),
     buildCategorySummary("quality_stability", qualityKpis),
     buildCategorySummary("marketplace", marketplaceKpis),
     buildCategorySummary("release_runtime", releaseKpis),
-    buildCategorySummary("strategy_scenario", strategyKpis),
+    buildCategorySummary("strategy_scenario", combinedStrategyKpis),
   ];
 
   const domainRollups = computeDomainKpiRollups(inputs);
 
-  const allKpis = [...portfolioKpis, ...qualityKpis, ...marketplaceKpis, ...releaseKpis, ...strategyKpis];
+  const allKpis = [...portfolioKpis, ...qualityKpis, ...marketplaceKpis, ...releaseKpis, ...combinedStrategyKpis];
   const strongCount = allKpis.filter((k) => k.status === "strong").length;
   const healthyCount = allKpis.filter((k) => k.status === "healthy").length;
   const warningCount = allKpis.filter((k) => k.status === "warning").length;

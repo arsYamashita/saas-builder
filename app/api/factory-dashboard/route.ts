@@ -150,6 +150,11 @@ import {
   type ScenarioAutoExecutionGuardrailsReport,
 } from "@/lib/factory/scenario-auto-execution-guardrails";
 import { resolveActorRole } from "@/lib/factory/team-role-approval";
+import { SaaSBuilderStorageAdapter } from "@/lib/idea-discovery/integrations/saas-builder-storage-adapter";
+import {
+  computeDiscoveryKpis,
+  type DiscoveryKpiInputs,
+} from "@/lib/idea-discovery/integrations/discovery-kpi-bridge";
 
 // ── Response Types ────────────────────────────────────────────
 
@@ -439,8 +444,7 @@ export async function GET() {
     // 22. Scenario planner report
     const scenarioPlanner = buildScenarioReport();
 
-    // 23. Strategic KPI report
-    const strategicKpis = buildStrategicKpiReport();
+    // 23. Strategic KPI report (built later after discovery data is loaded)
 
     // 24. Scenario execution report
     const scenarioExecution = buildScenarioExecutionReport();
@@ -473,16 +477,57 @@ export async function GET() {
     const systemActor = resolveActorRole("dashboard-service", "admin");
     const scenarioAutoExecutionGuardrails = buildScenarioAutoExecutionGuardrailReport(systemActor);
 
-    // 34. Idea Discovery overview
-    const discoveryOverview = {
-      totalDiscoveredIdeas: 0,
-      recentlyMatched: 0,
-      gapsDetected: 0,
-      topDomains: [] as string[],
-      lastRunAt: null as string | null,
-    };
-    // Note: This will be populated once discovery has run
-    // Storage adapter will read from data/idea-discovery/ directory
+    // 34. Idea Discovery overview — read real data from storage
+    let discoveryOverview: DiscoveryOverview;
+    let discoveryKpiRecords: import("@/lib/factory/strategic-kpi-layer").KpiRecord[] = [];
+    try {
+      const discoveryStorage = new SaaSBuilderStorageAdapter();
+      const analyzedIdeas = await discoveryStorage.loadAnalyzedIdeas();
+      const feedItems = await discoveryStorage.loadFeedItems();
+
+      const matched = feedItems.filter((f) => f.templateMatch.type === "matched").length;
+      const gaps = feedItems.filter((f) => f.templateMatch.type === "gap_detected").length;
+
+      // Extract top domains
+      const domainCounts = new Map<string, number>();
+      for (const item of feedItems) {
+        const domain = item.idea.quickFilter.domain;
+        if (domain) domainCounts.set(domain, (domainCounts.get(domain) || 0) + 1);
+      }
+      const topDomains = Array.from(domainCounts.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([d]) => d);
+
+      discoveryOverview = {
+        totalDiscoveredIdeas: analyzedIdeas.length,
+        recentlyMatched: matched,
+        gapsDetected: gaps,
+        topDomains,
+        lastRunAt: analyzedIdeas.length > 0
+          ? analyzedIdeas[analyzedIdeas.length - 1].analyzedAt
+          : null,
+      };
+
+      // Compute discovery KPIs for injection into strategic KPI report
+      const kpiInputs: DiscoveryKpiInputs = {
+        analyzedIdeas,
+        feedItems,
+        projectsCreatedFromIdeas: 0, // TODO: count from database
+      };
+      discoveryKpiRecords = computeDiscoveryKpis(kpiInputs);
+    } catch {
+      discoveryOverview = {
+        totalDiscoveredIdeas: 0,
+        recentlyMatched: 0,
+        gapsDetected: 0,
+        topDomains: [],
+        lastRunAt: null,
+      };
+    }
+
+    // 35. Strategic KPI report (built here so discovery KPIs are available)
+    const strategicKpis = buildStrategicKpiReport({ discoveryKpis: discoveryKpiRecords });
 
     const data: FactoryDashboardData = {
       overview: {
