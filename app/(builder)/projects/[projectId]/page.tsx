@@ -9,6 +9,7 @@ import { toGenerationProgress } from "@/lib/projects/generation-progress";
 import { toQualityProgress } from "@/lib/projects/quality-progress";
 import { buildGeneratedProjectSummary } from "@/lib/projects/generated-project-summary";
 import { computeGeneratedFilesDiff } from "@/lib/projects/generated-files-diff";
+import LivePreview from "@/components/builder/LivePreview";
 
 type ImplementationRun = {
   id: string;
@@ -135,6 +136,8 @@ export default function ProjectDetailPage() {
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "info" | "warn" } | null>(null);
   const toastRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
 
   function showToast(message: string, type: "success" | "info" | "warn" = "info") {
     if (toastRef.current) clearTimeout(toastRef.current);
@@ -177,6 +180,10 @@ export default function ProjectDetailPage() {
           const latest = result.generationRuns?.[0];
           if (!latest || latest.status === "completed" || latest.status === "failed") {
             stopPolling();
+            // Auto-refresh preview when generation completes
+            if (latest?.status === "completed") {
+              setPreviewRefreshKey((k) => k + 1);
+            }
           }
         } else {
           const latest = result.qualityRuns?.[0];
@@ -378,12 +385,25 @@ export default function ProjectDetailPage() {
           {toast.message}
         </div>
       )}
-      <header>
-        <h1 className="text-2xl font-bold">{data.project.name}</h1>
-        <p className="text-sm text-gray-500">
-          template: {data.project.template_key} / status:{" "}
-          {data.project.status}
-        </p>
+      <header className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">{data.project.name}</h1>
+          <p className="text-sm text-gray-500">
+            template: {data.project.template_key} / status:{" "}
+            {data.project.status}
+          </p>
+        </div>
+        <button
+          onClick={() => setPreviewOpen(!previewOpen)}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            previewOpen
+              ? "bg-blue-600 text-white"
+              : "bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200"
+          }`}
+        >
+          <span>👁️</span>
+          <span>{previewOpen ? "Preview を閉じる" : "Live Preview"}</span>
+        </button>
       </header>
 
       {error && (
@@ -1802,6 +1822,14 @@ export default function ProjectDetailPage() {
           </div>
         )}
       </section>
+
+      {/* ── Live Preview Panel ── */}
+      <LivePreview
+        projectId={projectId}
+        isOpen={previewOpen}
+        onToggle={() => setPreviewOpen(!previewOpen)}
+        refreshKey={previewRefreshKey}
+      />
     </main>
   );
 }
