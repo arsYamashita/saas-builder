@@ -14,3 +14,7 @@ data/
 tests/playwright/.auth/
 .DS_Store
 .claude/
+
+# Roadmap assets (not source)
+AI-SaaS-Builder-Release-Roadmap.*
+roadmap-preview-*.jpg
