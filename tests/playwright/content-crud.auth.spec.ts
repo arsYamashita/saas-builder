@@ -37,7 +37,7 @@ test.describe.serial("Content CRUD flow", () => {
 
   test("2. navigate to new content form", async ({ page }) => {
     await page.goto("/content");
-    await page.getByRole("link", { name: /New Content/i }).click();
+    await page.getByRole("link", { name: /新規コンテンツ/i }).click();
     await expect(page).toHaveURL(/\/content\/new/);
     await expect(page.locator("form")).toBeVisible({ timeout: 10000 });
   });
@@ -70,7 +70,7 @@ test.describe.serial("Content CRUD flow", () => {
     });
 
     const row = page.locator("tr", { hasText: testTitle });
-    await row.getByRole("link", { name: /Edit/i }).click();
+    await row.getByRole("link", { name: /編集/i }).click();
 
     await expect(page).toHaveURL(/\/content\/[^/]+\/edit/);
     const titleInput = page.getByRole("textbox").first();
@@ -106,7 +106,7 @@ test.describe.serial("Content CRUD flow", () => {
     page.on("dialog", (dialog) => dialog.accept());
 
     const row = page.locator("tr", { hasText: updatedTitle });
-    await row.getByRole("button", { name: /Delete/i }).click();
+    await row.getByRole("button", { name: /削除/i }).click();
 
     // After delete + router.refresh(), item should disappear
     await expect(page.locator("body")).not.toContainText(updatedTitle, {
@@ -116,7 +116,7 @@ test.describe.serial("Content CRUD flow", () => {
 
   test("8. deleted content no longer in list", async ({ page }) => {
     await page.goto("/content");
-    await expect(page.locator("h1")).toContainText("Contents", {
+    await expect(page.locator("h1")).toContainText("コンテンツ管理", {
       timeout: 10000,
     });
     await expect(page.locator("body")).not.toContainText(updatedTitle);
