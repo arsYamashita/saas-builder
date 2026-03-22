@@ -1,6 +1,7 @@
 {
   "baselineTag": "baseline/cms-green-v1",
   "templateKey": "community_membership_saas",
+  "short_name": "cms",
   "fixturePath": "tests/fixtures/community-membership-saas-first-run.json",
 
   "expectedGenerationSteps": {

@@ -71,7 +71,7 @@ export async function POST(_req: NextRequest, { params }: Props) {
         projectId,
         blueprintId: latestBlueprint.id,
         sourceRunId: latestRun.id,
-        fileCategory: file.file_category as any,
+        fileCategory: file.file_category as import("@/types/generated-file").GeneratedFileCategory,
         filePath: file.file_path,
         language: file.language || "text",
         title: file.title,

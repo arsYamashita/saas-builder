@@ -551,3 +551,155 @@ export function formatAutopilotReport(result: AutopilotRunResult): string {
 
   return lines.join("\n");
 }
+
+// ── Async Variants (for live execution) ─────────────────────
+
+export type AsyncExecutors = {
+  executePipeline?: (p: TemplateProposal) => Promise<PipelineStageResult[]>;
+  executeQualityGates?: (p: TemplateProposal) => Promise<QualityGateResult[]>;
+  executeBaselineCompare?: (p: TemplateProposal) => Promise<BaselineCompareResult>;
+};
+
+/**
+ * Async version of evaluateProposal for live pipeline execution.
+ */
+export async function evaluateProposalAsync(
+  proposal: TemplateProposal,
+  config: AutopilotConfig,
+  executors?: AsyncExecutors
+): Promise<AutopilotTemplateResult> {
+  const startTime = Date.now();
+  const reasons: string[] = [];
+
+  if (config.dryRun) {
+    return {
+      proposal,
+      outcome: "skipped_dry_run",
+      pipelineStages: AUTOPILOT_PIPELINE_STEPS.map((step) => ({
+        step,
+        status: "skipped" as StageStatus,
+      })),
+      qualityGates: AUTOPILOT_QUALITY_GATES.map((gate) => ({
+        gate,
+        status: "skipped" as StageStatus,
+      })),
+      totalDurationMs: 0,
+      reasons: ["dry run — pipeline not executed"],
+      completedAt: new Date().toISOString(),
+    };
+  }
+
+  // 1. Pipeline execution
+  const pipelineStages = executors?.executePipeline
+    ? await executors.executePipeline(proposal)
+    : simulatePipelineExecution(proposal);
+
+  const pipelineFailed = pipelineStages.some((s) => s.status === "failed");
+  if (pipelineFailed) {
+    const failedSteps = pipelineStages.filter((s) => s.status === "failed").map((s) => s.step);
+    reasons.push(`pipeline failed at: ${failedSteps.join(", ")}`);
+    return {
+      proposal,
+      outcome: "failed_pipeline",
+      pipelineStages,
+      qualityGates: AUTOPILOT_QUALITY_GATES.map((gate) => ({
+        gate,
+        status: "skipped" as StageStatus,
+      })),
+      totalDurationMs: Date.now() - startTime,
+      reasons,
+      completedAt: new Date().toISOString(),
+    };
+  }
+
+  // 2. Quality gates
+  const qualityGates = executors?.executeQualityGates
+    ? await executors.executeQualityGates(proposal)
+    : simulateQualityGates(proposal);
+
+  const qualityFailed = qualityGates.some((g) => g.status === "failed");
+  if (qualityFailed) {
+    const failedGates = qualityGates.filter((g) => g.status === "failed").map((g) => g.gate);
+    reasons.push(`quality gates failed: ${failedGates.join(", ")}`);
+    return {
+      proposal,
+      outcome: "failed_quality",
+      pipelineStages,
+      qualityGates,
+      totalDurationMs: Date.now() - startTime,
+      reasons,
+      completedAt: new Date().toISOString(),
+    };
+  }
+
+  // 3. Baseline compare
+  const baselineCompare = executors?.executeBaselineCompare
+    ? await executors.executeBaselineCompare(proposal)
+    : simulateBaselineCompare(proposal);
+
+  if (!baselineCompare.passed) {
+    reasons.push(`baseline compare failed: ${baselineCompare.errorMessage ?? "unknown"}`);
+    return {
+      proposal,
+      outcome: "failed_baseline",
+      pipelineStages,
+      qualityGates,
+      baselineCompare,
+      totalDurationMs: Date.now() - startTime,
+      reasons,
+      completedAt: new Date().toISOString(),
+    };
+  }
+
+  reasons.push("all pipeline stages passed");
+  reasons.push("all quality gates passed");
+  reasons.push("baseline compare passed");
+
+  return {
+    proposal,
+    outcome: "validated_candidate",
+    pipelineStages,
+    qualityGates,
+    baselineCompare,
+    totalDurationMs: Date.now() - startTime,
+    reasons,
+    completedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * Async version of runAutopilot for live pipeline execution.
+ */
+export async function runAutopilotAsync(opts: {
+  config?: Partial<AutopilotConfig>;
+  evolutionContext?: EvolutionContext;
+  degradedDomains?: Set<TemplateDomain>;
+  executors?: AsyncExecutors;
+}): Promise<AutopilotRunResult> {
+  const config: AutopilotConfig = {
+    ...DEFAULT_AUTOPILOT_CONFIG,
+    ...opts.config,
+  };
+  const startedAt = new Date().toISOString();
+
+  const proposals = proposeTemplateCandidates(undefined, opts.evolutionContext);
+  const selection = selectForAutopilot(proposals, config, opts.degradedDomains);
+
+  const templateResults: AutopilotTemplateResult[] = [];
+  for (const proposal of selection.selected) {
+    const result = await evaluateProposalAsync(proposal, config, opts.executors);
+    templateResults.push(result);
+  }
+
+  const summary = buildAutopilotRunSummary(proposals.length, selection, templateResults);
+
+  return {
+    runId: `autopilot-${Date.now()}`,
+    config,
+    selection,
+    templateResults,
+    summary,
+    startedAt,
+    completedAt: new Date().toISOString(),
+  };
+}

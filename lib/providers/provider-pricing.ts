@@ -21,9 +21,13 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
   "gemini-2.5-flash-preview-05-20": { inputPer1M: 0.15, outputPer1M: 0.60 },
   "gemini-2.5-pro-preview-05-06": { inputPer1M: 1.25, outputPer1M: 10.00 },
   // Claude
+  "claude-sonnet-4-5": { inputPer1M: 3.00, outputPer1M: 15.00 },
   "claude-sonnet-4-20250514": { inputPer1M: 3.00, outputPer1M: 15.00 },
   "claude-opus-4-20250514": { inputPer1M: 15.00, outputPer1M: 75.00 },
   "claude-haiku-4-5-20251001": { inputPer1M: 0.80, outputPer1M: 4.00 },
+  // OpenAI
+  "gpt-4o": { inputPer1M: 2.50, outputPer1M: 10.00 },
+  "gpt-4o-mini": { inputPer1M: 0.15, outputPer1M: 0.60 },
 };
 
 /**

@@ -17,7 +17,13 @@
     "test:cleanup": "tsx scripts/cleanup-e2e-data.ts",
     "regression:mca": "bash scripts/run-mca-regression.sh",
     "regression:rsv": "bash scripts/run-rsv-regression.sh",
-    "regression:crm": "bash scripts/run-crm-regression.sh"
+    "regression:crm": "bash scripts/run-crm-regression.sh",
+    "regression:cms": "bash scripts/run-cms-regression.sh",
+    "regression:iao": "bash scripts/run-iao-regression.sh",
+    "regression:nightly": "bash scripts/run-nightly-regression.sh",
+    "autopilot": "tsx scripts/run-template-autopilot.ts",
+    "autopilot:live": "tsx scripts/run-template-autopilot.ts --live",
+    "autopilot:dry": "tsx scripts/run-template-autopilot.ts --dry-run"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.30.0",
@@ -29,6 +35,7 @@
     "clsx": "^2.1.0",
     "lucide-react": "^0.400.0",
     "next": "14.2.0",
+    "pdf-parse": "^2.4.5",
     "pg": "^8.20.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
@@ -40,6 +47,7 @@
   "devDependencies": {
     "@playwright/test": "^1.45.0",
     "@types/node": "^20.14.0",
+    "@types/pdf-parse": "^1.1.5",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
     "autoprefixer": "^10.4.0",

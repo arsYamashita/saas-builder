@@ -22,6 +22,7 @@
  *   F. control plane only activates/deactivates/bounds existing behaviors
  */
 
+import { createLogger } from "../utils/logger";
 import type { ProviderId, TaskKind } from "../providers/provider-interface";
 import type { ProviderTaskMetric } from "../providers/provider-scoreboard";
 import type { RoutingContext, RoutingDecision } from "../providers/provider-router";
@@ -43,6 +44,8 @@ import type { RegressionStatus } from "../regression/nightly-template-regression
 export type FactoryIntelligenceMode = "baseline" | "balanced" | "aggressive" | "safe";
 
 export const DEFAULT_MODE: FactoryIntelligenceMode = "balanced";
+
+const logger = createLogger("factory-intelligence");
 
 // ── Fallback Strictness & Risk Tolerance ─────────────────────
 
@@ -315,11 +318,11 @@ export function applyFactoryIntelligencePolicy(
           adjusted.sort((a, b) => b.score - a.score);
           providerScores = adjusted.map((a) => ({ provider: a.provider, score: a.score }));
 
-          const log = buildProviderLearningLog(taskKind, taskPrefs, adjusted, baseOrder.map((p) => {
+          const learningLog = buildProviderLearningLog(taskKind, taskPrefs, adjusted, baseOrder.map((p) => {
             const orig = routingDecision?.providerScores.find((ps) => ps.provider === p);
             return { provider: p, score: orig?.score ?? 0 };
           }));
-          console.log(`[factory-intelligence] learning: ${JSON.stringify(log)}`);
+          logger.info("learning", learningLog as unknown as Record<string, unknown>);
         }
       }
 
@@ -375,7 +378,7 @@ export function applyFactoryIntelligencePolicy(
     });
 
     const guardrailLog = buildCostGuardrailLog(taskKind, finalOrder, costGuardrailDecision);
-    console.log(`[factory-intelligence] guardrail: ${JSON.stringify(guardrailLog)}`);
+    logger.info("guardrail", guardrailLog as unknown as Record<string, unknown>);
 
     if (costGuardrailDecision.result === "downgraded") {
       downgradedDueToBudget = true;
@@ -491,8 +494,8 @@ export function buildFactoryIntelligenceLog(
  * Logs the resolved strategy at run start.
  */
 export function logFactoryStrategy(strategy: FactoryExecutionStrategy): void {
-  const log = buildFactoryIntelligenceLog(strategy);
-  console.log(`[factory-intelligence] strategy: ${JSON.stringify(log)}`);
+  const strategyLog = buildFactoryIntelligenceLog(strategy);
+  logger.info("strategy", strategyLog as unknown as Record<string, unknown>);
 }
 
 /**
@@ -502,8 +505,8 @@ export function logFactoryRunSummary(
   strategy: FactoryExecutionStrategy,
   summary: FactoryIntelligenceSummary
 ): void {
-  const log = buildFactoryIntelligenceLog(strategy, summary);
-  console.log(`[factory-intelligence] run-summary: ${JSON.stringify(log)}`);
+  const summaryLog = buildFactoryIntelligenceLog(strategy, summary);
+  logger.info("run-summary", summaryLog as unknown as Record<string, unknown>);
 }
 
 // ── Learning Influence Capping ───────────────────────────────

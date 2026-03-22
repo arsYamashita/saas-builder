@@ -55,12 +55,20 @@ export class OpenAIAdapter implements ProviderAdapter {
     const json = await response.json();
     const text = json?.choices?.[0]?.message?.content ?? "";
 
+    // Extract token usage from OpenAI API response
+    const inputTokens: number | undefined = json?.usage?.prompt_tokens;
+    const outputTokens: number | undefined = json?.usage?.completion_tokens;
+    const totalTokens: number | undefined = json?.usage?.total_tokens;
+
     return {
       provider: "openai",
       model: OPENAI_MODEL,
       text,
       raw: json,
       durationMs: Date.now() - start,
+      inputTokens,
+      outputTokens,
+      totalTokens,
     };
   }
 }
