@@ -1,5 +1,6 @@
 export function getScaffoldAppLayoutTsx() {
   return `import React from "react";
+import { BuiltWithBadge } from "@/components/built-with-badge";
 
 export const metadata = {
   title: "Generated SaaS Template",
@@ -13,7 +14,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ja">
-      <body>{children}</body>
+      <body>
+        {children}
+        <BuiltWithBadge />
+      </body>
     </html>
   );
 }
