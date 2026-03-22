@@ -1,6 +1,27 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { MetricCard } from "@/components/ui/metric-card";
+import { PageHeader } from "@/components/ui/page-header";
+import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/ui/empty-state";
+import { cn } from "@/lib/utils/cn";
+import {
+  BarChart3,
+  CheckCircle2,
+  XCircle,
+  Trophy,
+  TrendingUp,
+  Clock,
+  Shield,
+} from "lucide-react";
 
 type TemplateScore = {
   templateKey: string;
@@ -27,6 +48,29 @@ type ScoreboardData = {
   generatedAt: string;
 };
 
+function RateCircle({ rate, size = "lg" }: { rate: number; size?: "sm" | "lg" }) {
+  const color =
+    rate >= 90
+      ? "text-emerald-600 border-emerald-200 bg-emerald-50"
+      : rate >= 70
+        ? "text-amber-600 border-amber-200 bg-amber-50"
+        : "text-red-600 border-red-200 bg-red-50";
+
+  return (
+    <div
+      className={cn(
+        "flex flex-col items-center justify-center rounded-full border-2",
+        color,
+        size === "lg" ? "h-20 w-20" : "h-14 w-14"
+      )}
+    >
+      <span className={cn("font-bold", size === "lg" ? "text-xl" : "text-base")}>
+        {rate}%
+      </span>
+    </div>
+  );
+}
+
 export default function ScoreboardPage() {
   const [data, setData] = useState<ScoreboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -51,137 +95,183 @@ export default function ScoreboardPage() {
 
   if (loading) {
     return (
-      <main className="max-w-5xl mx-auto p-6">
-        <p className="text-gray-500">Loading...</p>
-      </main>
+      <div className="space-y-6 animate-fade-in">
+        <div className="space-y-2">
+          <Skeleton className="h-8 w-56" />
+          <Skeleton className="h-4 w-40" />
+        </div>
+        <div className="grid gap-4 md:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-28 rounded-xl" />
+          ))}
+        </div>
+        <Skeleton className="h-48 rounded-xl" />
+      </div>
     );
   }
 
   if (error || !data) {
     return (
-      <main className="max-w-5xl mx-auto p-6">
-        <p className="text-red-500">{error || "Failed to load scoreboard"}</p>
-      </main>
+      <div className="space-y-6 animate-fade-in">
+        <PageHeader title="Template Scoreboard" />
+        <Card>
+          <CardContent className="py-10 text-center">
+            <p className="text-sm text-destructive">
+              {error || "Failed to load scoreboard"}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 
   return (
-    <main className="max-w-5xl mx-auto p-6 space-y-6">
-      <div>
-        <h1 className="text-xl font-bold">Template Scoreboard</h1>
-        <p className="text-xs text-gray-500">
-          Generated at {new Date(data.generatedAt).toLocaleString("ja-JP")}
-        </p>
-      </div>
+    <div className="space-y-8 animate-fade-in">
+      <PageHeader
+        title="Template Scoreboard"
+        description={`Last updated ${new Date(data.generatedAt).toLocaleString("ja-JP")}`}
+      />
 
       {data.templates.length === 0 ? (
-        <p className="text-sm text-gray-500">
-          まだ生成実行がありません。
-        </p>
+        <Card>
+          <EmptyState
+            icon={BarChart3}
+            title="No generation runs yet"
+            description="Run a generation pipeline to see template scores and metrics here."
+          />
+        </Card>
       ) : (
-        <div className="space-y-4">
-          {data.templates.map((t) => (
-            <section
+        <div className="space-y-6">
+          {data.templates.map((t, index) => (
+            <Card
               key={t.templateKey}
-              className="border rounded-xl p-4 space-y-3"
+              className="overflow-hidden"
+              style={{ animationDelay: `${index * 80}ms` }}
             >
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="font-semibold">{t.label}</h2>
-                  <p className="text-xs text-gray-500">{t.templateKey}</p>
+              <CardHeader className="pb-4">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+                      <BarChart3 className="h-5 w-5 text-primary" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-lg">{t.label}</CardTitle>
+                      <p className="text-xs text-muted-foreground font-mono">
+                        {t.templateKey}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {t.blueprintReviewStatus === "approved" ? (
+                      <Badge variant="success" className="flex items-center gap-1">
+                        <CheckCircle2 className="h-3 w-3" />
+                        Blueprint Approved
+                      </Badge>
+                    ) : t.blueprintReviewStatus === "rejected" ? (
+                      <Badge variant="destructive" className="flex items-center gap-1">
+                        <XCircle className="h-3 w-3" />
+                        Blueprint Rejected
+                      </Badge>
+                    ) : t.blueprintReviewStatus ? (
+                      <Badge variant="secondary">Blueprint Pending</Badge>
+                    ) : null}
+                    {t.latestBaselineTag && (
+                      <Badge variant="info">{t.latestBaselineTag}</Badge>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  {t.blueprintReviewStatus === "approved" ? (
-                    <span className="inline-block bg-green-100 text-green-700 rounded px-2 py-0.5 text-xs font-medium">
-                      Blueprint 承認済み
-                    </span>
-                  ) : t.blueprintReviewStatus === "rejected" ? (
-                    <span className="inline-block bg-red-100 text-red-700 rounded px-2 py-0.5 text-xs font-medium">
-                      Blueprint 却下
-                    </span>
-                  ) : t.blueprintReviewStatus ? (
-                    <span className="inline-block bg-gray-100 text-gray-500 rounded px-2 py-0.5 text-xs font-medium">
-                      Blueprint 未承認
-                    </span>
-                  ) : null}
-                  {t.latestBaselineTag && (
-                    <span className="inline-block bg-indigo-100 text-indigo-800 rounded px-2 py-0.5 text-xs font-medium">
-                      {t.latestBaselineTag}
-                    </span>
-                  )}
-                </div>
-              </div>
+              </CardHeader>
 
-              {/* Metrics Grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {/* Green Rate */}
-                <div className="border rounded-lg p-3 text-center">
-                  <p className="text-2xl font-bold text-green-700">
-                    {t.greenRate}%
-                  </p>
-                  <p className="text-xs text-gray-500">Green Rate</p>
-                  <p className="text-xs text-gray-400">
-                    {t.completedRuns}/{t.totalRuns} runs
-                  </p>
+              <CardContent>
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                  <div className="flex flex-col items-center gap-2 rounded-xl border p-4">
+                    <RateCircle rate={t.greenRate} size="sm" />
+                    <div className="text-center">
+                      <p className="text-xs font-medium text-muted-foreground">
+                        Green Rate
+                      </p>
+                      <p className="text-xs text-muted-foreground/70">
+                        {t.completedRuns}/{t.totalRuns} runs
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col items-center gap-2 rounded-xl border p-4">
+                    <RateCircle
+                      rate={t.qualityTotalRuns > 0 ? t.qualityPassRate : 0}
+                      size="sm"
+                    />
+                    <div className="text-center">
+                      <p className="text-xs font-medium text-muted-foreground">
+                        Quality Pass
+                      </p>
+                      <p className="text-xs text-muted-foreground/70">
+                        {t.qualityTotalRuns > 0
+                          ? `${t.qualityPassedRuns}/${t.qualityTotalRuns} runs`
+                          : "Not run"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col items-center gap-2 rounded-xl border p-4">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-amber-200 bg-amber-50">
+                      <span className="text-base font-bold text-amber-600">
+                        {t.approvedRuns}
+                      </span>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-xs font-medium text-muted-foreground">
+                        Approved
+                      </p>
+                      <p className="text-xs text-muted-foreground/70">
+                        {t.rejectedRuns} rejected
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col items-center gap-2 rounded-xl border p-4">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-indigo-200 bg-indigo-50">
+                      <span className="text-base font-bold text-indigo-600">
+                        {t.promotedRuns}
+                      </span>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-xs font-medium text-muted-foreground">
+                        Promoted
+                      </p>
+                      <p className="text-xs text-muted-foreground/70">
+                        {t.approvedRuns > 0
+                          ? `${t.promotionRate}% of approved`
+                          : `${t.failedRuns} failed`}
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
-                {/* Quality Pass Rate */}
-                <div className="border rounded-lg p-3 text-center">
-                  <p className={`text-2xl font-bold ${t.qualityTotalRuns > 0 ? "text-blue-700" : "text-gray-300"}`}>
-                    {t.qualityTotalRuns > 0 ? `${t.qualityPassRate}%` : "N/A"}
-                  </p>
-                  <p className="text-xs text-gray-500">Quality Pass</p>
-                  <p className="text-xs text-gray-400">
-                    {t.qualityTotalRuns > 0
-                      ? `${t.qualityPassedRuns}/${t.qualityTotalRuns} runs`
-                      : "未実行"}
-                  </p>
-                </div>
-
-                {/* Approval */}
-                <div className="border rounded-lg p-3 text-center">
-                  <p className="text-2xl font-bold text-amber-700">
-                    {t.approvedRuns}
-                  </p>
-                  <p className="text-xs text-gray-500">Approved</p>
-                  <p className="text-xs text-gray-400">
-                    {t.rejectedRuns} rejected
-                  </p>
-                </div>
-
-                {/* Promoted */}
-                <div className="border rounded-lg p-3 text-center">
-                  <p className="text-2xl font-bold text-indigo-700">
-                    {t.promotedRuns}
-                  </p>
-                  <p className="text-xs text-gray-500">Promoted</p>
-                  <p className="text-xs text-gray-400">
-                    {t.approvedRuns > 0
-                      ? `${t.promotionRate}% of approved`
-                      : `${t.failedRuns} failed`}
-                  </p>
-                </div>
-              </div>
-
-              {/* Timestamps */}
-              <div className="flex gap-4 text-xs text-gray-400">
-                {t.lastApprovedAt && (
-                  <span>
-                    Last approved:{" "}
-                    {new Date(t.lastApprovedAt).toLocaleString("ja-JP")}
-                  </span>
+                {/* Timestamps */}
+                {(t.lastApprovedAt || t.lastPromotedAt) && (
+                  <div className="mt-4 flex flex-wrap gap-4 border-t pt-3">
+                    {t.lastApprovedAt && (
+                      <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <Clock className="h-3 w-3" />
+                        Last approved:{" "}
+                        {new Date(t.lastApprovedAt).toLocaleString("ja-JP")}
+                      </span>
+                    )}
+                    {t.lastPromotedAt && (
+                      <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <Trophy className="h-3 w-3" />
+                        Last promoted:{" "}
+                        {new Date(t.lastPromotedAt).toLocaleString("ja-JP")}
+                      </span>
+                    )}
+                  </div>
                 )}
-                {t.lastPromotedAt && (
-                  <span>
-                    Last promoted:{" "}
-                    {new Date(t.lastPromotedAt).toLocaleString("ja-JP")}
-                  </span>
-                )}
-              </div>
-            </section>
+              </CardContent>
+            </Card>
           ))}
         </div>
       )}
-    </main>
+    </div>
   );
 }

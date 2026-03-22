@@ -8,6 +8,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Avatar } from "@/components/ui/avatar";
 import { Users as UsersIcon } from "lucide-react";
 
 export default async function UsersPage() {
@@ -25,13 +28,11 @@ export default async function UsersPage() {
     .order("joined_at", { ascending: false });
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Users</h1>
-        <p className="text-sm text-muted-foreground">
-          Manage team members and their roles.
-        </p>
-      </div>
+    <div className="space-y-6 animate-fade-in">
+      <PageHeader
+        title="Users"
+        description="Manage team members and their roles."
+      />
 
       {error ? (
         <Card>
@@ -43,73 +44,64 @@ export default async function UsersPage() {
         </Card>
       ) : !tenantUsers || tenantUsers.length === 0 ? (
         <Card>
-          <CardContent className="flex flex-col items-center justify-center py-16">
-            <UsersIcon className="mb-4 h-12 w-12 text-muted-foreground/50" />
-            <h2 className="text-lg font-semibold">No team members</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Team members will appear here after they join.
-            </p>
-          </CardContent>
+          <EmptyState
+            icon={UsersIcon}
+            title="No team members"
+            description="Team members will appear here after they join your organization."
+          />
         </Card>
       ) : (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">
+            <CardTitle>
               Team Members ({tenantUsers.length})
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left text-muted-foreground">
-                    <th className="pb-3 pr-4 font-medium">Name</th>
-                    <th className="pb-3 pr-4 font-medium">Email</th>
-                    <th className="pb-3 pr-4 font-medium">Role</th>
-                    <th className="pb-3 font-medium">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tenantUsers.map((tu: any) => {
-                    const user = tu.users;
-                    return (
-                      <tr
-                        key={tu.id}
-                        className="border-b last:border-0 hover:bg-muted/50"
+            <div className="space-y-1">
+              {tenantUsers.map((tu: any) => {
+                const user = tu.users;
+                const name = user?.display_name || user?.email || "Unknown";
+
+                return (
+                  <div
+                    key={tu.id}
+                    className="flex items-center gap-4 rounded-lg px-3 py-3 transition-colors hover:bg-muted/50"
+                  >
+                    <Avatar name={name} size="md" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">
+                        {user?.display_name || "No name"}
+                      </p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {user?.email || "No email"}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Badge
+                        variant={
+                          tu.role === "owner"
+                            ? "default"
+                            : tu.role === "admin"
+                              ? "info"
+                              : "outline"
+                        }
+                        className="capitalize"
                       >
-                        <td className="py-3 pr-4 font-medium">
-                          {user?.display_name || "—"}
-                        </td>
-                        <td className="py-3 pr-4 text-muted-foreground">
-                          {user?.email || "—"}
-                        </td>
-                        <td className="py-3 pr-4">
-                          <Badge
-                            variant={
-                              tu.role === "owner"
-                                ? "default"
-                                : tu.role === "admin"
-                                ? "secondary"
-                                : "outline"
-                            }
-                          >
-                            {tu.role}
-                          </Badge>
-                        </td>
-                        <td className="py-3">
-                          <Badge
-                            variant={
-                              tu.status === "active" ? "success" : "warning"
-                            }
-                          >
-                            {tu.status || "active"}
-                          </Badge>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                        {tu.role}
+                      </Badge>
+                      <Badge
+                        variant={
+                          tu.status === "active" ? "success" : "warning"
+                        }
+                        className="capitalize"
+                      >
+                        {tu.status || "active"}
+                      </Badge>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </CardContent>
         </Card>
