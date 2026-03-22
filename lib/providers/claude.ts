@@ -57,12 +57,23 @@ export class ClaudeAdapter implements ProviderAdapter {
         ?.map((item: { text?: string }) => item.text || "")
         ?.join("\n") ?? "";
 
+    // Extract token usage from Anthropic API response
+    const inputTokens: number | undefined = json?.usage?.input_tokens;
+    const outputTokens: number | undefined = json?.usage?.output_tokens;
+    const totalTokens =
+      inputTokens != null && outputTokens != null
+        ? inputTokens + outputTokens
+        : undefined;
+
     return {
       provider: "claude",
       model: CLAUDE_MODEL,
       text,
       raw: json,
       durationMs: Date.now() - start,
+      inputTokens,
+      outputTokens,
+      totalTokens,
     };
   }
 }

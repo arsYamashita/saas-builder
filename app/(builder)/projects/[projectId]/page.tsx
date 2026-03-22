@@ -8,7 +8,7 @@ import { computeBlueprintDiff } from "@/lib/projects/blueprint-diff";
 import { toGenerationProgress } from "@/lib/projects/generation-progress";
 import { toQualityProgress } from "@/lib/projects/quality-progress";
 import { buildGeneratedProjectSummary } from "@/lib/projects/generated-project-summary";
-import { computeGeneratedFilesDiff } from "@/lib/projects/generated-files-diff";
+import { computeGeneratedFilesDiff, type FileContentDiff } from "@/lib/projects/generated-files-diff";
 
 type ImplementationRun = {
   id: string;
@@ -44,6 +44,10 @@ type GenerationRunData = {
       invalidatedAt?: string;
       invalidatedByStep?: string;
       rejectReason?: string;
+      inputTokens?: number;
+      outputTokens?: number;
+      estimatedCostUsd?: number;
+      fallbackReason?: string;
     };
   }>;
   error_message?: string | null;
@@ -510,6 +514,16 @@ export default function ProjectDetailPage() {
                             : `${m.durationMs}ms`}
                         </span>
                       )}
+                      {m?.inputTokens != null && m?.outputTokens != null && step.status === "completed" && (
+                        <span className="text-xs text-gray-400 tabular-nums" title={`in: ${m.inputTokens.toLocaleString()} / out: ${m.outputTokens.toLocaleString()}`}>
+                          {((m.inputTokens + m.outputTokens) / 1000).toFixed(1)}k tok
+                        </span>
+                      )}
+                      {m?.estimatedCostUsd != null && step.status === "completed" && (
+                        <span className="text-xs text-emerald-600 tabular-nums">
+                          ${m.estimatedCostUsd.toFixed(4)}
+                        </span>
+                      )}
                       <span
                         className={`text-xs ${
                           step.status === "completed"
@@ -525,6 +539,11 @@ export default function ProjectDetailPage() {
                       </span>
                     </div>
                   </div>
+                  {m?.fallbackReason && (
+                    <p className="mt-1 text-xs text-amber-600 bg-amber-50 rounded px-2 py-0.5">
+                      Fallback: {m.fallbackReason}
+                    </p>
+                  )}
                 </div>
                 );
               })}
@@ -554,6 +573,10 @@ export default function ProjectDetailPage() {
               const providers = Array.from(new Set(steps.map((s) => s.meta?.provider).filter(Boolean)));
               const totalWarnings = steps.reduce((sum, s) => sum + (s.meta?.warningCount ?? 0), 0);
               const totalErrors = steps.reduce((sum, s) => sum + (s.meta?.errorCount ?? 0), 0);
+              const totalInputTokens = steps.reduce((sum, s) => sum + (s.meta?.inputTokens ?? 0), 0);
+              const totalOutputTokens = steps.reduce((sum, s) => sum + (s.meta?.outputTokens ?? 0), 0);
+              const totalCostUsd = steps.reduce((sum, s) => sum + (s.meta?.estimatedCostUsd ?? 0), 0);
+              const hasFallback = steps.some((s) => s.meta?.fallbackReason);
 
               return (
               <div key={run.id} className="border rounded-lg p-4">
@@ -591,6 +614,19 @@ export default function ProjectDetailPage() {
                     )}
                     {totalErrors > 0 && (
                       <span className="text-red-600">{totalErrors} errors</span>
+                    )}
+                    {(totalInputTokens > 0 || totalOutputTokens > 0) && (
+                      <span>
+                        <span className="text-gray-400">tokens:</span>{" "}
+                        <span className="tabular-nums">{((totalInputTokens + totalOutputTokens) / 1000).toFixed(1)}k</span>
+                        <span className="text-gray-300 mx-0.5">(in:{(totalInputTokens / 1000).toFixed(1)}k / out:{(totalOutputTokens / 1000).toFixed(1)}k)</span>
+                      </span>
+                    )}
+                    {totalCostUsd > 0 && (
+                      <span className="text-emerald-600 font-medium">${totalCostUsd.toFixed(4)}</span>
+                    )}
+                    {hasFallback && (
+                      <span className="text-amber-600">fallback used</span>
                     )}
                   </div>
                 )}
@@ -932,12 +968,32 @@ export default function ProjectDetailPage() {
                   ) : (
                     <div className="grid gap-1">
                       {bp.entities.map((e, i) => (
-                        <div key={i} className="flex gap-2 bg-gray-50 rounded px-3 py-1.5">
-                          <span className="font-medium shrink-0">{e.name}</span>
-                          {e.description && (
-                            <span className="text-gray-500 truncate">{e.description}</span>
+                        <details key={i} className="bg-gray-50 rounded px-3 py-1.5 group">
+                          <summary className="flex gap-2 cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+                            <span className="font-medium shrink-0">{e.name}</span>
+                            {e.description && (
+                              <span className="text-gray-500 truncate">{e.description}</span>
+                            )}
+                            {e.fields.length > 0 && (
+                              <span className="ml-auto text-xs text-gray-400 shrink-0">
+                                {e.fields.length} fields
+                              </span>
+                            )}
+                          </summary>
+                          {e.fields.length > 0 && (
+                            <div className="mt-2 ml-2 border-l-2 border-gray-200 pl-3 pb-1 space-y-0.5">
+                              {e.fields.map((f, fi) => (
+                                <div key={fi} className="flex items-center gap-2 text-xs">
+                                  <span className="font-mono text-gray-700">{f.name}</span>
+                                  <span className="text-gray-400">{f.type}</span>
+                                  {f.required && (
+                                    <span className="text-red-500 text-[10px] font-medium">required</span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
                           )}
-                        </div>
+                        </details>
                       ))}
                     </div>
                   )}
@@ -1688,9 +1744,10 @@ export default function ProjectDetailPage() {
       {(() => {
         if (!data.generatedFiles || data.generatedFiles.length === 0) return null;
         const filesDiff = computeGeneratedFilesDiff(
-          data.generatedFiles.map((f: { file_path: string; version: number }) => ({
+          data.generatedFiles.map((f: { file_path: string; version: number; content_text: string }) => ({
             file_path: f.file_path,
             version: f.version,
+            content_text: f.content_text,
           }))
         );
         if (!filesDiff) return null;
@@ -1711,6 +1768,11 @@ export default function ProjectDetailPage() {
               <div className="space-y-2 text-sm">
                 <p className="text-xs text-gray-500">
                   v{filesDiff.latestVersion}: {filesDiff.totalLatest} files / v{filesDiff.previousVersion}: {filesDiff.totalPrevious} files
+                  {filesDiff.modifiedFiles.length > 0 && (
+                    <span className="ml-2 text-amber-600">
+                      ({filesDiff.modifiedFiles.length} modified)
+                    </span>
+                  )}
                 </p>
 
                 {filesDiff.addedFiles.length > 0 && (
@@ -1746,6 +1808,60 @@ export default function ProjectDetailPage() {
                         </span>
                       ))}
                     </div>
+                  </div>
+                )}
+
+                {filesDiff.modifiedFiles.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-amber-700 mb-1">
+                      Modified ({filesDiff.modifiedFiles.length})
+                    </p>
+                    <div className="flex flex-wrap gap-1">
+                      {filesDiff.modifiedFiles.map((f) => (
+                        <span
+                          key={f}
+                          className="inline-block bg-amber-100 text-amber-800 rounded px-2 py-0.5 text-xs"
+                        >
+                          ~ {f}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Content diffs for modified files */}
+                {filesDiff.contentDiffs.filter((d) => d.status === "modified").length > 0 && (
+                  <div className="space-y-2 mt-2">
+                    {filesDiff.contentDiffs
+                      .filter((d): d is FileContentDiff => d.status === "modified")
+                      .map((diff) => (
+                        <details key={diff.file_path}>
+                          <summary className="text-xs cursor-pointer hover:text-gray-700 flex items-center gap-2">
+                            <span className="font-mono">{diff.file_path}</span>
+                            <span className="text-green-600">+{diff.addedLineCount}</span>
+                            <span className="text-red-600">-{diff.removedLineCount}</span>
+                          </summary>
+                          <pre className="mt-1 bg-white rounded border text-xs overflow-auto max-h-64 p-2">
+                            {diff.diffLines.map((line, i) => (
+                              <div
+                                key={i}
+                                className={
+                                  line.type === "added"
+                                    ? "bg-green-50 text-green-800"
+                                    : line.type === "removed"
+                                    ? "bg-red-50 text-red-800"
+                                    : ""
+                                }
+                              >
+                                <span className="select-none inline-block w-4 text-gray-400">
+                                  {line.type === "added" ? "+" : line.type === "removed" ? "-" : " "}
+                                </span>
+                                {line.text}
+                              </div>
+                            ))}
+                          </pre>
+                        </details>
+                      ))}
                   </div>
                 )}
 

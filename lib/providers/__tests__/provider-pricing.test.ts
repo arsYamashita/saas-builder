@@ -20,7 +20,7 @@ describe("getModelPricing", () => {
   });
 
   it("returns null for unknown model", () => {
-    expect(getModelPricing("gpt-4o")).toBeNull();
+    expect(getModelPricing("llama-3-70b")).toBeNull();
   });
 
   it("has pricing for all expected models", () => {

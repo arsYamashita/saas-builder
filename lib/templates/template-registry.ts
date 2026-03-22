@@ -120,7 +120,7 @@ export const TEMPLATE_MANIFESTS: TemplateManifest[] = [
     label: "予約管理SaaS",
     finalPromptDir: "final/reservation_saas",
     finalPrompts: FINAL_PROMPT_FILENAMES,
-    prefixPrompt: "12-claude-membership-template-prefix.md", // TODO: reservation_saas-specific prefix
+    prefixPrompt: "12-claude-reservation-saas-prefix.md",
     rulesRoot: "docs/rules/reservation_saas",
     fixturePath: "tests/fixtures/reservation-saas-first-run.json",
     baselineDocPath: "docs/baselines/reservation-saas-green-v1.md",
@@ -144,7 +144,7 @@ export const TEMPLATE_MANIFESTS: TemplateManifest[] = [
     label: "コミュニティ会員制SaaS",
     finalPromptDir: "final/community_membership_saas",
     finalPrompts: FINAL_PROMPT_FILENAMES,
-    prefixPrompt: "12-claude-membership-template-prefix.md", // TODO: community-specific prefix
+    prefixPrompt: "12-claude-community-membership-saas-prefix.md",
     rulesRoot: "docs/rules/community_membership_saas",
     fixturePath: "tests/fixtures/community-membership-saas-first-run.json",
     baselineDocPath: "docs/baselines/community-membership-saas-green-v1.md",
@@ -164,8 +164,8 @@ export const TEMPLATE_MANIFESTS: TemplateManifest[] = [
     fixturePath: "tests/fixtures/simple-crm-first-run.json",
     baselineDocPath: "docs/baselines/simple-crm-green-v1.md",
     baselineJsonPath: "tests/baselines/simple-crm-green-v1.json",
-    regressionCommand: "",
-    compareScriptPath: "",
+    regressionCommand: "npm run regression:crm",
+    compareScriptPath: "scripts/compare-crm-baseline.sh",
     presetModule: "lib/templates/simple-crm-saas.ts",
     extraQualityGates: [
       {
@@ -188,8 +188,8 @@ export const TEMPLATE_MANIFESTS: TemplateManifest[] = [
     fixturePath: "tests/fixtures/internal-admin-ops-first-run.json",
     baselineDocPath: "docs/baselines/internal-admin-ops-green-v1.md",
     baselineJsonPath: "tests/baselines/internal-admin-ops-green-v1.json",
-    regressionCommand: "",
-    compareScriptPath: "",
+    regressionCommand: "npm run regression:iao",
+    compareScriptPath: "scripts/compare-iao-baseline.sh",
     presetModule: "lib/templates/internal-admin-ops-saas.ts",
     extraQualityGates: [
       {

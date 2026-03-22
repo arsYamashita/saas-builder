@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Compare a regression run against the CMS GREEN v1 baseline
+# Compare a regression run against the community_membership_saas GREEN v1 baseline
 # Usage: bash scripts/compare-cms-baseline.sh <project-id>
 # Requires: curl, jq, dev server running
+#
+# API response structure:
+#   .generationRuns[0].steps_json[]   — {key, status}
+#   .qualityRuns[0].checks_json[]     — {key, status}
+#   .blueprints, .implementationRuns, .generatedFiles — arrays
 
 if [ $# -lt 1 ]; then
   echo "Usage: $0 <project-id>"

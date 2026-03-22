@@ -20,7 +20,7 @@ import {
   previewDraft,
 } from "@/lib/projects/project-draft-builder";
 import { buildReviewSummary } from "@/lib/projects/project-review-summary";
-import type { TemplateKey } from "@/types/project";
+import type { TemplateKey, BrandTone, BillingModel } from "@/types/project";
 import { buildValidationSummary } from "@/lib/projects/project-validation-summary";
 import { getTemplateGuidance } from "@/lib/projects/template-validation-messages";
 
@@ -490,7 +490,7 @@ export default function NewProjectPage() {
                   className="w-full border rounded px-3 py-2"
                   value={form.brandTone}
                   onChange={(e) =>
-                    setForm({ ...form, brandTone: e.target.value as any })
+                    setForm({ ...form, brandTone: e.target.value as BrandTone })
                   }
                 >
                   <option value="modern">Modern</option>
@@ -512,7 +512,7 @@ export default function NewProjectPage() {
                   className="w-full border rounded px-3 py-2"
                   value={form.billingModel}
                   onChange={(e) =>
-                    setForm({ ...form, billingModel: e.target.value as any })
+                    setForm({ ...form, billingModel: e.target.value as BillingModel })
                   }
                 >
                   <option value="subscription">サブスクリプション</option>
@@ -539,7 +539,7 @@ export default function NewProjectPage() {
                   className="w-full border rounded px-3 py-2"
                   value={form.priority}
                   onChange={(e) =>
-                    setForm({ ...form, priority: e.target.value as any })
+                    setForm({ ...form, priority: e.target.value as "low" | "medium" | "high" })
                   }
                 >
                   <option value="high">高</option>

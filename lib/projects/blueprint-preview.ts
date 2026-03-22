@@ -11,7 +11,11 @@ export interface BlueprintSummary {
     target: string;
     category: string;
   };
-  entities: { name: string; description: string }[];
+  entities: {
+    name: string;
+    description: string;
+    fields: { name: string; type: string; required: boolean }[];
+  }[];
   roles: { name: string; description: string }[];
   screens: { name: string; path: string; role_access: string[] }[];
   billingEnabled: boolean;
@@ -43,6 +47,14 @@ export function extractBlueprintSummary(blueprint: {
       return {
         name: str(o.name ?? o.entity_name),
         description: str(o.description ?? o.purpose ?? ""),
+        fields: asArr(o.main_fields ?? o.fields).map((f) => {
+          const fo = asObj(f);
+          return {
+            name: str(fo.name ?? fo.field_name),
+            type: str(fo.type ?? fo.data_type ?? "text"),
+            required: !!(fo.required ?? false),
+          };
+        }),
       };
     }),
     roles: asArr(blueprint.roles_json).map((r) => {

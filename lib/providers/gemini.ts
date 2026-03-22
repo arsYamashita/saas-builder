@@ -52,12 +52,20 @@ export class GeminiAdapter implements ProviderAdapter {
         ?.map((p: { text?: string }) => p.text || "")
         .join("\n") ?? "";
 
+    // Extract token usage from Gemini API response
+    const inputTokens: number | undefined = json?.usageMetadata?.promptTokenCount;
+    const outputTokens: number | undefined = json?.usageMetadata?.candidatesTokenCount;
+    const totalTokens: number | undefined = json?.usageMetadata?.totalTokenCount;
+
     return {
       provider: "gemini",
       model: GEMINI_MODEL,
       text,
       raw: json,
       durationMs: Date.now() - start,
+      inputTokens,
+      outputTokens,
+      totalTokens,
     };
   }
 }

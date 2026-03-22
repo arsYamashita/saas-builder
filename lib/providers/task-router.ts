@@ -41,6 +41,9 @@ import {
   buildProviderLearningLog,
   type LearnedPreferences,
 } from "./provider-learning";
+import { createLogger } from "../utils/logger";
+
+const logger = createLogger("task-router");
 
 // ── Static Route Table ──────────────────────────────────────
 
@@ -236,7 +239,7 @@ export async function executeTask(
           adjusted,
           baseScores
         );
-        console.log(`[provider-learning] ${JSON.stringify(learningLog)}`);
+        logger.info("learning", learningLog as unknown as Record<string, unknown>);
       }
 
       // Build max confidence from task preferences
@@ -267,7 +270,7 @@ export async function executeTask(
       });
 
       const guardrailLog = buildCostGuardrailLog(taskKind, allRanked, costGuardrailDecision);
-      console.log(`[cost-guardrail] ${JSON.stringify(guardrailLog)}`);
+      logger.info("cost-guardrail", guardrailLog as unknown as Record<string, unknown>);
 
       if (costGuardrailDecision.result === "blocked") {
         throw new Error(
@@ -287,9 +290,11 @@ export async function executeTask(
           (fb) => adapters[fb].isAvailable()
         );
         if (available) {
-          console.log(
-            `[task-router] Routed provider ${routingDecision.provider} unavailable for ${taskKind}, using fallback ${available}`
-          );
+          logger.warn("provider unavailable, using fallback", {
+            primary: routingDecision.provider,
+            taskKind,
+            fallback: available,
+          });
           providerId = available;
         } else {
           throw new Error(
@@ -299,17 +304,19 @@ export async function executeTask(
       }
     }
 
-    const log = buildRoutingLog(taskKind, routingDecision);
-    console.log(`[routing-intelligence] ${JSON.stringify(log)}`);
+    const routingLog = buildRoutingLog(taskKind, routingDecision);
+    logger.info("routing", routingLog as unknown as Record<string, unknown>);
   } else {
     // Static routing (original behavior)
     const primary = adapters[route.primary];
     if (primary.isAvailable()) {
       providerId = route.primary;
     } else if (route.fallback && adapters[route.fallback].isAvailable()) {
-      console.log(
-        `[task-router] ${route.primary} unavailable for ${taskKind}, falling back to ${route.fallback}`
-      );
+      logger.warn("static provider unavailable, using fallback", {
+        primary: route.primary,
+        taskKind,
+        fallback: route.fallback,
+      });
       providerId = route.fallback;
     } else {
       throw new Error(
@@ -325,6 +332,7 @@ export async function executeTask(
   let raw: ProviderRawResult;
   let fallbackUsed = false;
   let fallbackFromProvider: ProviderId | undefined;
+  let fallbackReason: string | undefined;
   try {
     raw = await adapter.generate({
       prompt,
@@ -338,10 +346,13 @@ export async function executeTask(
     const fallbackId = route.fallback;
 
     if (isRetryable && fallbackId && !options?.forceProvider && adapters[fallbackId].isAvailable()) {
-      console.log(
-        `[task-router] ${providerId} returned retryable error for ${taskKind}, falling back to ${fallbackId}`
-      );
+      logger.warn("retryable error, falling back", {
+        provider: providerId,
+        taskKind,
+        fallback: fallbackId,
+      });
       fallbackFromProvider = providerId;
+      fallbackReason = err instanceof Error ? err.message : String(err);
       providerId = fallbackId;
       adapter = adapters[fallbackId];
       fallbackUsed = true;
@@ -360,6 +371,7 @@ export async function executeTask(
   if (fallbackUsed) {
     raw.fallbackUsed = true;
     raw.fallbackFromProvider = fallbackFromProvider;
+    raw.fallbackReason = fallbackReason;
   }
 
   // Normalize

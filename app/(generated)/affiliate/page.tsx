@@ -17,7 +17,7 @@ export default async function AffiliatePage() {
         .select("*")
         .eq("affiliate_id", affiliate.id)
         .order("created_at", { ascending: false })
-    : { data: [] as any[] };
+    : { data: [] as Record<string, unknown>[] };
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
   const affiliateUrl = affiliate ? `${baseUrl}/a/${affiliate.code}` : null;
