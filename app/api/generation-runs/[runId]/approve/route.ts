@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/db/supabase/admin";
+import { requireCurrentUser } from "@/lib/auth/current-user";
 
 type Props = {
   params: Promise<{ runId: string }>;
@@ -7,6 +8,7 @@ type Props = {
 
 export async function POST(_req: NextRequest, { params }: Props) {
   try {
+    await requireCurrentUser();
     const { runId } = await params;
     const supabase = createAdminClient();
 
@@ -48,6 +50,9 @@ export async function POST(_req: NextRequest, { params }: Props) {
     return NextResponse.json({ ok: true, runId, review_status: "approved" });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
+    if (message === "Unauthorized") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     return NextResponse.json(
       { error: "Failed to approve run", details: message },
       { status: 500 }

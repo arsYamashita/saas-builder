@@ -86,10 +86,9 @@ test("reset password page renders", async ({ page }) => {
   await expect(emailInput).toBeVisible();
 });
 
-// ── Root redirect ────────────────────────────────────────────
+// ── Landing page (unauthenticated) ──────────────────────────
 
-test("root redirects to projects (then login)", async ({ page }) => {
+test("root shows landing page for unauthenticated users", async ({ page }) => {
   await page.goto("/");
-  // Root redirects to /projects, which redirects to /auth/login
-  await expect(page).toHaveURL(/\/auth\/login/);
+  await expect(page.locator("body")).toContainText("AIでSaaSを");
 });

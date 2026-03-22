@@ -2,9 +2,11 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/db/supabase/admin";
 import { buildProviderScoreboard } from "@/lib/providers/provider-scoreboard";
 import type { GenerationStep } from "@/types/generation-run";
+import { requireCurrentUser } from "@/lib/auth/current-user";
 
 export async function GET() {
   try {
+    await requireCurrentUser();
     const supabase = createAdminClient();
 
     // Try full select first; fall back to core columns if promoted_at/review_status don't exist yet
@@ -51,6 +53,9 @@ export async function GET() {
     return NextResponse.json(scoreboard);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
+    if (message === "Unauthorized") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     return NextResponse.json(
       { error: "Failed to build provider scoreboard", details: message },
       { status: 500 }

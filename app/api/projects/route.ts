@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { projectFormSchema } from "@/lib/validation/project-form";
 import { createAdminClient } from "@/lib/db/supabase/admin";
 import { slugify } from "@/lib/utils/slugify";
+import { requireCurrentUser } from "@/lib/auth/current-user";
 
 export async function GET() {
   try {
+    await requireCurrentUser();
     const supabase = createAdminClient();
 
     const { data: projects, error } = await supabase
@@ -23,6 +25,9 @@ export async function GET() {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Unknown server error";
+    if (message === "Unauthorized") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     return NextResponse.json(
       { error: "Failed to fetch projects", details: message },
       { status: 500 }
@@ -32,6 +37,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
+    await requireCurrentUser();
     const body = await req.json();
     const parsed = projectFormSchema.safeParse(body);
 
@@ -111,7 +117,9 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Unknown server error";
-
+    if (message === "Unauthorized") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     return NextResponse.json(
       { error: "Failed to create project", details: message },
       { status: 500 }

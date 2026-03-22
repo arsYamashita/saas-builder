@@ -6,6 +6,7 @@ import { blueprintSchema } from "@/lib/validation/blueprint";
 import { executeTask } from "@/lib/providers/task-router";
 import { extractJsonFromText } from "@/lib/providers/result-normalizer";
 import { buildStepMeta, mergeStepMetas } from "@/lib/providers/step-meta";
+import { requireCurrentUser } from "@/lib/auth/current-user";
 
 type Props = {
   params: Promise<{ projectId: string }>;
@@ -44,6 +45,7 @@ MVP範囲: ${JSON.stringify(meta.mvpScope ?? [])}
 
 export async function POST(_req: NextRequest, { params }: Props) {
   try {
+    await requireCurrentUser();
     const { projectId } = await params;
     const supabase = createAdminClient();
 
@@ -158,7 +160,9 @@ export async function POST(_req: NextRequest, { params }: Props) {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Unknown server error";
-
+    if (message === "Unauthorized") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     return NextResponse.json(
       { error: "Failed to generate blueprint", details: message },
       { status: 500 }

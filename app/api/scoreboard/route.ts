@@ -2,9 +2,11 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/db/supabase/admin";
 import { buildScoreboard } from "@/lib/providers/template-scoreboard";
 import { TEMPLATE_REGISTRY } from "@/lib/templates/template-registry";
+import { requireCurrentUser } from "@/lib/auth/current-user";
 
 export async function GET() {
   try {
+    await requireCurrentUser();
     const supabase = createAdminClient();
 
     // Fetch all generation runs
@@ -93,6 +95,9 @@ export async function GET() {
     return NextResponse.json(scoreboard);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
+    if (message === "Unauthorized") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     return NextResponse.json(
       { error: "Failed to build scoreboard", details: message },
       { status: 500 }

@@ -7,6 +7,7 @@ import {
 } from "@/lib/db/generation-runs";
 import { createAdminClient } from "@/lib/db/supabase/admin";
 import type { GenerationStepMeta } from "@/types/generation-run";
+import { requireCurrentUser } from "@/lib/auth/current-user";
 
 type Props = {
   params: Promise<{ projectId: string }>;
@@ -41,6 +42,12 @@ async function postInternal(path: string): Promise<{
 }
 
 export async function POST(_req: NextRequest, { params }: Props) {
+  try {
+    await requireCurrentUser();
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const { projectId } = await params;
   let generationRunId = "";
   const baseUrl =

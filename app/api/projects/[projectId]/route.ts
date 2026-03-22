@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/db/supabase/admin";
+import { requireCurrentUser } from "@/lib/auth/current-user";
 
 type Props = {
   params: Promise<{ projectId: string }>;
@@ -7,6 +8,7 @@ type Props = {
 
 export async function GET(_req: NextRequest, { params }: Props) {
   try {
+    await requireCurrentUser();
     const { projectId } = await params;
     const supabase = createAdminClient();
 
@@ -64,7 +66,9 @@ export async function GET(_req: NextRequest, { params }: Props) {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Unknown server error";
-
+    if (message === "Unauthorized") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     return NextResponse.json(
       { error: "Failed to fetch project", details: message },
       { status: 500 }

@@ -6,6 +6,7 @@ import { executeTask } from "@/lib/providers/task-router";
 import { buildStepMeta } from "@/lib/providers/step-meta";
 import { createAdminClient } from "@/lib/db/supabase/admin";
 import { resolveTemplatePrefixPath } from "@/lib/ai/template-prompt-resolver";
+import { requireCurrentUser } from "@/lib/auth/current-user";
 
 type Props = {
   params: Promise<{ projectId: string }>;
@@ -29,6 +30,7 @@ function buildBlueprintJsonForClaude(blueprint: Record<string, unknown>) {
 
 export async function POST(_req: NextRequest, { params }: Props) {
   try {
+    await requireCurrentUser();
     const { projectId } = await params;
     const supabase = createAdminClient();
     const { data: project } = await supabase
@@ -75,7 +77,9 @@ export async function POST(_req: NextRequest, { params }: Props) {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Unknown server error";
-
+    if (message === "Unauthorized") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     return NextResponse.json(
       { error: "Failed to generate implementation plan", details: message },
       { status: 500 }
