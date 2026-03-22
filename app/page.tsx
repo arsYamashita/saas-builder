@@ -219,6 +219,80 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* ========== BADGE SHOWCASE ========== */}
+      <section className="border-t py-16 sm:py-20">
+        <div className="mx-auto max-w-4xl px-6">
+          <div className="relative overflow-hidden rounded-2xl border bg-gradient-to-br from-slate-900 to-slate-800 p-8 sm:p-12">
+            {/* Simulated browser chrome */}
+            <div className="mb-6 flex items-center gap-2">
+              <div className="h-3 w-3 rounded-full bg-red-400/80" />
+              <div className="h-3 w-3 rounded-full bg-yellow-400/80" />
+              <div className="h-3 w-3 rounded-full bg-green-400/80" />
+              <div className="ml-3 h-6 flex-1 rounded-md bg-white/10" />
+            </div>
+
+            {/* Simulated page content */}
+            <div className="space-y-3">
+              <div className="h-4 w-3/4 rounded bg-white/10" />
+              <div className="h-4 w-1/2 rounded bg-white/10" />
+              <div className="h-24 w-full rounded-lg bg-white/5" />
+              <div className="h-4 w-2/3 rounded bg-white/10" />
+            </div>
+
+            {/* The actual badge preview */}
+            <div className="absolute bottom-6 right-6 flex items-center gap-1.5 rounded-full bg-black/80 px-3 py-1.5 text-white shadow-lg">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <rect x="4" y="4" width="16" height="16" rx="2" ry="2" />
+                <rect x="9" y="9" width="6" height="6" />
+                <line x1="9" y1="1" x2="9" y2="4" />
+                <line x1="15" y1="1" x2="15" y2="4" />
+                <line x1="9" y1="20" x2="9" y2="23" />
+                <line x1="15" y1="20" x2="15" y2="23" />
+                <line x1="20" y1="9" x2="23" y2="9" />
+                <line x1="20" y1="14" x2="23" y2="14" />
+                <line x1="1" y1="9" x2="4" y2="9" />
+                <line x1="1" y1="14" x2="4" y2="14" />
+              </svg>
+              <span className="text-xs font-medium">Built with SaaS Builder</span>
+            </div>
+
+            {/* Pointer annotation */}
+            <div className="absolute bottom-16 right-28 hidden items-center gap-2 sm:flex">
+              <span className="text-xs font-medium text-emerald-400">
+                自動で埋め込まれるバッジ
+              </span>
+              <svg
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                className="text-emerald-400 rotate-45"
+              >
+                <path d="M5 12h14M12 5l7 7-7 7" />
+              </svg>
+            </div>
+          </div>
+
+          <p className="mt-4 text-center text-sm text-muted-foreground">
+            生成されたすべてのアプリに「Built with SaaS Builder」バッジが自動で組み込まれます。
+            <br className="hidden sm:block" />
+            あなたのアプリが新しいユーザーを呼び込む、バイラル成長エンジンです。
+          </p>
+        </div>
+      </section>
+
       {/* ========== HOW IT WORKS ========== */}
       <section className="border-t py-24 sm:py-32">
         <div className="mx-auto max-w-5xl px-6">

@@ -14,6 +14,7 @@ import { getScaffoldNextEnvDts } from "@/lib/quality/scaffold/next-env-d-ts";
 import { getScaffoldAuthSpec, getScaffoldSmokeSpec } from "@/lib/quality/scaffold/playwright-tests";
 import { getScaffoldSupabaseServer } from "@/lib/quality/scaffold/compat-supabase-server";
 import { getScaffoldSupabaseClient } from "@/lib/quality/scaffold/compat-supabase-client";
+import { generateBuiltWithBadge, getBadgeFilePath } from "@/lib/generators/built-with-badge";
 
 export async function writeExportScaffold(projectDir: string, projectId: string) {
   await writeTextFile(
@@ -90,5 +91,11 @@ export async function writeExportScaffold(projectDir: string, projectId: string)
   await writeTextFile(
     path.join(projectDir, "src/lib/supabase/client.ts"),
     getScaffoldSupabaseClient()
+  );
+
+  // Viral growth badge — included in every generated app (free tier)
+  await writeTextFile(
+    path.join(projectDir, getBadgeFilePath()),
+    generateBuiltWithBadge(projectId)
   );
 }
