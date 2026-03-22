@@ -12,6 +12,9 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/ui/empty-state";
+import { cn } from "@/lib/utils/cn";
 import {
   ArrowLeft,
   Download,
@@ -22,6 +25,9 @@ import {
   FileCode,
   AlertCircle,
   Play,
+  File,
+  Folder,
+  ChevronRight,
 } from "lucide-react";
 
 interface GeneratedFile {
@@ -42,6 +48,17 @@ interface QualityRun {
   }>;
   started_at: string;
   completed_at?: string | null;
+}
+
+function groupFilesByDirectory(files: GeneratedFile[]) {
+  const tree: Record<string, GeneratedFile[]> = {};
+  files.forEach((file) => {
+    const parts = file.file_path.split("/");
+    const dir = parts.length > 1 ? parts.slice(0, -1).join("/") : ".";
+    if (!tree[dir]) tree[dir] = [];
+    tree[dir].push(file);
+  });
+  return Object.entries(tree).sort(([a], [b]) => a.localeCompare(b));
 }
 
 export default function DeployPage() {
@@ -113,15 +130,26 @@ export default function DeployPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      <div className="space-y-6 animate-fade-in">
+        <div className="flex items-center gap-4">
+          <Skeleton className="h-9 w-9 rounded-lg" />
+          <div className="space-y-2">
+            <Skeleton className="h-7 w-32" />
+            <Skeleton className="h-4 w-48" />
+          </div>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          <Skeleton className="h-44 rounded-xl" />
+          <Skeleton className="h-44 rounded-xl" />
+        </div>
+        <Skeleton className="h-64 rounded-xl" />
       </div>
     );
   }
 
   if (!project) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex items-center justify-center h-64 animate-fade-in">
         <p className="text-muted-foreground">Project not found.</p>
       </div>
     );
@@ -129,63 +157,74 @@ export default function DeployPage() {
 
   const latestQuality = qualityRuns[0] ?? null;
   const qualitySteps = latestQuality?.steps_json ?? [];
+  const groupedFiles = groupFilesByDirectory(files);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-4">
+    <div className="space-y-6 animate-fade-in">
+      {/* Header */}
+      <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" asChild>
           <Link href={`/projects/${projectId}`}>
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Deploy</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Deploy</h1>
           <p className="text-sm text-muted-foreground">{project.name}</p>
         </div>
       </div>
 
+      {/* Error */}
       {error && (
-        <Card className="border-destructive">
-          <CardContent className="flex items-center gap-2 py-3">
-            <AlertCircle className="h-4 w-4 text-destructive" />
-            <p className="text-sm text-destructive">{error}</p>
-          </CardContent>
-        </Card>
+        <div className="flex items-center gap-3 rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3">
+          <AlertCircle className="h-4 w-4 shrink-0 text-destructive" />
+          <p className="text-sm text-destructive">{error}</p>
+        </div>
       )}
 
-      {/* Actions */}
+      {/* Action Cards */}
       <div className="grid gap-4 md:grid-cols-2">
-        <Card>
+        <Card className="relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent pointer-events-none" />
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Download className="h-4 w-4" />
-              Export Files
-            </CardTitle>
-            <CardDescription>
-              Export generated code to the file system.
-            </CardDescription>
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+                <Download className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <CardTitle>Export Files</CardTitle>
+                <CardDescription>
+                  Export generated code to the file system.
+                </CardDescription>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
             <Button onClick={exportFiles} disabled={exporting}>
               {exporting ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <Download className="mr-2 h-4 w-4" />
+                <Download className="h-4 w-4" />
               )}
               Export Files
             </Button>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent pointer-events-none" />
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <ShieldCheck className="h-4 w-4" />
-              Quality Gate
-            </CardTitle>
-            <CardDescription>
-              Run lint, typecheck, and tests on generated code.
-            </CardDescription>
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50">
+                <ShieldCheck className="h-5 w-5 text-emerald-600" />
+              </div>
+              <div>
+                <CardTitle>Quality Gate</CardTitle>
+                <CardDescription>
+                  Run lint, typecheck, and tests on generated code.
+                </CardDescription>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
             <Button
@@ -194,9 +233,9 @@ export default function DeployPage() {
               disabled={runningQuality}
             >
               {runningQuality ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <Play className="mr-2 h-4 w-4" />
+                <Play className="h-4 w-4" />
               )}
               Run Quality Gate
             </Button>
@@ -209,33 +248,41 @@ export default function DeployPage() {
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
-              <CardTitle className="text-base">Quality Gate Results</CardTitle>
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+                <CardTitle>Quality Gate Results</CardTitle>
+              </div>
               <Badge
                 variant={
                   latestQuality.status === "passed"
                     ? "success"
                     : latestQuality.status === "failed"
-                    ? "destructive"
-                    : "secondary"
+                      ? "destructive"
+                      : "secondary"
                 }
+                className="capitalize"
               >
                 {latestQuality.status}
               </Badge>
             </div>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2">
+            <div className="space-y-1">
               {qualitySteps.map((step) => (
                 <div
                   key={step.key}
-                  className="flex items-center gap-3 rounded-md border px-3 py-2"
+                  className={cn(
+                    "flex items-center gap-3 rounded-lg px-3 py-2.5",
+                    step.status === "passed" && "bg-emerald-50/50",
+                    step.status === "failed" && "bg-destructive/5"
+                  )}
                 >
                   {step.status === "passed" ? (
-                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
                   ) : step.status === "failed" ? (
-                    <XCircle className="h-4 w-4 text-destructive" />
+                    <XCircle className="h-4 w-4 shrink-0 text-destructive" />
                   ) : (
-                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
                   )}
                   <span className="text-sm font-medium">
                     {step.label || step.key}
@@ -250,28 +297,44 @@ export default function DeployPage() {
       {/* Generated Files */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <FileCode className="h-4 w-4" />
-            Generated Files ({files.length})
-          </CardTitle>
+          <div className="flex items-center gap-2">
+            <FileCode className="h-4 w-4 text-muted-foreground" />
+            <CardTitle>Generated Files ({files.length})</CardTitle>
+          </div>
         </CardHeader>
         <CardContent>
           {files.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4 text-center">
-              No files generated yet. Run the generation pipeline first.
-            </p>
+            <EmptyState
+              icon={FileCode}
+              title="No files generated"
+              description="Run the generation pipeline first to produce code files."
+            />
           ) : (
-            <div className="max-h-80 overflow-y-auto space-y-1">
-              {files.map((file) => (
-                <div
-                  key={file.id}
-                  className="flex items-center gap-2 rounded px-2 py-1 text-sm hover:bg-muted/50"
-                >
-                  <FileCode className="h-3 w-3 text-muted-foreground" />
-                  <span className="font-mono text-xs">{file.file_path}</span>
-                  <Badge variant="outline" className="ml-auto text-xs">
-                    {file.file_type}
-                  </Badge>
+            <div className="max-h-96 overflow-y-auto space-y-4">
+              {groupedFiles.map(([dir, dirFiles]) => (
+                <div key={dir}>
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <Folder className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="text-xs font-medium text-muted-foreground font-mono">
+                      {dir}
+                    </span>
+                  </div>
+                  <div className="ml-2 space-y-0.5 border-l-2 border-muted pl-3">
+                    {dirFiles.map((file) => (
+                      <div
+                        key={file.id}
+                        className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-muted/50"
+                      >
+                        <File className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        <span className="flex-1 truncate font-mono text-xs">
+                          {file.file_path.split("/").pop()}
+                        </span>
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">
+                          {file.file_type}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>

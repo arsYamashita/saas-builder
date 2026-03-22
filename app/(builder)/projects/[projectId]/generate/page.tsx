@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +12,9 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils/cn";
 import {
   ArrowLeft,
   Play,
@@ -21,6 +24,9 @@ import {
   XCircle,
   AlertCircle,
   FileCode,
+  Zap,
+  Clock,
+  Cpu,
 } from "lucide-react";
 
 type StepStatus = "pending" | "running" | "completed" | "failed" | "skipped";
@@ -47,17 +53,16 @@ interface GenerationRun {
   completed_at?: string | null;
 }
 
-const stepIcons: Record<StepStatus, React.ReactNode> = {
-  pending: <Circle className="h-4 w-4 text-muted-foreground" />,
-  running: <Loader2 className="h-4 w-4 animate-spin text-blue-500" />,
-  completed: <CheckCircle2 className="h-4 w-4 text-emerald-500" />,
-  failed: <XCircle className="h-4 w-4 text-destructive" />,
-  skipped: <Circle className="h-4 w-4 text-muted-foreground/50" />,
+const stepIconMap: Record<StepStatus, { icon: React.ElementType; className: string }> = {
+  pending: { icon: Circle, className: "text-muted-foreground/40" },
+  running: { icon: Loader2, className: "text-primary animate-spin" },
+  completed: { icon: CheckCircle2, className: "text-emerald-500" },
+  failed: { icon: XCircle, className: "text-destructive" },
+  skipped: { icon: Circle, className: "text-muted-foreground/30" },
 };
 
 export default function GeneratePage() {
   const { projectId } = useParams<{ projectId: string }>();
-  const router = useRouter();
   const [project, setProject] = useState<any>(null);
   const [latestRun, setLatestRun] = useState<GenerationRun | null>(null);
   const [loading, setLoading] = useState(true);
@@ -84,7 +89,6 @@ export default function GeneratePage() {
     fetchData();
   }, [fetchData]);
 
-  // Poll while generating
   useEffect(() => {
     if (!latestRun || !["running", "pending"].includes(latestRun.status)) return;
     const interval = setInterval(fetchData, 3000);
@@ -112,15 +116,23 @@ export default function GeneratePage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      <div className="space-y-6 animate-fade-in">
+        <div className="flex items-center gap-4">
+          <Skeleton className="h-9 w-9 rounded-lg" />
+          <div className="space-y-2">
+            <Skeleton className="h-7 w-48" />
+            <Skeleton className="h-4 w-32" />
+          </div>
+        </div>
+        <Skeleton className="h-48 w-full rounded-xl" />
+        <Skeleton className="h-64 w-full rounded-xl" />
       </div>
     );
   }
 
   if (!project) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex items-center justify-center h-64 animate-fade-in">
         <p className="text-muted-foreground">Project not found.</p>
       </div>
     );
@@ -130,124 +142,165 @@ export default function GeneratePage() {
   const completedSteps = steps.filter((s) => s.status === "completed").length;
   const isRunning = latestRun?.status === "running";
 
+  const pipelineActions = [
+    { endpoint: "generate-template", label: "Generate Template", primary: true },
+    { endpoint: "generate-api-design", label: "API Design", primary: false },
+    { endpoint: "generate-schema", label: "Schema", primary: false },
+    { endpoint: "generate-implementation", label: "Implementation", primary: false },
+  ];
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-4">
+    <div className="space-y-6 animate-fade-in">
+      {/* Header */}
+      <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" asChild>
           <Link href={`/projects/${projectId}`}>
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Generate Code</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Generate Code</h1>
           <p className="text-sm text-muted-foreground">{project.name}</p>
         </div>
       </div>
 
+      {/* Error */}
       {error && (
-        <Card className="border-destructive">
-          <CardContent className="flex items-center gap-2 py-3">
-            <AlertCircle className="h-4 w-4 text-destructive" />
-            <p className="text-sm text-destructive">{error}</p>
-          </CardContent>
-        </Card>
+        <div className="flex items-center gap-3 rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3">
+          <AlertCircle className="h-4 w-4 shrink-0 text-destructive" />
+          <p className="text-sm text-destructive">{error}</p>
+        </div>
       )}
 
-      {/* Generation Actions */}
+      {/* Pipeline Actions */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Generation Pipeline</CardTitle>
-          <CardDescription>
-            Run AI-powered code generation for your project.
-          </CardDescription>
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+              <Zap className="h-4 w-4 text-primary" />
+            </div>
+            <div>
+              <CardTitle>Generation Pipeline</CardTitle>
+              <CardDescription>
+                Run AI-powered code generation for your project.
+              </CardDescription>
+            </div>
+          </div>
         </CardHeader>
-        <CardContent className="flex flex-wrap gap-3">
-          <Button
-            onClick={() => startGeneration("generate-template", "generate template")}
-            disabled={generating || isRunning}
-          >
-            {generating ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <Play className="mr-2 h-4 w-4" />
-            )}
-            Generate Template
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => startGeneration("generate-api-design", "generate API design")}
-            disabled={generating || isRunning}
-          >
-            Generate API Design
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => startGeneration("generate-schema", "generate schema")}
-            disabled={generating || isRunning}
-          >
-            Generate Schema
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => startGeneration("generate-implementation", "generate implementation")}
-            disabled={generating || isRunning}
-          >
-            Generate Implementation
-          </Button>
+        <CardContent>
+          <div className="flex flex-wrap gap-2">
+            {pipelineActions.map((action) => (
+              <Button
+                key={action.endpoint}
+                variant={action.primary ? "default" : "outline"}
+                onClick={() =>
+                  startGeneration(action.endpoint, action.label.toLowerCase())
+                }
+                disabled={generating || isRunning}
+                size="sm"
+              >
+                {generating ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Play className="h-3.5 w-3.5" />
+                )}
+                {action.label}
+              </Button>
+            ))}
+          </div>
         </CardContent>
       </Card>
 
-      {/* Latest Generation Run */}
+      {/* Latest Run */}
       {latestRun && (
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
-              <CardTitle className="text-base">Latest Generation Run</CardTitle>
-              <Badge
-                variant={
-                  latestRun.status === "completed"
-                    ? "success"
-                    : latestRun.status === "failed"
-                    ? "destructive"
-                    : latestRun.status === "running"
-                    ? "warning"
-                    : "secondary"
-                }
-              >
-                {latestRun.status}
-              </Badge>
+              <div className="flex items-center gap-2">
+                <CardTitle>Latest Run</CardTitle>
+                <Badge
+                  variant={
+                    latestRun.status === "completed"
+                      ? "success"
+                      : latestRun.status === "failed"
+                        ? "destructive"
+                        : latestRun.status === "running"
+                          ? "info"
+                          : "secondary"
+                  }
+                  className="capitalize"
+                >
+                  {latestRun.status}
+                </Badge>
+              </div>
+              {latestRun.started_at && (
+                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <Clock className="h-3 w-3" />
+                  {new Date(latestRun.started_at).toLocaleString("ja-JP")}
+                </span>
+              )}
             </div>
-            <CardDescription>
-              {completedSteps}/{steps.length} steps completed
-              {latestRun.started_at &&
-                ` — Started ${new Date(latestRun.started_at).toLocaleString("ja-JP")}`}
-            </CardDescription>
+            {steps.length > 0 && (
+              <div className="pt-2">
+                <div className="flex items-center justify-between text-xs text-muted-foreground mb-2">
+                  <span>Progress</span>
+                  <span>
+                    {completedSteps}/{steps.length} steps
+                  </span>
+                </div>
+                <Progress
+                  value={completedSteps}
+                  max={steps.length}
+                  variant={
+                    latestRun.status === "failed" ? "destructive" : "default"
+                  }
+                />
+              </div>
+            )}
           </CardHeader>
           <CardContent>
-            <div className="space-y-2">
-              {steps.map((step) => (
-                <div
-                  key={step.key}
-                  className="flex items-center gap-3 rounded-md border px-3 py-2"
-                >
-                  {stepIcons[step.status] ?? stepIcons.pending}
-                  <span className="flex-1 text-sm font-medium">
-                    {step.label || step.key}
-                  </span>
-                  {step.meta?.provider && (
-                    <span className="text-xs text-muted-foreground">
-                      {step.meta.provider}
-                    </span>
-                  )}
-                  {step.meta?.durationMs != null && (
-                    <span className="text-xs text-muted-foreground">
-                      {(step.meta.durationMs / 1000).toFixed(1)}s
-                    </span>
-                  )}
-                </div>
-              ))}
+            <div className="space-y-1">
+              {steps.map((step, index) => {
+                const { icon: StepIcon, className: iconClass } =
+                  stepIconMap[step.status] ?? stepIconMap.pending;
+                return (
+                  <div
+                    key={step.key}
+                    className={cn(
+                      "flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors",
+                      step.status === "running" && "bg-primary/5",
+                      step.status === "failed" && "bg-destructive/5"
+                    )}
+                    style={{ animationDelay: `${index * 30}ms` }}
+                  >
+                    <StepIcon className={cn("h-4 w-4 shrink-0", iconClass)} />
+
+                    {/* Vertical connector line */}
+                    <div className="flex-1">
+                      <span className="text-sm font-medium">
+                        {step.label || step.key}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      {step.meta?.provider && (
+                        <span className="flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                          <Cpu className="h-2.5 w-2.5" />
+                          {step.meta.provider}
+                          {step.meta.model && ` / ${step.meta.model}`}
+                        </span>
+                      )}
+                      {step.meta?.durationMs != null && (
+                        <span className="text-xs tabular-nums text-muted-foreground">
+                          {(step.meta.durationMs / 1000).toFixed(1)}s
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
               {steps.length === 0 && (
-                <p className="text-sm text-muted-foreground py-4 text-center">
+                <p className="py-6 text-center text-sm text-muted-foreground">
                   No steps recorded yet.
                 </p>
               )}
@@ -257,13 +310,13 @@ export default function GeneratePage() {
       )}
 
       {/* Navigation */}
-      <div className="flex gap-3">
-        <Button variant="outline" asChild>
+      <div className="flex gap-2">
+        <Button variant="outline" size="sm" asChild>
           <Link href={`/projects/${projectId}/blueprint`}>View Blueprint</Link>
         </Button>
-        <Button variant="outline" asChild>
+        <Button variant="outline" size="sm" asChild>
           <Link href={`/projects/${projectId}/deploy`}>
-            <FileCode className="mr-2 h-4 w-4" />
+            <FileCode className="h-3.5 w-3.5" />
             Deploy
           </Link>
         </Button>

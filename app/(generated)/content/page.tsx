@@ -2,6 +2,25 @@ import Link from "next/link";
 import { createAdminClient } from "@/lib/db/supabase/admin";
 import { requireTenantRole } from "@/lib/rbac/guards";
 import { DeleteButton } from "@/components/domain/delete-button";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
+import { EmptyState } from "@/components/ui/empty-state";
+import {
+  Plus,
+  FileText,
+  Pencil,
+  Eye,
+  EyeOff,
+  Globe,
+  Lock,
+} from "lucide-react";
 
 export default async function ContentListPage() {
   const membership = await requireTenantRole("admin");
@@ -18,62 +37,134 @@ export default async function ContentListPage() {
   }
 
   return (
-    <main className="p-6 max-w-6xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Contents</h1>
-        <Link
-          href="/content/new"
-          className="rounded bg-black text-white px-4 py-2"
-        >
-          New Content
-        </Link>
-      </div>
+    <div className="space-y-6 animate-fade-in">
+      <PageHeader
+        title="Contents"
+        description="Manage your published content and articles."
+        action={
+          <Button asChild>
+            <Link href="/content/new">
+              <Plus className="h-4 w-4" />
+              New Content
+            </Link>
+          </Button>
+        }
+      />
 
-      <div className="border rounded-xl overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="text-left px-4 py-3">Title</th>
-              <th className="text-left px-4 py-3">Type</th>
-              <th className="text-left px-4 py-3">Visibility</th>
-              <th className="text-left px-4 py-3">Published</th>
-              <th className="text-left px-4 py-3">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {contents?.map((content) => (
-              <tr key={content.id} className="border-t">
-                <td className="px-4 py-3">{content.title}</td>
-                <td className="px-4 py-3">{content.content_type}</td>
-                <td className="px-4 py-3">{content.visibility}</td>
-                <td className="px-4 py-3">
-                  {content.published ? "true" : "false"}
-                </td>
-                <td className="px-4 py-3 flex gap-3">
-                  <Link
-                    href={`/content/${content.id}/edit`}
-                    className="underline"
-                  >
-                    Edit
-                  </Link>
-                  <DeleteButton
-                    endpoint={`/api/domain/content/${content.id}`}
-                    confirmMessage={`「${content.title}」を削除しますか？`}
-                  />
-                </td>
-              </tr>
-            ))}
-
-            {contents?.length === 0 && (
-              <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-gray-500">
-                  コンテンツがまだありません
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </main>
+      {!contents || contents.length === 0 ? (
+        <Card>
+          <EmptyState
+            icon={FileText}
+            title="No content yet"
+            description="Create your first piece of content to get started."
+            action={
+              <Button asChild>
+                <Link href="/content/new">
+                  <Plus className="h-4 w-4" />
+                  New Content
+                </Link>
+              </Button>
+            }
+          />
+        </Card>
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle>All Content ({contents.length})</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left">
+                    <th className="pb-3 pr-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Title
+                    </th>
+                    <th className="pb-3 pr-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Type
+                    </th>
+                    <th className="pb-3 pr-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Visibility
+                    </th>
+                    <th className="pb-3 pr-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Published
+                    </th>
+                    <th className="pb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {contents.map((content) => (
+                    <tr
+                      key={content.id}
+                      className="border-b last:border-0 transition-colors hover:bg-muted/30"
+                    >
+                      <td className="py-3.5 pr-4">
+                        <div className="flex items-center gap-2.5">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted">
+                            <FileText className="h-4 w-4 text-muted-foreground" />
+                          </div>
+                          <span className="font-medium">{content.title}</span>
+                        </div>
+                      </td>
+                      <td className="py-3.5 pr-4">
+                        <Badge variant="outline" className="capitalize">
+                          {content.content_type}
+                        </Badge>
+                      </td>
+                      <td className="py-3.5 pr-4">
+                        <span className="flex items-center gap-1.5 text-muted-foreground">
+                          {content.visibility === "public" ? (
+                            <>
+                              <Globe className="h-3 w-3" />
+                              <span className="text-xs">Public</span>
+                            </>
+                          ) : (
+                            <>
+                              <Lock className="h-3 w-3" />
+                              <span className="text-xs capitalize">
+                                {content.visibility}
+                              </span>
+                            </>
+                          )}
+                        </span>
+                      </td>
+                      <td className="py-3.5 pr-4">
+                        {content.published ? (
+                          <Badge variant="success" className="flex items-center gap-1 w-fit">
+                            <Eye className="h-3 w-3" />
+                            Live
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary" className="flex items-center gap-1 w-fit">
+                            <EyeOff className="h-3 w-3" />
+                            Draft
+                          </Badge>
+                        )}
+                      </td>
+                      <td className="py-3.5">
+                        <div className="flex items-center gap-2">
+                          <Button variant="ghost" size="sm" asChild>
+                            <Link href={`/content/${content.id}/edit`}>
+                              <Pencil className="h-3.5 w-3.5" />
+                              Edit
+                            </Link>
+                          </Button>
+                          <DeleteButton
+                            endpoint={`/api/domain/content/${content.id}`}
+                            confirmMessage={`Delete "${content.title}"?`}
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
   );
 }

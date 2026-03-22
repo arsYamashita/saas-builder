@@ -1,6 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
+import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/ui/empty-state";
+import { cn } from "@/lib/utils/cn";
+import { Zap, Globe, Clock } from "lucide-react";
 
 type ProviderTaskMetric = {
   provider: string;
@@ -63,71 +76,130 @@ function formatCost(usd: number): string {
 }
 
 function rateColor(rate: number): string {
-  if (rate >= 90) return "text-green-700";
+  if (rate >= 90) return "text-emerald-600";
   if (rate >= 70) return "text-amber-600";
   return "text-red-600";
 }
 
-function MetricTable({ metrics, title }: { metrics: ProviderTaskMetric[]; title: string }) {
+function MetricTable({
+  metrics,
+  title,
+}: {
+  metrics: ProviderTaskMetric[];
+  title: string;
+}) {
   if (metrics.length === 0) return null;
 
-  const sorted = [...metrics].sort((a, b) =>
-    a.provider.localeCompare(b.provider) || a.taskKind.localeCompare(b.taskKind)
+  const sorted = [...metrics].sort(
+    (a, b) =>
+      a.provider.localeCompare(b.provider) ||
+      a.taskKind.localeCompare(b.taskKind)
   );
 
   return (
     <div>
-      <h3 className="text-sm font-semibold mb-2 text-gray-600">{title}</h3>
-      <div className="overflow-x-auto">
-        <table className="w-full text-xs border-collapse">
+      <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground/60">
+        {title}
+      </h3>
+      <div className="overflow-x-auto rounded-lg border">
+        <table className="w-full text-xs">
           <thead>
-            <tr className="border-b text-left text-gray-500">
-              <th className="py-1.5 pr-3">Provider</th>
-              <th className="py-1.5 pr-3">Task</th>
-              <th className="py-1.5 pr-3 text-right">Success</th>
-              <th className="py-1.5 pr-3 text-right">Promoted</th>
-              <th className="py-1.5 pr-3 text-right">Fallback</th>
-              <th className="py-1.5 pr-3 text-right">Avg</th>
-              <th className="py-1.5 pr-3 text-right">p95</th>
-              <th className="py-1.5 pr-3 text-right">Tokens</th>
-              <th className="py-1.5 text-right">Cost</th>
+            <tr className="border-b bg-muted/30">
+              <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">
+                Provider
+              </th>
+              <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">
+                Task
+              </th>
+              <th className="px-3 py-2.5 text-right font-medium text-muted-foreground">
+                Success
+              </th>
+              <th className="px-3 py-2.5 text-right font-medium text-muted-foreground">
+                Promoted
+              </th>
+              <th className="px-3 py-2.5 text-right font-medium text-muted-foreground">
+                Fallback
+              </th>
+              <th className="px-3 py-2.5 text-right font-medium text-muted-foreground">
+                Avg
+              </th>
+              <th className="px-3 py-2.5 text-right font-medium text-muted-foreground">
+                p95
+              </th>
+              <th className="px-3 py-2.5 text-right font-medium text-muted-foreground">
+                Tokens
+              </th>
+              <th className="px-3 py-2.5 text-right font-medium text-muted-foreground">
+                Cost
+              </th>
             </tr>
           </thead>
           <tbody>
             {sorted.map((m) => (
-              <tr key={`${m.provider}-${m.taskKind}`} className="border-b border-gray-100">
-                <td className="py-1.5 pr-3 font-medium">{m.provider}</td>
-                <td className="py-1.5 pr-3">{m.taskKind}</td>
-                <td className={`py-1.5 pr-3 text-right font-mono ${rateColor(m.successRate)}`}>
-                  {m.successRate}%
-                  <span className="text-gray-400 ml-1">({m.completedSteps}/{m.totalSteps})</span>
+              <tr
+                key={`${m.provider}-${m.taskKind}`}
+                className="border-b last:border-0 transition-colors hover:bg-muted/20"
+              >
+                <td className="px-3 py-2.5 font-medium">{m.provider}</td>
+                <td className="px-3 py-2.5 text-muted-foreground">
+                  {m.taskKind}
                 </td>
-                <td className="py-1.5 pr-3 text-right font-mono">
-                  {m.promotedSteps > 0 ? (
-                    <span className="text-green-700">{m.promotedStepRate}% ({m.promotedSteps})</span>
-                  ) : (
-                    <span className="text-gray-300">0</span>
+                <td
+                  className={cn(
+                    "px-3 py-2.5 text-right font-mono tabular-nums",
+                    rateColor(m.successRate)
                   )}
+                >
+                  {m.successRate}%
+                  <span className="ml-1 text-muted-foreground/60">
+                    ({m.completedSteps}/{m.totalSteps})
+                  </span>
                 </td>
-                <td className="py-1.5 pr-3 text-right font-mono">
-                  {m.fallbackCount > 0 ? (
-                    <span className="text-amber-600" title={m.fallbackReasons.join("\n") || undefined}>
-                      {m.fallbackRate}% ({m.fallbackCount})
+                <td className="px-3 py-2.5 text-right font-mono tabular-nums">
+                  {m.promotedSteps > 0 ? (
+                    <span className="text-emerald-600">
+                      {m.promotedStepRate}%{" "}
+                      <span className="text-muted-foreground/60">
+                        ({m.promotedSteps})
+                      </span>
                     </span>
                   ) : (
-                    <span className="text-gray-300">0</span>
+                    <span className="text-muted-foreground/40">0</span>
                   )}
                 </td>
-                <td className="py-1.5 pr-3 text-right font-mono text-gray-600">
+                <td className="px-3 py-2.5 text-right font-mono tabular-nums">
+                  {m.fallbackCount > 0 ? (
+                    <span
+                      className="text-amber-600 cursor-help"
+                      title={
+                        m.fallbackReasons.join("\n") || undefined
+                      }
+                    >
+                      {m.fallbackRate}%{" "}
+                      <span className="text-muted-foreground/60">
+                        ({m.fallbackCount})
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground/40">0</span>
+                  )}
+                </td>
+                <td className="px-3 py-2.5 text-right font-mono tabular-nums text-muted-foreground">
                   {formatDuration(m.avgDurationMs)}
                 </td>
-                <td className="py-1.5 pr-3 text-right font-mono text-gray-600">
+                <td className="px-3 py-2.5 text-right font-mono tabular-nums text-muted-foreground">
                   {formatDuration(m.p95DurationMs)}
                 </td>
-                <td className="py-1.5 pr-3 text-right font-mono text-gray-600" title={`in: ${formatTokens(m.totalInputTokens)} / out: ${formatTokens(m.totalOutputTokens)}`}>
+                <td
+                  className="px-3 py-2.5 text-right font-mono tabular-nums text-muted-foreground cursor-help"
+                  title={`in: ${formatTokens(m.totalInputTokens)} / out: ${formatTokens(m.totalOutputTokens)}`}
+                >
                   {formatTokens(m.totalTokens)}
                 </td>
-                <td className="py-1.5 text-right font-mono text-gray-600" title={`avg: ${formatCost(m.avgCostPerStep)}/step`}>
+                <td
+                  className="px-3 py-2.5 text-right font-mono tabular-nums text-muted-foreground cursor-help"
+                  title={`avg: ${formatCost(m.avgCostPerStep)}/step`}
+                >
                   {formatCost(m.totalCostUsd)}
                 </td>
               </tr>
@@ -162,55 +234,102 @@ export default function ProviderScoreboardPage() {
 
   if (loading) {
     return (
-      <main className="max-w-6xl mx-auto p-6">
-        <p className="text-gray-500">Loading...</p>
-      </main>
+      <div className="space-y-6 animate-fade-in">
+        <div className="space-y-2">
+          <Skeleton className="h-8 w-56" />
+          <Skeleton className="h-4 w-72" />
+        </div>
+        <Skeleton className="h-64 rounded-xl" />
+        <Skeleton className="h-48 rounded-xl" />
+      </div>
     );
   }
 
   if (error || !data) {
     return (
-      <main className="max-w-6xl mx-auto p-6">
-        <p className="text-red-500">{error || "Failed to load"}</p>
-      </main>
+      <div className="space-y-6 animate-fade-in">
+        <PageHeader title="Provider Scoreboard" />
+        <Card>
+          <CardContent className="py-10 text-center">
+            <p className="text-sm text-destructive">
+              {error || "Failed to load"}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 
   return (
-    <main className="max-w-6xl mx-auto p-6 space-y-8">
-      <div>
-        <h1 className="text-xl font-bold">Provider Scoreboard</h1>
-        <p className="text-xs text-gray-500">
-          Factory Intelligence v1 — Generated {new Date(data.generatedAt).toLocaleString("ja-JP")}
-        </p>
-      </div>
+    <div className="space-y-8 animate-fade-in">
+      <PageHeader
+        title="Provider Scoreboard"
+        description={`Factory Intelligence v1 -- Last updated ${new Date(data.generatedAt).toLocaleString("ja-JP")}`}
+      />
 
       {/* Global Metrics */}
-      <section className="border rounded-xl p-4 space-y-3">
-        <h2 className="font-semibold">Global — 全テンプレート集計</h2>
-        <MetricTable metrics={data.globalMetrics} title="Provider × TaskKind" />
-      </section>
-
-      {/* Per-Template */}
-      {data.templates.map((t) => (
-        <section key={t.templateKey} className="border rounded-xl p-4 space-y-3">
-          <div className="flex items-center justify-between">
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+              <Globe className="h-5 w-5 text-primary" />
+            </div>
             <div>
-              <h2 className="font-semibold">{t.templateKey}</h2>
-              <p className="text-xs text-gray-400">
-                {t.completedRuns}/{t.totalRuns} completed — {t.promotedRuns} promoted
-                {t.promotionRate > 0 && ` (${t.promotionRate}%)`}
-                {t.totalCostUsd > 0 && ` — ${formatCost(t.totalCostUsd)} total (${formatCost(t.avgCostPerRun)}/run)`}
-              </p>
+              <CardTitle>Global Metrics</CardTitle>
+              <CardDescription>
+                Aggregated performance across all templates
+              </CardDescription>
             </div>
           </div>
-          <MetricTable metrics={t.stepMetrics} title="Step Metrics" />
-        </section>
+        </CardHeader>
+        <CardContent>
+          <MetricTable
+            metrics={data.globalMetrics}
+            title="Provider x Task Kind"
+          />
+        </CardContent>
+      </Card>
+
+      {/* Per-Template */}
+      {data.templates.map((t, index) => (
+        <Card
+          key={t.templateKey}
+          style={{ animationDelay: `${index * 60}ms` }}
+        >
+          <CardHeader>
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted">
+                  <Zap className="h-5 w-5 text-muted-foreground" />
+                </div>
+                <div>
+                  <CardTitle>{t.templateKey}</CardTitle>
+                  <CardDescription>
+                    {t.completedRuns}/{t.totalRuns} completed
+                    {t.promotedRuns > 0 &&
+                      ` -- ${t.promotedRuns} promoted (${t.promotionRate}%)`}
+                    {t.totalCostUsd > 0 &&
+                      ` -- ${formatCost(t.totalCostUsd)} total (${formatCost(t.avgCostPerRun)}/run)`}
+                  </CardDescription>
+                </div>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <MetricTable metrics={t.stepMetrics} title="Step Metrics" />
+          </CardContent>
+        </Card>
       ))}
 
       {data.templates.length === 0 && (
-        <p className="text-sm text-gray-500">まだ生成実行がありません。</p>
+        <Card>
+          <EmptyState
+            icon={Zap}
+            title="No generation runs yet"
+            description="Run a generation pipeline to see provider performance metrics."
+          />
+        </Card>
       )}
-    </main>
+    </div>
   );
 }

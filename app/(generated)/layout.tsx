@@ -6,9 +6,9 @@ export default function GeneratedLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="max-w-7xl mx-auto p-6">
+    <div className="min-h-screen bg-background">
       <AdminNav />
-      {children}
+      <div className="mx-auto max-w-7xl px-6 py-6 lg:px-8">{children}</div>
     </div>
   );
 }

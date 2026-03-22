@@ -17,8 +17,12 @@ export default async function BlueprintPage({
 
   if (!project) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <p className="text-muted-foreground">Project not found.</p>
+      <div className="flex items-center justify-center h-64 animate-fade-in">
+        <div className="text-center">
+          <p className="text-sm font-medium text-muted-foreground">
+            Project not found.
+          </p>
+        </div>
       </div>
     );
   }

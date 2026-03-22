@@ -1,114 +1,225 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  CreditCard,
+  ExternalLink,
+  Loader2,
+  Receipt,
+  Sparkles,
+} from "lucide-react";
 
 export default function BillingPage() {
   const [plans, setPlans] = useState<any[]>([]);
   const [subscriptions, setSubscriptions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
+  const [portalLoading, setPortalLoading] = useState(false);
 
   useEffect(() => {
     const run = async () => {
-      const plansRes = await fetch("/api/domain/membership-plans");
-      const plansJson = await plansRes.json();
-      setPlans(plansJson.plans ?? []);
+      try {
+        const plansRes = await fetch("/api/domain/membership-plans");
+        const plansJson = await plansRes.json();
+        setPlans(plansJson.plans ?? []);
 
-      const subRes = await fetch("/api/billing/subscriptions");
-      const subJson = await subRes.json();
-      setSubscriptions(subJson.subscriptions ?? []);
+        const subRes = await fetch("/api/billing/subscriptions");
+        const subJson = await subRes.json();
+        setSubscriptions(subJson.subscriptions ?? []);
+      } finally {
+        setLoading(false);
+      }
     };
 
     run();
   }, []);
 
+  const handleCheckout = async (planId: string) => {
+    setCheckoutLoading(planId);
+    try {
+      const res = await fetch("/api/billing/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ membership_plan_id: planId }),
+      });
+
+      const json = await res.json();
+
+      if (!res.ok) {
+        alert(json.error || "Checkout failed");
+        return;
+      }
+
+      window.location.href = json.url;
+    } finally {
+      setCheckoutLoading(null);
+    }
+  };
+
+  const handlePortal = async () => {
+    setPortalLoading(true);
+    try {
+      const res = await fetch("/api/billing/portal", { method: "POST" });
+      const json = await res.json();
+
+      if (!res.ok) {
+        alert(json.error || "Portal open failed");
+        return;
+      }
+
+      window.location.href = json.url;
+    } finally {
+      setPortalLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="space-y-6 animate-fade-in">
+        <div className="space-y-2">
+          <Skeleton className="h-8 w-32" />
+          <Skeleton className="h-4 w-56" />
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          <Skeleton className="h-44 rounded-xl" />
+          <Skeleton className="h-44 rounded-xl" />
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <main className="p-6 max-w-5xl mx-auto space-y-6">
-      <h1 className="text-2xl font-bold">Billing</h1>
+    <div className="space-y-8 animate-fade-in">
+      <PageHeader
+        title="Billing"
+        description="Manage your subscription plans and payment methods."
+      />
 
-      <section className="border rounded-xl p-4">
-        <h2 className="font-semibold mb-3">Available Plans</h2>
-
-        <div className="space-y-3">
-          {plans.map((plan) => (
-            <div
-              key={plan.id}
-              className="border rounded-lg p-4 flex items-center justify-between gap-4"
-            >
-              <div>
-                <p className="font-medium">{plan.name}</p>
-                <p className="text-sm text-gray-500">{plan.description}</p>
-                <p className="text-xs text-gray-500">
-                  price_id: {plan.price_id || "-"}
-                </p>
-              </div>
-
-              <button
-                className="rounded bg-black text-white px-4 py-2"
-                onClick={async () => {
-                  const res = await fetch("/api/billing/checkout", {
-                    method: "POST",
-                    headers: {
-                      "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({
-                      membership_plan_id: plan.id,
-                    }),
-                  });
-
-                  const json = await res.json();
-
-                  if (!res.ok) {
-                    alert(json.error || "Checkout failed");
-                    return;
-                  }
-
-                  window.location.href = json.url;
-                }}
+      {/* Available Plans */}
+      <div>
+        <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted-foreground/60">
+          Available Plans
+        </h2>
+        {plans.length === 0 ? (
+          <Card>
+            <EmptyState
+              icon={Sparkles}
+              title="No plans available"
+              description="Plans will appear here once they are configured."
+            />
+          </Card>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {plans.map((plan) => (
+              <Card
+                key={plan.id}
+                className="flex flex-col transition-all duration-200 hover:shadow-card-hover"
               >
-                Checkout
-              </button>
-            </div>
-          ))}
+                <CardHeader>
+                  <CardTitle className="text-lg">{plan.name}</CardTitle>
+                  {plan.description && (
+                    <CardDescription>{plan.description}</CardDescription>
+                  )}
+                </CardHeader>
+                <CardContent className="flex-1">
+                  {plan.price_id && (
+                    <p className="mb-4 text-xs text-muted-foreground font-mono">
+                      {plan.price_id}
+                    </p>
+                  )}
+                  <Button
+                    className="w-full"
+                    onClick={() => handleCheckout(plan.id)}
+                    disabled={checkoutLoading !== null}
+                  >
+                    {checkoutLoading === plan.id ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <CreditCard className="h-4 w-4" />
+                    )}
+                    Subscribe
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Current Subscriptions */}
+      <div>
+        <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted-foreground/60">
+          Current Subscriptions
+        </h2>
+        {subscriptions.length === 0 ? (
+          <Card>
+            <EmptyState
+              icon={Receipt}
+              title="No active subscriptions"
+              description="Subscribe to a plan to get started."
+            />
+          </Card>
+        ) : (
+          <div className="space-y-3">
+            {subscriptions.map((sub) => (
+              <Card key={sub.id}>
+                <CardContent className="flex items-center justify-between p-5">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+                      <Receipt className="h-5 w-5 text-primary" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium capitalize">
+                          {sub.status}
+                        </p>
+                        <Badge
+                          variant={
+                            sub.status === "active" ? "success" : "warning"
+                          }
+                          className="capitalize"
+                        >
+                          {sub.status}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {sub.current_period_start} - {sub.current_period_end}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+
+        <div className="mt-4">
+          <Button
+            variant="outline"
+            onClick={handlePortal}
+            disabled={portalLoading}
+          >
+            {portalLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <ExternalLink className="h-4 w-4" />
+            )}
+            Open Customer Portal
+          </Button>
         </div>
-      </section>
-
-      <section className="border rounded-xl p-4">
-        <h2 className="font-semibold mb-3">Current Subscriptions</h2>
-
-        <div className="space-y-3">
-          {subscriptions.length ? (
-            subscriptions.map((sub) => (
-              <div key={sub.id} className="border rounded-lg p-4">
-                <p className="font-medium">{sub.status}</p>
-                <p className="text-sm text-gray-500">
-                  {sub.current_period_start} - {sub.current_period_end}
-                </p>
-              </div>
-            ))
-          ) : (
-            <p className="text-sm text-gray-500">契約はまだありません。</p>
-          )}
-        </div>
-
-        <button
-          className="mt-4 rounded border px-4 py-2"
-          onClick={async () => {
-            const res = await fetch("/api/billing/portal", {
-              method: "POST",
-            });
-
-            const json = await res.json();
-
-            if (!res.ok) {
-              alert(json.error || "Portal open failed");
-              return;
-            }
-
-            window.location.href = json.url;
-          }}
-        >
-          Open Customer Portal
-        </button>
-      </section>
-    </main>
+      </div>
+    </div>
   );
 }
