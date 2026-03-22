@@ -4,6 +4,7 @@ import { isSafeRelativePath, normalizeExportPath } from "@/lib/utils/safe-path";
 import { writeTextFile } from "@/lib/utils/write-file";
 import { getProjectExportPath } from "@/lib/utils/project-export-path";
 import { writeExportScaffold } from "@/lib/quality/write-export-scaffold";
+import { requireCurrentUser } from "@/lib/auth/current-user";
 
 type Props = {
   params: Promise<{ projectId: string }>;
@@ -24,6 +25,7 @@ const EXPORTABLE_CATEGORIES = new Set([
 
 export async function POST(_req: NextRequest, { params }: Props) {
   try {
+    await requireCurrentUser();
     const { projectId } = await params;
     const files = await getGeneratedFilesByProject(projectId);
 
@@ -60,7 +62,9 @@ export async function POST(_req: NextRequest, { params }: Props) {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Unknown server error";
-
+    if (message === "Unauthorized") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     return NextResponse.json(
       {
         error: "Failed to export files",

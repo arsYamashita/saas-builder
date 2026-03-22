@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /projects/
+Disallow: /dashboard/
+Disallow: /settings/
+Sitemap: https://saas-builder-cyan.vercel.app/sitemap.xml

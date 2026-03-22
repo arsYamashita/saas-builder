@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/db/supabase/admin";
 import { getTemplateShortName } from "@/lib/templates/template-registry";
+import { requireCurrentUser } from "@/lib/auth/current-user";
 
 type Props = {
   params: Promise<{ runId: string }>;
@@ -8,6 +9,7 @@ type Props = {
 
 export async function POST(req: NextRequest, { params }: Props) {
   try {
+    await requireCurrentUser();
     const { runId } = await params;
     const body = await req.json().catch(() => ({}));
     const supabase = createAdminClient();
@@ -144,6 +146,9 @@ export async function POST(req: NextRequest, { params }: Props) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
+    if (message === "Unauthorized") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     return NextResponse.json(
       { error: "Failed to promote run", details: message },
       { status: 500 }
