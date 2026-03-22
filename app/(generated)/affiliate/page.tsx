@@ -58,8 +58,8 @@ export default async function AffiliatePage() {
   return (
     <div className="space-y-8 animate-fade-in">
       <PageHeader
-        title="Affiliate Program"
-        description="Share your referral link and earn commissions."
+        title="アフィリエイトプログラム"
+        description="紹介リンクを共有してコミッションを獲得しましょう。"
       />
 
       {/* Affiliate Link */}
@@ -70,9 +70,9 @@ export default async function AffiliatePage() {
               <Link2 className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <CardTitle>Your Referral Link</CardTitle>
+              <CardTitle>紹介リンク</CardTitle>
               <CardDescription>
-                Share this link to earn commissions on referrals.
+                このリンクを共有してコミッションを獲得できます。
               </CardDescription>
             </div>
           </div>
@@ -81,14 +81,14 @@ export default async function AffiliatePage() {
           {!affiliate ? (
             <div className="rounded-lg border border-dashed bg-muted/30 p-6 text-center">
               <p className="text-sm text-muted-foreground">
-                No affiliate account found. Contact support to get started.
+                アフィリエイトアカウントが見つかりません。サポートにお問い合わせください。
               </p>
             </div>
           ) : (
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-medium text-muted-foreground">
-                  Code:
+                  コード:
                 </span>
                 <Badge variant="info" className="font-mono">
                   {affiliate.code}
@@ -100,7 +100,7 @@ export default async function AffiliatePage() {
                 </span>
                 <button
                   className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
-                  title="Copy link"
+                  title="リンクをコピー"
                   onClick={() => {
                     if (affiliateUrl) navigator.clipboard.writeText(affiliateUrl);
                   }}
@@ -117,17 +117,17 @@ export default async function AffiliatePage() {
       {affiliate && (
         <div className="grid gap-4 sm:grid-cols-3">
           <MetricCard
-            label="Total Earned"
+            label="累計獲得額"
             value={`$${totalEarnings.toFixed(2)}`}
             icon={DollarSign}
           />
           <MetricCard
-            label="Pending"
+            label="保留中"
             value={`$${pendingEarnings.toFixed(2)}`}
             icon={TrendingUp}
           />
           <MetricCard
-            label="Total Referrals"
+            label="総紹介数"
             value={commissions?.length ?? 0}
             icon={Users}
           />
@@ -137,14 +137,14 @@ export default async function AffiliatePage() {
       {/* Commissions */}
       <div>
         <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted-foreground/60">
-          Commissions
+          コミッション
         </h2>
         {!commissions || commissions.length === 0 ? (
           <Card>
             <EmptyState
               icon={Receipt}
-              title="No commissions yet"
-              description="Commissions will appear here when your referrals make purchases."
+              title="コミッションはまだありません"
+              description="紹介者が購入すると、ここにコミッションが表示されます。"
             />
           </Card>
         ) : (

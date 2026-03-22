@@ -24,17 +24,17 @@ const statusConfig: Record<
   ProjectStatus,
   { variant: "secondary" | "success" | "warning" | "info"; label: string }
 > = {
-  draft: { variant: "secondary", label: "Draft" },
-  approved: { variant: "success", label: "Approved" },
-  generating: { variant: "warning", label: "Generating" },
-  deployed: { variant: "info", label: "Deployed" },
+  draft: { variant: "secondary", label: "下書き" },
+  approved: { variant: "success", label: "承認済み" },
+  generating: { variant: "warning", label: "生成中" },
+  deployed: { variant: "info", label: "デプロイ済み" },
 };
 
 function formatDate(dateString: string): string {
-  return new Date(dateString).toLocaleDateString("en-US", {
+  return new Date(dateString).toLocaleDateString("ja-JP", {
+    year: "numeric",
     month: "short",
     day: "numeric",
-    year: "numeric",
   });
 }
 
@@ -49,13 +49,13 @@ export default async function ProjectsPage() {
   return (
     <div className="space-y-8 animate-fade-in">
       <PageHeader
-        title="Projects"
-        description="Manage your SaaS projects and track their progress."
+        title="プロジェクト"
+        description="SaaSプロジェクトの管理と進捗を確認できます。"
         action={
           <Button asChild>
             <Link href="/projects/new">
               <Plus className="h-4 w-4" />
-              New Project
+              新規プロジェクト
             </Link>
           </Button>
         }
@@ -65,7 +65,7 @@ export default async function ProjectsPage() {
         <Card>
           <CardContent className="py-10 text-center">
             <p className="text-sm text-destructive">
-              Failed to load projects. Please try again later.
+              プロジェクトの読み込みに失敗しました。
             </p>
           </CardContent>
         </Card>
@@ -73,13 +73,13 @@ export default async function ProjectsPage() {
         <Card>
           <EmptyState
             icon={FolderKanban}
-            title="No projects yet"
-            description="Create your first SaaS project to get started building with AI-powered code generation."
+            title="プロジェクトがありません"
+            description="AIコード生成でSaaSアプリを構築しましょう。最初のプロジェクトを作成してください。"
             action={
               <Button asChild>
                 <Link href="/projects/new">
                   <Plus className="h-4 w-4" />
-                  New Project
+                  新規プロジェクト
                 </Link>
               </Button>
             }
@@ -134,7 +134,7 @@ export default async function ProjectsPage() {
                     </div>
 
                     <div className="mt-4 flex items-center text-xs font-medium text-primary opacity-0 transition-opacity duration-150 group-hover:opacity-100">
-                      Open project
+                      プロジェクトを開く
                       <ArrowRight className="ml-1 h-3 w-3" />
                     </div>
                   </CardContent>

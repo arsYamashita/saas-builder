@@ -106,31 +106,31 @@ function MetricTable({
           <thead>
             <tr className="border-b bg-muted/30">
               <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">
-                Provider
+                プロバイダー
               </th>
               <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">
-                Task
+                タスク
               </th>
               <th className="px-3 py-2.5 text-right font-medium text-muted-foreground">
-                Success
+                成功
               </th>
               <th className="px-3 py-2.5 text-right font-medium text-muted-foreground">
-                Promoted
+                昇格
               </th>
               <th className="px-3 py-2.5 text-right font-medium text-muted-foreground">
-                Fallback
+                フォールバック
               </th>
               <th className="px-3 py-2.5 text-right font-medium text-muted-foreground">
-                Avg
+                平均
               </th>
               <th className="px-3 py-2.5 text-right font-medium text-muted-foreground">
                 p95
               </th>
               <th className="px-3 py-2.5 text-right font-medium text-muted-foreground">
-                Tokens
+                トークン
               </th>
               <th className="px-3 py-2.5 text-right font-medium text-muted-foreground">
-                Cost
+                コスト
               </th>
             </tr>
           </thead>
@@ -248,11 +248,11 @@ export default function ProviderScoreboardPage() {
   if (error || !data) {
     return (
       <div className="space-y-6 animate-fade-in">
-        <PageHeader title="Provider Scoreboard" />
+        <PageHeader title="プロバイダースコアボード" />
         <Card>
           <CardContent className="py-10 text-center">
             <p className="text-sm text-destructive">
-              {error || "Failed to load"}
+              {error || "読み込みに失敗しました"}
             </p>
           </CardContent>
         </Card>
@@ -263,8 +263,8 @@ export default function ProviderScoreboardPage() {
   return (
     <div className="space-y-8 animate-fade-in">
       <PageHeader
-        title="Provider Scoreboard"
-        description={`Factory Intelligence v1 -- Last updated ${new Date(data.generatedAt).toLocaleString("ja-JP")}`}
+        title="プロバイダースコアボード"
+        description={`Factory Intelligence v1 — 最終更新 ${new Date(data.generatedAt).toLocaleString("ja-JP")}`}
       />
 
       {/* Global Metrics */}
@@ -275,9 +275,9 @@ export default function ProviderScoreboardPage() {
               <Globe className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <CardTitle>Global Metrics</CardTitle>
+              <CardTitle>グローバル指標</CardTitle>
               <CardDescription>
-                Aggregated performance across all templates
+                全テンプレートの集計パフォーマンス
               </CardDescription>
             </div>
           </div>
@@ -285,7 +285,7 @@ export default function ProviderScoreboardPage() {
         <CardContent>
           <MetricTable
             metrics={data.globalMetrics}
-            title="Provider x Task Kind"
+            title="プロバイダー × タスク種別"
           />
         </CardContent>
       </Card>
@@ -305,18 +305,18 @@ export default function ProviderScoreboardPage() {
                 <div>
                   <CardTitle>{t.templateKey}</CardTitle>
                   <CardDescription>
-                    {t.completedRuns}/{t.totalRuns} completed
+                    {t.completedRuns}/{t.totalRuns} 完了
                     {t.promotedRuns > 0 &&
-                      ` -- ${t.promotedRuns} promoted (${t.promotionRate}%)`}
+                      ` — ${t.promotedRuns} 昇格 (${t.promotionRate}%)`}
                     {t.totalCostUsd > 0 &&
-                      ` -- ${formatCost(t.totalCostUsd)} total (${formatCost(t.avgCostPerRun)}/run)`}
+                      ` — ${formatCost(t.totalCostUsd)} 合計 (${formatCost(t.avgCostPerRun)}/回)`}
                   </CardDescription>
                 </div>
               </div>
             </div>
           </CardHeader>
           <CardContent>
-            <MetricTable metrics={t.stepMetrics} title="Step Metrics" />
+            <MetricTable metrics={t.stepMetrics} title="ステップ指標" />
           </CardContent>
         </Card>
       ))}
@@ -325,8 +325,8 @@ export default function ProviderScoreboardPage() {
         <Card>
           <EmptyState
             icon={Zap}
-            title="No generation runs yet"
-            description="Run a generation pipeline to see provider performance metrics."
+            title="まだ生成履歴がありません"
+            description="生成パイプラインを実行するとプロバイダーの指標が表示されます。"
           />
         </Card>
       )}

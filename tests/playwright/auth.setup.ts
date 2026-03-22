@@ -29,14 +29,14 @@ setup("authenticate", async ({ page }) => {
   });
 
   await page.goto("/auth/login");
-  await expect(page.locator("body")).toContainText("Welcome back", { timeout: 10000 });
+  await expect(page.locator("body")).toContainText("おかえりなさい", { timeout: 10000 });
 
   // Fill login form
   await page.locator('input[type="email"]').fill(email);
   await page.locator('input[type="password"]').fill(password);
 
   // Click submit and wait for navigation
-  await page.getByRole("button", { name: /Sign In/i }).click();
+  await page.getByRole("button", { name: /サインイン/i }).click();
 
   // Wait for redirect — the login page does router.push("/dashboard")
   // Use a longer timeout as the server-side auth cookie setup can be slow

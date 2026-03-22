@@ -41,14 +41,14 @@ export default function LoginPage() {
       const json = await res.json();
 
       if (!res.ok) {
-        setError(json.error || "Login failed");
+        setError(json.error || "ログインに失敗しました");
         return;
       }
 
       router.push(json.redirectTo || "/dashboard");
       router.refresh();
     } catch {
-      setError("An unexpected error occurred.");
+      setError("予期しないエラーが発生しました。");
     } finally {
       setLoading(false);
     }
@@ -64,15 +64,15 @@ export default function LoginPage() {
           </div>
           <h1 className="text-xl font-semibold tracking-tight">SaaS Builder</h1>
           <p className="text-sm text-muted-foreground">
-            Build and deploy SaaS applications
+            AIでSaaSアプリケーションを構築
           </p>
         </div>
 
         <Card className="shadow-elevated">
           <CardHeader className="text-center">
-            <CardTitle className="text-xl">Welcome back</CardTitle>
+            <CardTitle className="text-xl">おかえりなさい</CardTitle>
             <CardDescription>
-              Sign in to your account to continue.
+              アカウントにサインインして続けましょう。
             </CardDescription>
           </CardHeader>
 
@@ -90,14 +90,14 @@ export default function LoginPage() {
                   htmlFor="email"
                   className="text-sm font-medium leading-none"
                 >
-                  Email
+                  メールアドレス
                 </label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     id="email"
                     type="email"
-                    placeholder="you@example.com"
+                    placeholder="example@example.com"
                     className="pl-10"
                     value={form.email}
                     onChange={(e) =>
@@ -114,13 +114,13 @@ export default function LoginPage() {
                     htmlFor="password"
                     className="text-sm font-medium leading-none"
                   >
-                    Password
+                    パスワード
                   </label>
                   <Link
                     href="/auth/reset-password"
                     className="text-xs text-primary hover:text-primary/80 transition-colors"
                   >
-                    Forgot password?
+                    パスワードを忘れた方
                   </Link>
                 </div>
                 <div className="relative">
@@ -128,7 +128,7 @@ export default function LoginPage() {
                   <Input
                     id="password"
                     type="password"
-                    placeholder="Enter your password"
+                    placeholder="パスワードを入力"
                     className="pl-10"
                     value={form.password}
                     onChange={(e) =>
@@ -150,20 +150,20 @@ export default function LoginPage() {
                 {loading ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Signing in...
+                    サインイン中...
                   </>
                 ) : (
-                  "Sign In"
+                  "サインイン"
                 )}
               </Button>
 
               <p className="text-center text-sm text-muted-foreground">
-                Don&apos;t have an account?{" "}
+                アカウントをお持ちでない方は{" "}
                 <Link
                   href="/auth/signup"
                   className="font-medium text-primary hover:text-primary/80 transition-colors"
                 >
-                  Sign up
+                  新規登録
                 </Link>
               </p>
             </CardFooter>

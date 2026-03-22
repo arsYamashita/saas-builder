@@ -51,7 +51,7 @@ export default function ResetPasswordPage() {
 
       setSent(true);
     } catch {
-      setError("An unexpected error occurred. Please try again.");
+      setError("予期しないエラーが発生しました。もう一度お試しください。");
     } finally {
       setLoading(false);
     }
@@ -70,11 +70,11 @@ export default function ResetPasswordPage() {
 
         <Card className="shadow-elevated">
           <CardHeader className="text-center">
-            <CardTitle className="text-xl">Reset Password</CardTitle>
+            <CardTitle className="text-xl">パスワードリセット</CardTitle>
             <CardDescription>
               {sent
-                ? "Check your email for a reset link."
-                : "Enter your email to receive a password reset link."}
+                ? "リセットリンクをメールで送信しました。"
+                : "パスワードリセット用のリンクをメールで送信します。"}
             </CardDescription>
           </CardHeader>
 
@@ -84,8 +84,7 @@ export default function ResetPasswordPage() {
                 <CheckCircle2 className="h-8 w-8 text-emerald-500" />
               </div>
               <p className="text-sm text-muted-foreground text-center max-w-xs">
-                If an account with <strong>{email}</strong> exists, you will
-                receive a password reset email shortly.
+                <strong>{email}</strong> のアカウントが存在する場合、パスワードリセット用のメールが送信されます。
               </p>
             </CardContent>
           ) : (
@@ -102,14 +101,14 @@ export default function ResetPasswordPage() {
                     htmlFor="email"
                     className="text-sm font-medium leading-none"
                   >
-                    Email
+                    メールアドレス
                   </label>
                   <div className="relative">
                     <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <Input
                       id="email"
                       type="email"
-                      placeholder="you@example.com"
+                      placeholder="example@example.com"
                       className="pl-10"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
@@ -128,10 +127,10 @@ export default function ResetPasswordPage() {
                   {loading ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      Sending...
+                      送信中...
                     </>
                   ) : (
-                    "Send Reset Link"
+                    "リセットリンクを送信"
                   )}
                 </Button>
               </CardFooter>
@@ -144,7 +143,7 @@ export default function ResetPasswordPage() {
               className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               <ArrowLeft className="mr-1.5 h-3.5 w-3.5" />
-              Back to Sign In
+              サインインに戻る
             </Link>
           </div>
         </Card>

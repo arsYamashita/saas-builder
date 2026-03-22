@@ -41,13 +41,13 @@ export default function TemplatesPage() {
   return (
     <div className="space-y-8 animate-fade-in">
       <PageHeader
-        title="Templates"
-        description="Choose a template to start building your SaaS application."
+        title="テンプレート"
+        description="テンプレートを選んでSaaSアプリの構築を始めましょう。"
         action={
           <Button asChild>
             <Link href="/projects/new">
               <Plus className="h-4 w-4" />
-              New Project
+              新規プロジェクト
             </Link>
           </Button>
         }
@@ -82,7 +82,7 @@ export default function TemplatesPage() {
                     className="flex items-center gap-1 text-[10px]"
                   >
                     <Star className="h-2.5 w-2.5" />
-                    Recommended
+                    おすすめ
                   </Badge>
                 )}
                 {template.statusBadge !== "GREEN" && (
@@ -100,14 +100,14 @@ export default function TemplatesPage() {
 
               <div>
                 <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground/60">
-                  Target Users
+                  対象ユーザー
                 </p>
                 <p className="text-sm">{template.targetUsers}</p>
               </div>
 
               <div>
                 <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground/60">
-                  Core Entities
+                  主要エンティティ
                 </p>
                 <div className="flex flex-wrap gap-1.5">
                   {template.coreEntities.map((entity) => (
@@ -128,7 +128,7 @@ export default function TemplatesPage() {
                     <div className="flex h-5 w-5 items-center justify-center rounded bg-emerald-50">
                       <CreditCard className="h-3 w-3 text-emerald-600" />
                     </div>
-                    Billing
+                    課金
                   </span>
                 )}
                 {template.includesAffiliate && (
@@ -136,7 +136,7 @@ export default function TemplatesPage() {
                     <div className="flex h-5 w-5 items-center justify-center rounded bg-blue-50">
                       <Users className="h-3 w-3 text-blue-600" />
                     </div>
-                    Affiliate
+                    アフィリエイト
                   </span>
                 )}
               </div>
@@ -147,7 +147,7 @@ export default function TemplatesPage() {
                 <Link
                   href={`/projects/new?template=${template.templateKey}`}
                 >
-                  Use This Template
+                  このテンプレートを使う
                   <ArrowRight className="h-4 w-4 transition-transform group-hover/btn:translate-x-0.5" />
                 </Link>
               </Button>

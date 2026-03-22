@@ -36,7 +36,7 @@ test.describe.serial("Plans CRUD flow", () => {
 
   test("2. navigate to new plan form", async ({ page }) => {
     await page.goto("/plans");
-    await page.getByRole("link", { name: /New Plan/i }).click();
+    await page.getByRole("link", { name: /新規プラン/i }).click();
     await expect(page).toHaveURL(/\/plans\/new/);
     await expect(page.locator("form")).toBeVisible({ timeout: 10000 });
   });
@@ -69,7 +69,7 @@ test.describe.serial("Plans CRUD flow", () => {
     });
 
     const row = page.locator("tr", { hasText: testPlanName });
-    await row.getByRole("link", { name: /Edit/i }).click();
+    await row.getByRole("link", { name: /編集/i }).click();
 
     await expect(page).toHaveURL(/\/plans\/[^/]+\/edit/);
     const nameInput = page.getByRole("textbox").first();
@@ -104,7 +104,7 @@ test.describe.serial("Plans CRUD flow", () => {
     page.on("dialog", (dialog) => dialog.accept());
 
     const row = page.locator("tr", { hasText: updatedPlanName });
-    await row.getByRole("button", { name: /Delete/i }).click();
+    await row.getByRole("button", { name: /削除/i }).click();
 
     await expect(page.locator("body")).not.toContainText(updatedPlanName, {
       timeout: 10000,
@@ -113,7 +113,7 @@ test.describe.serial("Plans CRUD flow", () => {
 
   test("8. deleted plan no longer in list", async ({ page }) => {
     await page.goto("/plans");
-    await expect(page.locator("h1")).toContainText("Plans", {
+    await expect(page.locator("h1")).toContainText("プラン管理", {
       timeout: 10000,
     });
     await expect(page.locator("body")).not.toContainText(updatedPlanName);

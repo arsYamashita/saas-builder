@@ -58,7 +58,7 @@ export default function BillingPage() {
       const json = await res.json();
 
       if (!res.ok) {
-        alert(json.error || "Checkout failed");
+        alert(json.error || "チェックアウトに失敗しました");
         return;
       }
 
@@ -75,7 +75,7 @@ export default function BillingPage() {
       const json = await res.json();
 
       if (!res.ok) {
-        alert(json.error || "Portal open failed");
+        alert(json.error || "ポータルを開けませんでした");
         return;
       }
 
@@ -103,21 +103,21 @@ export default function BillingPage() {
   return (
     <div className="space-y-8 animate-fade-in">
       <PageHeader
-        title="Billing"
-        description="Manage your subscription plans and payment methods."
+        title="課金管理"
+        description="サブスクリプションプランと支払い方法を管理します。"
       />
 
       {/* Available Plans */}
       <div>
         <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted-foreground/60">
-          Available Plans
+          利用可能なプラン
         </h2>
         {plans.length === 0 ? (
           <Card>
             <EmptyState
               icon={Sparkles}
-              title="No plans available"
-              description="Plans will appear here once they are configured."
+              title="利用可能なプランがありません"
+              description="プランが設定されると、ここに表示されます。"
             />
           </Card>
         ) : (
@@ -149,7 +149,7 @@ export default function BillingPage() {
                     ) : (
                       <CreditCard className="h-4 w-4" />
                     )}
-                    Subscribe
+                    登録する
                   </Button>
                 </CardContent>
               </Card>
@@ -161,14 +161,14 @@ export default function BillingPage() {
       {/* Current Subscriptions */}
       <div>
         <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted-foreground/60">
-          Current Subscriptions
+          現在のサブスクリプション
         </h2>
         {subscriptions.length === 0 ? (
           <Card>
             <EmptyState
               icon={Receipt}
-              title="No active subscriptions"
-              description="Subscribe to a plan to get started."
+              title="アクティブなサブスクリプションはありません"
+              description="プランに登録して始めましょう。"
             />
           </Card>
         ) : (
@@ -216,7 +216,7 @@ export default function BillingPage() {
             ) : (
               <ExternalLink className="h-4 w-4" />
             )}
-            Open Customer Portal
+            カスタマーポータルを開く
           </Button>
         </div>
       </div>

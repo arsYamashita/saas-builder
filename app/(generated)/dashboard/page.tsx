@@ -26,34 +26,34 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-8 animate-fade-in">
       <PageHeader
-        title="Dashboard"
-        description="Overview of your SaaS application."
+        title="ダッシュボード"
+        description="SaaSアプリケーションの概要"
       />
 
       {/* Metric Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard
-          label="Total Users"
+          label="総ユーザー数"
           value="--"
-          sublabel="Awaiting data"
+          sublabel="データ取得中"
           icon={Users}
         />
         <MetricCard
-          label="Active Subscriptions"
+          label="アクティブサブスクリプション"
           value="--"
-          sublabel="Awaiting data"
+          sublabel="データ取得中"
           icon={CreditCard}
         />
         <MetricCard
-          label="Monthly Revenue"
+          label="月間売上"
           value="--"
-          sublabel="Awaiting data"
+          sublabel="データ取得中"
           icon={Activity}
         />
         <MetricCard
-          label="Conversion Rate"
+          label="コンバージョン率"
           value="--"
-          sublabel="Awaiting data"
+          sublabel="データ取得中"
           icon={Shield}
         />
       </div>
@@ -67,13 +67,13 @@ export default async function DashboardPage() {
                 name={
                   (user as any)?.display_name ||
                   (user as any)?.email ||
-                  "User"
+                  "ユーザー"
                 }
               />
               <div>
-                <CardTitle>Current User</CardTitle>
+                <CardTitle>現在のユーザー</CardTitle>
                 <p className="text-xs text-muted-foreground">
-                  Your account details
+                  アカウント情報
                 </p>
               </div>
             </div>
@@ -84,7 +84,7 @@ export default async function DashboardPage() {
                 <div className="flex items-center gap-3">
                   <Users className="h-4 w-4 text-muted-foreground" />
                   <div>
-                    <p className="text-xs text-muted-foreground">Name</p>
+                    <p className="text-xs text-muted-foreground">名前</p>
                     <p className="text-sm font-medium">
                       {(user as any).display_name}
                     </p>
@@ -95,7 +95,7 @@ export default async function DashboardPage() {
                 <div className="flex items-center gap-3">
                   <Mail className="h-4 w-4 text-muted-foreground" />
                   <div>
-                    <p className="text-xs text-muted-foreground">Email</p>
+                    <p className="text-xs text-muted-foreground">メール</p>
                     <p className="text-sm font-medium">
                       {(user as any).email}
                     </p>
@@ -106,7 +106,7 @@ export default async function DashboardPage() {
                 <div className="flex items-center gap-3">
                   <Shield className="h-4 w-4 text-muted-foreground" />
                   <div>
-                    <p className="text-xs text-muted-foreground">User ID</p>
+                    <p className="text-xs text-muted-foreground">ユーザーID</p>
                     <p className="text-xs font-mono text-muted-foreground">
                       {(user as any).id}
                     </p>
@@ -124,9 +124,9 @@ export default async function DashboardPage() {
                 <Building2 className="h-4 w-4 text-primary" />
               </div>
               <div>
-                <CardTitle>Current Tenant</CardTitle>
+                <CardTitle>現在のテナント</CardTitle>
                 <p className="text-xs text-muted-foreground">
-                  Your organization membership
+                  組織メンバーシップ
                 </p>
               </div>
             </div>
@@ -136,7 +136,7 @@ export default async function DashboardPage() {
               <div className="space-y-3">
                 {(membership as any)?.tenant_id && (
                   <div>
-                    <p className="text-xs text-muted-foreground">Tenant ID</p>
+                    <p className="text-xs text-muted-foreground">テナントID</p>
                     <p className="text-xs font-mono text-muted-foreground">
                       {(membership as any).tenant_id}
                     </p>
@@ -144,7 +144,7 @@ export default async function DashboardPage() {
                 )}
                 {(membership as any)?.role && (
                   <div className="flex items-center gap-2">
-                    <p className="text-xs text-muted-foreground">Role</p>
+                    <p className="text-xs text-muted-foreground">ロール</p>
                     <Badge variant="default" className="capitalize">
                       {(membership as any).role}
                     </Badge>
@@ -152,7 +152,7 @@ export default async function DashboardPage() {
                 )}
                 {(membership as any)?.status && (
                   <div className="flex items-center gap-2">
-                    <p className="text-xs text-muted-foreground">Status</p>
+                    <p className="text-xs text-muted-foreground">ステータス</p>
                     <Badge
                       variant={
                         (membership as any).status === "active"
@@ -168,7 +168,7 @@ export default async function DashboardPage() {
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">
-                No tenant membership found.
+                テナントメンバーシップが見つかりません。
               </p>
             )}
           </CardContent>

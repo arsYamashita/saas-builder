@@ -20,7 +20,7 @@ export default async function BlueprintPage({
       <div className="flex items-center justify-center h-64 animate-fade-in">
         <div className="text-center">
           <p className="text-sm font-medium text-muted-foreground">
-            Project not found.
+            プロジェクトが見つかりません
           </p>
         </div>
       </div>

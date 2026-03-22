@@ -8,7 +8,7 @@ export default function NewContentPage() {
 
   return (
     <main className="p-6 max-w-3xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6">New Content</h1>
+      <h1 className="text-2xl font-bold mb-6">新規コンテンツ作成</h1>
 
       <ContentForm
         submitLabel="作成する"
