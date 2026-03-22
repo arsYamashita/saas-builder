@@ -3,6 +3,33 @@ import { projectFormSchema } from "@/lib/validation/project-form";
 import { createAdminClient } from "@/lib/db/supabase/admin";
 import { slugify } from "@/lib/utils/slugify";
 
+export async function GET() {
+  try {
+    const supabase = createAdminClient();
+
+    const { data: projects, error } = await supabase
+      .from("projects")
+      .select("id, name, template_key, status, description, created_at, updated_at")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      return NextResponse.json(
+        { error: "Failed to fetch projects", details: error.message },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ projects: projects ?? [] });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Unknown server error";
+    return NextResponse.json(
+      { error: "Failed to fetch projects", details: message },
+      { status: 500 }
+    );
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
