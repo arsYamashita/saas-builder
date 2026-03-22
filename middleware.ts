@@ -8,6 +8,11 @@ const protectedPrefixes = [
   "/affiliate",
   "/content",
   "/plans",
+  "/projects",
+  "/templates",
+  "/settings",
+  "/scoreboard",
+  "/provider-scoreboard",
 ];
 
 export function middleware(req: NextRequest) {
@@ -41,5 +46,10 @@ export const config = {
     "/affiliate/:path*",
     "/content/:path*",
     "/plans/:path*",
+    "/projects/:path*",
+    "/templates/:path*",
+    "/settings/:path*",
+    "/scoreboard/:path*",
+    "/provider-scoreboard/:path*",
   ],
 };
