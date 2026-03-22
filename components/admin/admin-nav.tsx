@@ -14,11 +14,11 @@ import {
 } from "lucide-react";
 
 const navItems = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/content", label: "Contents", icon: FileText },
-  { href: "/plans", label: "Plans", icon: Tag },
-  { href: "/billing", label: "Billing", icon: CreditCard },
-  { href: "/affiliate", label: "Affiliate", icon: Users },
+  { href: "/dashboard", label: "ダッシュボード", icon: LayoutDashboard },
+  { href: "/content", label: "コンテンツ", icon: FileText },
+  { href: "/plans", label: "プラン", icon: Tag },
+  { href: "/billing", label: "課金", icon: CreditCard },
+  { href: "/affiliate", label: "アフィリエイト", icon: Users },
 ];
 
 export function AdminNav() {
@@ -33,7 +33,7 @@ export function AdminNav() {
             <Blocks className="h-3.5 w-3.5" />
           </div>
           <span className="text-sm font-semibold tracking-tight hidden sm:block">
-            Admin
+            管理者
           </span>
         </Link>
 

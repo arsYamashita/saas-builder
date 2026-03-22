@@ -19,7 +19,7 @@ export function LogoutButton() {
         const json = await res.json();
 
         if (!res.ok) {
-          alert(json.error || "Logout failed");
+          alert(json.error || "ログアウトに失敗しました");
           return;
         }
 
@@ -28,7 +28,7 @@ export function LogoutButton() {
       }}
     >
       <LogOut className="h-3.5 w-3.5" />
-      Logout
+      ログアウト
     </Button>
   );
 }

@@ -39,13 +39,13 @@ export default async function ContentListPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       <PageHeader
-        title="Contents"
-        description="Manage your published content and articles."
+        title="コンテンツ管理"
+        description="コンテンツと記事を管理します。"
         action={
           <Button asChild>
             <Link href="/content/new">
               <Plus className="h-4 w-4" />
-              New Content
+              新規コンテンツ
             </Link>
           </Button>
         }
@@ -55,13 +55,13 @@ export default async function ContentListPage() {
         <Card>
           <EmptyState
             icon={FileText}
-            title="No content yet"
-            description="Create your first piece of content to get started."
+            title="コンテンツがありません"
+            description="最初のコンテンツを作成しましょう。"
             action={
               <Button asChild>
                 <Link href="/content/new">
                   <Plus className="h-4 w-4" />
-                  New Content
+                  新規コンテンツ
                 </Link>
               </Button>
             }
@@ -70,7 +70,7 @@ export default async function ContentListPage() {
       ) : (
         <Card>
           <CardHeader>
-            <CardTitle>All Content ({contents.length})</CardTitle>
+            <CardTitle>すべてのコンテンツ ({contents.length})</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
@@ -78,19 +78,19 @@ export default async function ContentListPage() {
                 <thead>
                   <tr className="border-b text-left">
                     <th className="pb-3 pr-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                      Title
+                      タイトル
                     </th>
                     <th className="pb-3 pr-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                      Type
+                      種別
                     </th>
                     <th className="pb-3 pr-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                      Visibility
+                      公開範囲
                     </th>
                     <th className="pb-3 pr-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                      Published
+                      公開日
                     </th>
                     <th className="pb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                      Actions
+                      操作
                     </th>
                   </tr>
                 </thead>
@@ -118,7 +118,7 @@ export default async function ContentListPage() {
                           {content.visibility === "public" ? (
                             <>
                               <Globe className="h-3 w-3" />
-                              <span className="text-xs">Public</span>
+                              <span className="text-xs">公開</span>
                             </>
                           ) : (
                             <>
@@ -134,12 +134,12 @@ export default async function ContentListPage() {
                         {content.published ? (
                           <Badge variant="success" className="flex items-center gap-1 w-fit">
                             <Eye className="h-3 w-3" />
-                            Live
+                            公開中
                           </Badge>
                         ) : (
                           <Badge variant="secondary" className="flex items-center gap-1 w-fit">
                             <EyeOff className="h-3 w-3" />
-                            Draft
+                            下書き
                           </Badge>
                         )}
                       </td>
@@ -148,7 +148,7 @@ export default async function ContentListPage() {
                           <Button variant="ghost" size="sm" asChild>
                             <Link href={`/content/${content.id}/edit`}>
                               <Pencil className="h-3.5 w-3.5" />
-                              Edit
+                              編集
                             </Link>
                           </Button>
                           <DeleteButton

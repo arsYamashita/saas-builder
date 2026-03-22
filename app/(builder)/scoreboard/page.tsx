@@ -113,11 +113,11 @@ export default function ScoreboardPage() {
   if (error || !data) {
     return (
       <div className="space-y-6 animate-fade-in">
-        <PageHeader title="Template Scoreboard" />
+        <PageHeader title="テンプレートスコアボード" />
         <Card>
           <CardContent className="py-10 text-center">
             <p className="text-sm text-destructive">
-              {error || "Failed to load scoreboard"}
+              {error || "スコアボードの読み込みに失敗しました"}
             </p>
           </CardContent>
         </Card>
@@ -128,16 +128,16 @@ export default function ScoreboardPage() {
   return (
     <div className="space-y-8 animate-fade-in">
       <PageHeader
-        title="Template Scoreboard"
-        description={`Last updated ${new Date(data.generatedAt).toLocaleString("ja-JP")}`}
+        title="テンプレートスコアボード"
+        description={`最終更新 ${new Date(data.generatedAt).toLocaleString("ja-JP")}`}
       />
 
       {data.templates.length === 0 ? (
         <Card>
           <EmptyState
             icon={BarChart3}
-            title="No generation runs yet"
-            description="Run a generation pipeline to see template scores and metrics here."
+            title="まだ生成履歴がありません"
+            description="生成パイプラインを実行すると、テンプレートのスコアと指標がここに表示されます。"
           />
         </Card>
       ) : (
@@ -165,15 +165,15 @@ export default function ScoreboardPage() {
                     {t.blueprintReviewStatus === "approved" ? (
                       <Badge variant="success" className="flex items-center gap-1">
                         <CheckCircle2 className="h-3 w-3" />
-                        Blueprint Approved
+                        ブループリント承認済み
                       </Badge>
                     ) : t.blueprintReviewStatus === "rejected" ? (
                       <Badge variant="destructive" className="flex items-center gap-1">
                         <XCircle className="h-3 w-3" />
-                        Blueprint Rejected
+                        ブループリント却下
                       </Badge>
                     ) : t.blueprintReviewStatus ? (
-                      <Badge variant="secondary">Blueprint Pending</Badge>
+                      <Badge variant="secondary">ブループリント保留中</Badge>
                     ) : null}
                     {t.latestBaselineTag && (
                       <Badge variant="info">{t.latestBaselineTag}</Badge>
@@ -188,10 +188,10 @@ export default function ScoreboardPage() {
                     <RateCircle rate={t.greenRate} size="sm" />
                     <div className="text-center">
                       <p className="text-xs font-medium text-muted-foreground">
-                        Green Rate
+                        成功率
                       </p>
                       <p className="text-xs text-muted-foreground/70">
-                        {t.completedRuns}/{t.totalRuns} runs
+                        {t.completedRuns}/{t.totalRuns} 回
                       </p>
                     </div>
                   </div>
@@ -203,12 +203,12 @@ export default function ScoreboardPage() {
                     />
                     <div className="text-center">
                       <p className="text-xs font-medium text-muted-foreground">
-                        Quality Pass
+                        品質合格
                       </p>
                       <p className="text-xs text-muted-foreground/70">
                         {t.qualityTotalRuns > 0
-                          ? `${t.qualityPassedRuns}/${t.qualityTotalRuns} runs`
-                          : "Not run"}
+                          ? `${t.qualityPassedRuns}/${t.qualityTotalRuns} 回`
+                          : "未実行"}
                       </p>
                     </div>
                   </div>
@@ -221,10 +221,10 @@ export default function ScoreboardPage() {
                     </div>
                     <div className="text-center">
                       <p className="text-xs font-medium text-muted-foreground">
-                        Approved
+                        承認
                       </p>
                       <p className="text-xs text-muted-foreground/70">
-                        {t.rejectedRuns} rejected
+                        {t.rejectedRuns} 却下
                       </p>
                     </div>
                   </div>
@@ -237,12 +237,12 @@ export default function ScoreboardPage() {
                     </div>
                     <div className="text-center">
                       <p className="text-xs font-medium text-muted-foreground">
-                        Promoted
+                        昇格
                       </p>
                       <p className="text-xs text-muted-foreground/70">
                         {t.approvedRuns > 0
-                          ? `${t.promotionRate}% of approved`
-                          : `${t.failedRuns} failed`}
+                          ? `承認の${t.promotionRate}%`
+                          : `${t.failedRuns} 失敗`}
                       </p>
                     </div>
                   </div>
@@ -254,14 +254,14 @@ export default function ScoreboardPage() {
                     {t.lastApprovedAt && (
                       <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
                         <Clock className="h-3 w-3" />
-                        Last approved:{" "}
+                        最終承認:{" "}
                         {new Date(t.lastApprovedAt).toLocaleString("ja-JP")}
                       </span>
                     )}
                     {t.lastPromotedAt && (
                       <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
                         <Trophy className="h-3 w-3" />
-                        Last promoted:{" "}
+                        最終昇格:{" "}
                         {new Date(t.lastPromotedAt).toLocaleString("ja-JP")}
                       </span>
                     )}

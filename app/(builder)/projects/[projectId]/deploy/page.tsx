@@ -74,13 +74,13 @@ export default function DeployPage() {
   const fetchData = useCallback(async () => {
     try {
       const res = await fetch(`/api/projects/${projectId}`);
-      if (!res.ok) throw new Error("Failed to fetch project");
+      if (!res.ok) throw new Error("プロジェクトの取得に失敗しました");
       const data = await res.json();
       setProject(data.project);
       setFiles(data.generatedFiles ?? []);
       setQualityRuns(data.qualityRuns ?? []);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Unknown error");
+      setError(e instanceof Error ? e.message : "不明なエラー");
     } finally {
       setLoading(false);
     }
@@ -99,11 +99,11 @@ export default function DeployPage() {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Export failed");
+        throw new Error(data.error || "エクスポートに失敗しました");
       }
       await fetchData();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Unknown error");
+      setError(e instanceof Error ? e.message : "不明なエラー");
     } finally {
       setExporting(false);
     }
@@ -118,11 +118,11 @@ export default function DeployPage() {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Quality gate failed");
+        throw new Error(data.error || "品質ゲートに失敗しました");
       }
       await fetchData();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Unknown error");
+      setError(e instanceof Error ? e.message : "不明なエラー");
     } finally {
       setRunningQuality(false);
     }
@@ -150,7 +150,7 @@ export default function DeployPage() {
   if (!project) {
     return (
       <div className="flex items-center justify-center h-64 animate-fade-in">
-        <p className="text-muted-foreground">Project not found.</p>
+        <p className="text-muted-foreground">プロジェクトが見つかりません</p>
       </div>
     );
   }
@@ -169,7 +169,7 @@ export default function DeployPage() {
           </Link>
         </Button>
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Deploy</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">デプロイ</h1>
           <p className="text-sm text-muted-foreground">{project.name}</p>
         </div>
       </div>
@@ -192,9 +192,9 @@ export default function DeployPage() {
                 <Download className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <CardTitle>Export Files</CardTitle>
+                <CardTitle>ファイルエクスポート</CardTitle>
                 <CardDescription>
-                  Export generated code to the file system.
+                  生成されたコードをファイルシステムにエクスポートします。
                 </CardDescription>
               </div>
             </div>
@@ -206,7 +206,7 @@ export default function DeployPage() {
               ) : (
                 <Download className="h-4 w-4" />
               )}
-              Export Files
+              エクスポート
             </Button>
           </CardContent>
         </Card>
@@ -219,9 +219,9 @@ export default function DeployPage() {
                 <ShieldCheck className="h-5 w-5 text-emerald-600" />
               </div>
               <div>
-                <CardTitle>Quality Gate</CardTitle>
+                <CardTitle>品質ゲート</CardTitle>
                 <CardDescription>
-                  Run lint, typecheck, and tests on generated code.
+                  生成されたコードに対してLint、型チェック、テストを実行します。
                 </CardDescription>
               </div>
             </div>
@@ -237,7 +237,7 @@ export default function DeployPage() {
               ) : (
                 <Play className="h-4 w-4" />
               )}
-              Run Quality Gate
+              品質ゲートを実行
             </Button>
           </CardContent>
         </Card>
@@ -250,7 +250,7 @@ export default function DeployPage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <ShieldCheck className="h-4 w-4 text-muted-foreground" />
-                <CardTitle>Quality Gate Results</CardTitle>
+                <CardTitle>品質ゲート結果</CardTitle>
               </div>
               <Badge
                 variant={
@@ -299,15 +299,15 @@ export default function DeployPage() {
         <CardHeader>
           <div className="flex items-center gap-2">
             <FileCode className="h-4 w-4 text-muted-foreground" />
-            <CardTitle>Generated Files ({files.length})</CardTitle>
+            <CardTitle>生成ファイル ({files.length})</CardTitle>
           </div>
         </CardHeader>
         <CardContent>
           {files.length === 0 ? (
             <EmptyState
               icon={FileCode}
-              title="No files generated"
-              description="Run the generation pipeline first to produce code files."
+              title="ファイルが生成されていません"
+              description="まず生成パイプラインを実行してコードファイルを作成してください。"
             />
           ) : (
             <div className="max-h-96 overflow-y-auto space-y-4">

@@ -62,7 +62,7 @@ test("billing page redirects unauthenticated to login", async ({ page }) => {
 
 test("login page renders with email and password inputs", async ({ page }) => {
   await page.goto("/auth/login");
-  await expect(page.locator("body")).toContainText("Welcome back");
+  await expect(page.locator("body")).toContainText("おかえりなさい");
 
   const emailInput = page.locator('input[type="email"]');
   const passwordInput = page.locator('input[type="password"]');
@@ -72,7 +72,7 @@ test("login page renders with email and password inputs", async ({ page }) => {
 
 test("signup page renders with form", async ({ page }) => {
   await page.goto("/auth/signup");
-  await expect(page.locator("body")).toContainText("Create Account");
+  await expect(page.locator("body")).toContainText("アカウント作成");
 
   const inputs = await page.locator("input").count();
   expect(inputs).toBeGreaterThanOrEqual(2);
@@ -80,7 +80,7 @@ test("signup page renders with form", async ({ page }) => {
 
 test("reset password page renders", async ({ page }) => {
   await page.goto("/auth/reset-password");
-  await expect(page.locator("body")).toContainText("Reset Password");
+  await expect(page.locator("body")).toContainText("パスワードリセット");
 
   const emailInput = page.locator('input[type="email"]');
   await expect(emailInput).toBeVisible();

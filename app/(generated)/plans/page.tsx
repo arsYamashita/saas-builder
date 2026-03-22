@@ -31,13 +31,13 @@ export default async function PlansListPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       <PageHeader
-        title="Plans"
-        description="Manage subscription plans for your application."
+        title="プラン管理"
+        description="アプリケーションのサブスクリプションプランを管理します。"
         action={
           <Button asChild>
             <Link href="/plans/new">
               <Plus className="h-4 w-4" />
-              New Plan
+              新規プラン
             </Link>
           </Button>
         }
@@ -47,13 +47,13 @@ export default async function PlansListPage() {
         <Card>
           <EmptyState
             icon={Tag}
-            title="No plans yet"
-            description="Create your first subscription plan to start monetizing."
+            title="プランがありません"
+            description="最初のサブスクリプションプランを作成して収益化を始めましょう。"
             action={
               <Button asChild>
                 <Link href="/plans/new">
                   <Plus className="h-4 w-4" />
-                  New Plan
+                  新規プラン
                 </Link>
               </Button>
             }
@@ -62,7 +62,7 @@ export default async function PlansListPage() {
       ) : (
         <Card>
           <CardHeader>
-            <CardTitle>All Plans ({plans.length})</CardTitle>
+            <CardTitle>全プラン ({plans.length})</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
@@ -70,16 +70,16 @@ export default async function PlansListPage() {
                 <thead>
                   <tr className="border-b text-left">
                     <th className="pb-3 pr-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                      Name
+                      プラン名
                     </th>
                     <th className="pb-3 pr-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                      Price ID
+                      価格ID
                     </th>
                     <th className="pb-3 pr-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                      Status
+                      ステータス
                     </th>
                     <th className="pb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                      Actions
+                      操作
                     </th>
                   </tr>
                 </thead>
@@ -113,7 +113,7 @@ export default async function PlansListPage() {
                           }
                           className="capitalize"
                         >
-                          {plan.status}
+                          {plan.status === "active" ? "有効" : plan.status === "draft" ? "下書き" : plan.status}
                         </Badge>
                       </td>
                       <td className="py-3.5">
@@ -121,7 +121,7 @@ export default async function PlansListPage() {
                           <Button variant="ghost" size="sm" asChild>
                             <Link href={`/plans/${plan.id}/edit`}>
                               <Pencil className="h-3.5 w-3.5" />
-                              Edit
+                              編集
                             </Link>
                           </Button>
                           <DeleteButton

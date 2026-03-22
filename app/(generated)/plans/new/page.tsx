@@ -8,7 +8,7 @@ export default function NewPlanPage() {
 
   return (
     <main className="p-6 max-w-3xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6">New Plan</h1>
+      <h1 className="text-2xl font-bold mb-6">新規プラン作成</h1>
 
       <MembershipPlanForm
         submitLabel="作成する"

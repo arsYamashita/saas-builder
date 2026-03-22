@@ -54,8 +54,8 @@ export default function SettingsPage() {
   return (
     <div className="space-y-8 animate-fade-in">
       <PageHeader
-        title="Settings"
-        description="Manage your SaaS Builder configuration and connected services."
+        title="設定"
+        description="SaaS Builderの設定とサービス接続を管理します。"
       />
 
       {/* Service Status */}
@@ -66,10 +66,10 @@ export default function SettingsPage() {
               <Key className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <CardTitle>Service Configuration</CardTitle>
+              <CardTitle>サービス設定</CardTitle>
               <CardDescription>
-                API keys are configured via environment variables on the server.
-                {" "}{connectedCount}/{providers.length} services connected.
+                APIキーはサーバーの環境変数で設定されています。
+                {" "}{connectedCount}/{providers.length} 件のサービスが接続済み
               </CardDescription>
             </div>
           </div>
@@ -99,9 +99,9 @@ export default function SettingsPage() {
                       status={provider.isSet ? "online" : "offline"}
                     />
                     {provider.isSet ? (
-                      <Badge variant="success">Connected</Badge>
+                      <Badge variant="success">接続済み</Badge>
                     ) : (
-                      <Badge variant="warning">Not Set</Badge>
+                      <Badge variant="warning">未設定</Badge>
                     )}
                   </div>
                 </div>
@@ -119,9 +119,9 @@ export default function SettingsPage() {
               <Settings2 className="h-5 w-5 text-muted-foreground" />
             </div>
             <div>
-              <CardTitle>Application Info</CardTitle>
+              <CardTitle>アプリケーション情報</CardTitle>
               <CardDescription>
-                Technical details about your SaaS Builder instance.
+                SaaS Builderインスタンスの技術情報
               </CardDescription>
             </div>
           </div>
@@ -129,11 +129,11 @@ export default function SettingsPage() {
         <CardContent>
           <div className="space-y-0">
             {[
-              { label: "Version", value: "0.1.0" },
-              { label: "Framework", value: "Next.js 14 (App Router)" },
-              { label: "Database", value: "Supabase (PostgreSQL)" },
-              { label: "AI Providers", value: "Claude, Gemini" },
-              { label: "Styling", value: "Tailwind CSS" },
+              { label: "バージョン", value: "0.1.0" },
+              { label: "フレームワーク", value: "Next.js 14 (App Router)" },
+              { label: "データベース", value: "Supabase (PostgreSQL)" },
+              { label: "AIプロバイダー", value: "Claude, Gemini" },
+              { label: "スタイリング", value: "Tailwind CSS" },
             ].map((item, index) => (
               <div key={item.label}>
                 {index > 0 && <Separator className="my-0" />}

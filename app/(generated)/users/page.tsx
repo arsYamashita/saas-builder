@@ -30,15 +30,15 @@ export default async function UsersPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       <PageHeader
-        title="Users"
-        description="Manage team members and their roles."
+        title="ユーザー管理"
+        description="チームメンバーとロールを管理します。"
       />
 
       {error ? (
         <Card>
           <CardContent className="py-10 text-center">
             <p className="text-sm text-destructive">
-              Failed to load users. Please try again later.
+              ユーザーの読み込みに失敗しました。
             </p>
           </CardContent>
         </Card>
@@ -46,22 +46,22 @@ export default async function UsersPage() {
         <Card>
           <EmptyState
             icon={UsersIcon}
-            title="No team members"
-            description="Team members will appear here after they join your organization."
+            title="チームメンバーがいません"
+            description="組織に参加したメンバーがここに表示されます。"
           />
         </Card>
       ) : (
         <Card>
           <CardHeader>
             <CardTitle>
-              Team Members ({tenantUsers.length})
+              チームメンバー ({tenantUsers.length})
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-1">
               {tenantUsers.map((tu: any) => {
                 const user = tu.users;
-                const name = user?.display_name || user?.email || "Unknown";
+                const name = user?.display_name || user?.email || "不明";
 
                 return (
                   <div
@@ -71,10 +71,10 @@ export default async function UsersPage() {
                     <Avatar name={name} size="md" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">
-                        {user?.display_name || "No name"}
+                        {user?.display_name || "名前なし"}
                       </p>
                       <p className="text-xs text-muted-foreground truncate">
-                        {user?.email || "No email"}
+                        {user?.email || "メールなし"}
                       </p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
@@ -86,17 +86,15 @@ export default async function UsersPage() {
                               ? "info"
                               : "outline"
                         }
-                        className="capitalize"
                       >
-                        {tu.role}
+                        {tu.role === "owner" ? "オーナー" : tu.role === "admin" ? "管理者" : "メンバー"}
                       </Badge>
                       <Badge
                         variant={
                           tu.status === "active" ? "success" : "warning"
                         }
-                        className="capitalize"
                       >
-                        {tu.status || "active"}
+                        {tu.status === "active" || !tu.status ? "アクティブ" : tu.status}
                       </Badge>
                     </div>
                   </div>

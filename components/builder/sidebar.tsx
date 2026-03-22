@@ -19,17 +19,17 @@ import { Avatar } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 
 const mainNav = [
-  { href: "/projects", label: "Projects", icon: FolderKanban },
-  { href: "/templates", label: "Templates", icon: LayoutTemplate },
+  { href: "/projects", label: "プロジェクト", icon: FolderKanban },
+  { href: "/templates", label: "テンプレート", icon: LayoutTemplate },
 ];
 
 const analyticsNav = [
-  { href: "/scoreboard", label: "Scoreboard", icon: BarChart3 },
-  { href: "/provider-scoreboard", label: "Providers", icon: Zap },
+  { href: "/scoreboard", label: "スコアボード", icon: BarChart3 },
+  { href: "/provider-scoreboard", label: "プロバイダー", icon: Zap },
 ];
 
 const systemNav = [
-  { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/settings", label: "設定", icon: Settings },
 ];
 
 export function BuilderSidebar() {
@@ -131,11 +131,11 @@ export function BuilderSidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 space-y-6 overflow-y-auto p-3 pt-4">
-        {renderNavGroup(mainNav, "Build")}
+        {renderNavGroup(mainNav, "ビルド")}
         <Separator />
-        {renderNavGroup(analyticsNav, "Analytics")}
+        {renderNavGroup(analyticsNav, "アナリティクス")}
         <Separator />
-        {renderNavGroup(systemNav, "System")}
+        {renderNavGroup(systemNav, "システム")}
       </nav>
 
       {/* Footer */}
@@ -150,7 +150,7 @@ export function BuilderSidebar() {
           {!collapsed && (
             <div className="flex-1 min-w-0">
               <p className="truncate text-sm font-medium leading-tight">
-                Admin
+                管理者
               </p>
               <p className="truncate text-xs text-muted-foreground">
                 admin@saas.io
@@ -160,7 +160,7 @@ export function BuilderSidebar() {
           {!collapsed && (
             <button
               onClick={handleLogout}
-              title="Logout"
+              title="ログアウト"
               className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
               <LogOut className="h-3.5 w-3.5" />

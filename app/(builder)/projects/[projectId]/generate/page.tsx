@@ -72,14 +72,14 @@ export default function GeneratePage() {
   const fetchData = useCallback(async () => {
     try {
       const res = await fetch(`/api/projects/${projectId}`);
-      if (!res.ok) throw new Error("Failed to fetch project");
+      if (!res.ok) throw new Error("プロジェクトの取得に失敗しました");
       const data = await res.json();
       setProject(data.project);
       if (data.generationRuns?.length > 0) {
         setLatestRun(data.generationRuns[0]);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Unknown error");
+      setError(e instanceof Error ? e.message : "不明なエラー");
     } finally {
       setLoading(false);
     }
@@ -104,11 +104,11 @@ export default function GeneratePage() {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || `Failed to ${label}`);
+        throw new Error(data.error || `${label}に失敗しました`);
       }
       await fetchData();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Unknown error");
+      setError(e instanceof Error ? e.message : "不明なエラー");
     } finally {
       setGenerating(false);
     }
@@ -133,7 +133,7 @@ export default function GeneratePage() {
   if (!project) {
     return (
       <div className="flex items-center justify-center h-64 animate-fade-in">
-        <p className="text-muted-foreground">Project not found.</p>
+        <p className="text-muted-foreground">プロジェクトが見つかりません</p>
       </div>
     );
   }
@@ -143,10 +143,10 @@ export default function GeneratePage() {
   const isRunning = latestRun?.status === "running";
 
   const pipelineActions = [
-    { endpoint: "generate-template", label: "Generate Template", primary: true },
-    { endpoint: "generate-api-design", label: "API Design", primary: false },
-    { endpoint: "generate-schema", label: "Schema", primary: false },
-    { endpoint: "generate-implementation", label: "Implementation", primary: false },
+    { endpoint: "generate-template", label: "テンプレート生成", primary: true },
+    { endpoint: "generate-api-design", label: "API設計", primary: false },
+    { endpoint: "generate-schema", label: "スキーマ", primary: false },
+    { endpoint: "generate-implementation", label: "実装", primary: false },
   ];
 
   return (
@@ -159,7 +159,7 @@ export default function GeneratePage() {
           </Link>
         </Button>
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Generate Code</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">コード生成</h1>
           <p className="text-sm text-muted-foreground">{project.name}</p>
         </div>
       </div>
@@ -180,9 +180,9 @@ export default function GeneratePage() {
               <Zap className="h-4 w-4 text-primary" />
             </div>
             <div>
-              <CardTitle>Generation Pipeline</CardTitle>
+              <CardTitle>生成パイプライン</CardTitle>
               <CardDescription>
-                Run AI-powered code generation for your project.
+                AIによるコード生成をプロジェクトに対して実行します。
               </CardDescription>
             </div>
           </div>
@@ -217,7 +217,7 @@ export default function GeneratePage() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <CardTitle>Latest Run</CardTitle>
+                <CardTitle>最新の実行</CardTitle>
                 <Badge
                   variant={
                     latestRun.status === "completed"
@@ -243,9 +243,9 @@ export default function GeneratePage() {
             {steps.length > 0 && (
               <div className="pt-2">
                 <div className="flex items-center justify-between text-xs text-muted-foreground mb-2">
-                  <span>Progress</span>
+                  <span>進捗</span>
                   <span>
-                    {completedSteps}/{steps.length} steps
+                    {completedSteps}/{steps.length} ステップ
                   </span>
                 </div>
                 <Progress
@@ -301,7 +301,7 @@ export default function GeneratePage() {
               })}
               {steps.length === 0 && (
                 <p className="py-6 text-center text-sm text-muted-foreground">
-                  No steps recorded yet.
+                  ステップがまだ記録されていません。
                 </p>
               )}
             </div>
@@ -312,12 +312,12 @@ export default function GeneratePage() {
       {/* Navigation */}
       <div className="flex gap-2">
         <Button variant="outline" size="sm" asChild>
-          <Link href={`/projects/${projectId}/blueprint`}>View Blueprint</Link>
+          <Link href={`/projects/${projectId}/blueprint`}>ブループリントを見る</Link>
         </Button>
         <Button variant="outline" size="sm" asChild>
           <Link href={`/projects/${projectId}/deploy`}>
             <FileCode className="h-3.5 w-3.5" />
-            Deploy
+            デプロイ
           </Link>
         </Button>
       </div>

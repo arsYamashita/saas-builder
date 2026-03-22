@@ -11,7 +11,7 @@ type Props = {
 
 export function DeleteButton({
   endpoint,
-  label = "Delete",
+  label = "削除",
   confirmMessage = "本当に削除しますか？",
 }: Props) {
   const router = useRouter();
