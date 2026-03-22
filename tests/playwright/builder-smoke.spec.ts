@@ -62,7 +62,7 @@ test("billing page redirects unauthenticated to login", async ({ page }) => {
 
 test("login page renders with email and password inputs", async ({ page }) => {
   await page.goto("/auth/login");
-  await expect(page.locator("body")).toContainText("Login");
+  await expect(page.locator("body")).toContainText("Welcome back");
 
   const emailInput = page.locator('input[type="email"]');
   const passwordInput = page.locator('input[type="password"]');
@@ -72,7 +72,7 @@ test("login page renders with email and password inputs", async ({ page }) => {
 
 test("signup page renders with form", async ({ page }) => {
   await page.goto("/auth/signup");
-  await expect(page.locator("body")).toContainText("Sign up");
+  await expect(page.locator("body")).toContainText("Create Account");
 
   const inputs = await page.locator("input").count();
   expect(inputs).toBeGreaterThanOrEqual(2);
