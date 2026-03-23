@@ -1,7 +1,3 @@
-"use client";
-
-import { useCallback, useEffect, useState } from "react";
-import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
@@ -10,10 +6,13 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
-import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/utils/cn";
-import { Zap, Globe, Clock } from "lucide-react";
+import { Zap, Globe } from "lucide-react";
+import { createAdminClient } from "@/lib/db/supabase/admin";
+import { buildProviderScoreboard } from "@/lib/providers/provider-scoreboard";
+import type { GenerationStep } from "@/types/generation-run";
+import { requireCurrentUser } from "@/lib/auth/current-user";
 
 type ProviderTaskMetric = {
   provider: string;
@@ -164,7 +163,7 @@ function MetricTable({
                       </span>
                     </span>
                   ) : (
-                    <span className="text-muted-foreground/40">0</span>
+                    <span className="text-muted-foreground">0</span>
                   )}
                 </td>
                 <td className="px-3 py-2.5 text-right font-mono tabular-nums">
@@ -181,7 +180,7 @@ function MetricTable({
                       </span>
                     </span>
                   ) : (
-                    <span className="text-muted-foreground/40">0</span>
+                    <span className="text-muted-foreground">0</span>
                   )}
                 </td>
                 <td className="px-3 py-2.5 text-right font-mono tabular-nums text-muted-foreground">
@@ -211,48 +210,54 @@ function MetricTable({
   );
 }
 
-export default function ProviderScoreboardPage() {
-  const [data, setData] = useState<ProviderScoreboardData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+async function fetchProviderScoreboardData(): Promise<ProviderScoreboardData> {
+  await requireCurrentUser();
+  const supabase = createAdminClient();
 
-  const fetch_ = useCallback(async () => {
-    try {
-      const res = await fetch("/api/provider-scoreboard");
-      if (!res.ok) throw new Error("Failed to fetch");
-      setData(await res.json());
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  let runs: Record<string, unknown>[] = [];
+  const { data: fullRuns, error: fullErr } = await supabase
+    .from("generation_runs")
+    .select("id, template_key, status, steps_json, promoted_at, review_status")
+    .order("started_at", { ascending: false });
 
-  useEffect(() => {
-    fetch_();
-  }, [fetch_]);
+  if (fullErr && fullErr.message.includes("does not exist")) {
+    const { data: coreRuns, error: coreErr } = await supabase
+      .from("generation_runs")
+      .select("id, template_key, status, steps_json")
+      .order("started_at", { ascending: false });
 
-  if (loading) {
-    return (
-      <div className="space-y-6 animate-fade-in">
-        <div className="space-y-2">
-          <Skeleton className="h-8 w-56" />
-          <Skeleton className="h-4 w-72" />
-        </div>
-        <Skeleton className="h-64 rounded-xl" />
-        <Skeleton className="h-48 rounded-xl" />
-      </div>
-    );
+    if (coreErr) throw new Error("Failed to fetch generation runs");
+    runs = coreRuns ?? [];
+  } else if (fullErr) {
+    throw new Error("Failed to fetch generation runs");
+  } else {
+    runs = fullRuns ?? [];
   }
 
-  if (error || !data) {
+  return buildProviderScoreboard(
+    runs.map((r: Record<string, unknown>) => ({
+      id: r.id as string,
+      template_key: r.template_key as string,
+      status: r.status as string,
+      steps_json: (r.steps_json ?? []) as GenerationStep[],
+      promoted_at: (r.promoted_at as string) ?? null,
+      review_status: (r.review_status as string) ?? "pending",
+    }))
+  );
+}
+
+export default async function ProviderScoreboardPage() {
+  let data: ProviderScoreboardData;
+  try {
+    data = await fetchProviderScoreboardData();
+  } catch {
     return (
       <div className="space-y-6 animate-fade-in">
         <PageHeader title="プロバイダースコアボード" />
         <Card>
           <CardContent className="py-10 text-center">
             <p className="text-sm text-destructive">
-              {error || "読み込みに失敗しました"}
+              読み込みに失敗しました
             </p>
           </CardContent>
         </Card>
