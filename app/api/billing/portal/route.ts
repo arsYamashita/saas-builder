@@ -18,8 +18,9 @@ export async function POST() {
       .maybeSingle();
 
     if (error) {
+      console.error("Load subscription error:", error.message);
       return NextResponse.json(
-        { error: "Failed to load subscription", details: error.message },
+        { error: "Failed to load subscription" },
         { status: 500 }
       );
     }
@@ -38,11 +39,10 @@ export async function POST() {
 
     return NextResponse.json({ url: portalSession.url });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Unknown error";
+    console.error("Create portal session error:", error);
 
     return NextResponse.json(
-      { error: "Failed to create portal session", details: message },
+      { error: "Failed to create portal session" },
       { status: 500 }
     );
   }

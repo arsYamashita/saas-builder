@@ -11,11 +11,10 @@ export async function POST() {
       redirectTo: "/auth/login",
     });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Unknown error";
+    console.error("Logout error:", error);
 
     return NextResponse.json(
-      { error: "Failed to logout", details: message },
+      { error: "Failed to logout" },
       { status: 500 }
     );
   }

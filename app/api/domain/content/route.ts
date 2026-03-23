@@ -17,8 +17,9 @@ export async function GET() {
       .order("created_at", { ascending: false });
 
     if (error) {
+      console.error("Fetch contents error:", error.message);
       return NextResponse.json(
-        { error: "Failed to fetch contents", details: error.message },
+        { error: "Failed to fetch contents" },
         { status: 500 }
       );
     }
@@ -27,9 +28,10 @@ export async function GET() {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Unknown error";
+    console.error("Fetch contents unexpected error:", message);
 
     return NextResponse.json(
-      { error: "Failed to fetch contents", details: message },
+      { error: "Failed to fetch contents" },
       { status: 500 }
     );
   }
@@ -69,8 +71,9 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (error) {
+      console.error("Create content error:", error.message);
       return NextResponse.json(
-        { error: "Failed to create content", details: error.message },
+        { error: "Failed to create content" },
         { status: 500 }
       );
     }
@@ -88,9 +91,10 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Unknown error";
+    console.error("Create content unexpected error:", message);
 
     return NextResponse.json(
-      { error: "Failed to create content", details: message },
+      { error: "Failed to create content" },
       { status: 500 }
     );
   }

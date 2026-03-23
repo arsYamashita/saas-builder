@@ -23,19 +23,19 @@ export async function GET(_req: NextRequest, { params }: Props) {
       .single();
 
     if (error) {
+      console.error("Fetch content error:", error.message);
       return NextResponse.json(
-        { error: "Content not found", details: error.message },
+        { error: "Content not found" },
         { status: 404 }
       );
     }
 
     return NextResponse.json({ content: data });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Unknown error";
+    console.error("Fetch content unexpected error:", error);
 
     return NextResponse.json(
-      { error: "Failed to fetch content", details: message },
+      { error: "Failed to fetch content" },
       { status: 500 }
     );
   }
@@ -68,8 +68,9 @@ export async function PATCH(req: NextRequest, { params }: Props) {
       .single();
 
     if (beforeError) {
+      console.error("Fetch content for update error:", beforeError.message);
       return NextResponse.json(
-        { error: "Content not found", details: beforeError.message },
+        { error: "Content not found" },
         { status: 404 }
       );
     }
@@ -93,8 +94,9 @@ export async function PATCH(req: NextRequest, { params }: Props) {
       .single();
 
     if (error) {
+      console.error("Update content error:", error.message);
       return NextResponse.json(
-        { error: "Failed to update content", details: error.message },
+        { error: "Failed to update content" },
         { status: 500 }
       );
     }
@@ -111,11 +113,10 @@ export async function PATCH(req: NextRequest, { params }: Props) {
 
     return NextResponse.json({ content: data });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Unknown error";
+    console.error("Update content unexpected error:", error);
 
     return NextResponse.json(
-      { error: "Failed to update content", details: message },
+      { error: "Failed to update content" },
       { status: 500 }
     );
   }
@@ -136,8 +137,9 @@ export async function DELETE(_req: NextRequest, { params }: Props) {
       .single();
 
     if (beforeError) {
+      console.error("Fetch content for delete error:", beforeError.message);
       return NextResponse.json(
-        { error: "Content not found", details: beforeError.message },
+        { error: "Content not found" },
         { status: 404 }
       );
     }
@@ -150,12 +152,12 @@ export async function DELETE(_req: NextRequest, { params }: Props) {
 
     if (error) {
       const isFkViolation = error.code === "23503" || error.message?.includes("foreign key");
+      console.error("Delete content error:", error.message);
       return NextResponse.json(
         {
           error: isFkViolation
             ? "Cannot delete content: it is referenced by other records"
             : "Failed to delete content",
-          details: error.message,
         },
         { status: isFkViolation ? 409 : 500 }
       );
@@ -173,11 +175,10 @@ export async function DELETE(_req: NextRequest, { params }: Props) {
 
     return NextResponse.json({ ok: true, deletedId: contentId });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Unknown error";
+    console.error("Delete content unexpected error:", error);
 
     return NextResponse.json(
-      { error: "Failed to delete content", details: message },
+      { error: "Failed to delete content" },
       { status: 500 }
     );
   }
