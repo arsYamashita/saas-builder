@@ -160,7 +160,7 @@ export default function HomePage() {
       {/* ================================================================
           STICKY HEADER
       ================================================================ */}
-      <nav className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl">
+      <nav aria-label="メインナビゲーション" className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2.5">
@@ -209,6 +209,7 @@ export default function HomePage() {
         </div>
       </nav>
 
+      <main id="main-content">
       {/* ================================================================
           HERO SECTION
       ================================================================ */}
@@ -627,9 +628,10 @@ export default function HomePage() {
             <div className="mt-12 overflow-hidden rounded-2xl border bg-card shadow-sm">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
+                  <caption className="sr-only">SaaS Builder、ノーコード、外注開発の比較表</caption>
                   <thead>
                     <tr className="border-b bg-muted/40">
-                      <th className="px-6 py-4 text-left font-medium text-muted-foreground" />
+                      <th scope="col" className="px-6 py-4 text-left font-medium text-muted-foreground"><span className="sr-only">比較項目</span></th>
                       <th className="px-6 py-4 text-center">
                         <div className="inline-flex flex-col items-center gap-1">
                           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
@@ -660,7 +662,8 @@ export default function HomePage() {
                         <td className="px-6 py-4 text-center comparison-highlight">
                           {typeof row.saas === "boolean" ? (
                             <span className="inline-flex items-center justify-center">
-                              <Check className="h-5 w-5 text-emerald-600" />
+                              <Check className="h-5 w-5 text-emerald-600" aria-hidden="true" />
+                              <span className="sr-only">対応</span>
                             </span>
                           ) : (
                             <span className="font-semibold text-primary">
@@ -671,19 +674,19 @@ export default function HomePage() {
                         <td className="px-6 py-4 text-center text-muted-foreground">
                           {typeof row.nocode === "boolean" ? (
                             row.nocode ? (
-                              <Check className="mx-auto h-5 w-5 text-emerald-600" />
+                              <span><Check className="mx-auto h-5 w-5 text-emerald-600" aria-hidden="true" /><span className="sr-only">対応</span></span>
                             ) : (
-                              <span className="text-red-400">&times;</span>
+                              <span><span className="text-red-400" aria-hidden="true">&times;</span><span className="sr-only">非対応</span></span>
                             )
                           ) : row.nocode === "partial" ? (
-                            <span className="text-yellow-500">&triangle;</span>
+                            <span><span className="text-yellow-500" aria-hidden="true">&triangle;</span><span className="sr-only">一部対応</span></span>
                           ) : (
                             row.nocode
                           )}
                         </td>
                         <td className="px-6 py-4 text-center text-muted-foreground">
                           {typeof row.outsource === "boolean" ? (
-                            <Check className="mx-auto h-5 w-5 text-emerald-600" />
+                            <span><Check className="mx-auto h-5 w-5 text-emerald-600" aria-hidden="true" /><span className="sr-only">対応</span></span>
                           ) : (
                             row.outsource
                           )}
@@ -739,6 +742,8 @@ export default function HomePage() {
           </div>
         </ScrollReveal>
       </section>
+
+      </main>
 
       {/* ================================================================
           FOOTER

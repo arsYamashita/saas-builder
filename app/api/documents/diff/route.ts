@@ -8,9 +8,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { compareDocuments, compareDocumentsLocal } from "@/lib/document-analysis/document-diff";
 import { diffRequestSchema } from "@/lib/validation/document-analysis";
+import { requireCurrentUser } from "@/lib/auth/current-user";
 
 export async function POST(request: NextRequest) {
   try {
+    await requireCurrentUser();
     const body = await request.json();
     const parsed = diffRequestSchema.safeParse(body);
 

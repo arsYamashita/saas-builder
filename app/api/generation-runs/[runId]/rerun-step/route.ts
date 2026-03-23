@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/db/supabase/admin";
 import type { GenerationStep } from "@/types/generation-run";
 import type { GenerationStepMeta } from "@/types/generation-run";
+import { requireCurrentUser } from "@/lib/auth/current-user";
 import {
   getStepRouteInfo,
   applyStepRerunResult,
@@ -15,6 +16,7 @@ type Props = {
 
 export async function POST(req: NextRequest, { params }: Props) {
   try {
+    await requireCurrentUser();
     const { runId } = await params;
     const body = await req.json();
     const { stepKey } = body as { stepKey?: string };

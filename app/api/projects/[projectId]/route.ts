@@ -25,35 +25,39 @@ export async function GET(_req: NextRequest, { params }: Props) {
       );
     }
 
-    const { data: blueprints } = await supabase
-      .from("blueprints")
-      .select("*")
-      .eq("project_id", projectId)
-      .order("version", { ascending: false });
-
-    const { data: implementationRuns } = await supabase
-      .from("implementation_runs")
-      .select("*")
-      .eq("project_id", projectId)
-      .order("created_at", { ascending: false });
-
-    const { data: generatedFiles } = await supabase
-      .from("generated_files")
-      .select("*")
-      .eq("project_id", projectId)
-      .order("created_at", { ascending: false });
-
-    const { data: generationRuns } = await supabase
-      .from("generation_runs")
-      .select("*")
-      .eq("project_id", projectId)
-      .order("started_at", { ascending: false });
-
-    const { data: qualityRuns } = await supabase
-      .from("quality_runs")
-      .select("*")
-      .eq("project_id", projectId)
-      .order("started_at", { ascending: false });
+    const [
+      { data: blueprints },
+      { data: implementationRuns },
+      { data: generatedFiles },
+      { data: generationRuns },
+      { data: qualityRuns },
+    ] = await Promise.all([
+      supabase
+        .from("blueprints")
+        .select("*")
+        .eq("project_id", projectId)
+        .order("version", { ascending: false }),
+      supabase
+        .from("implementation_runs")
+        .select("*")
+        .eq("project_id", projectId)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("generated_files")
+        .select("*")
+        .eq("project_id", projectId)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("generation_runs")
+        .select("*")
+        .eq("project_id", projectId)
+        .order("started_at", { ascending: false }),
+      supabase
+        .from("quality_runs")
+        .select("*")
+        .eq("project_id", projectId)
+        .order("started_at", { ascending: false }),
+    ]);
 
     return NextResponse.json({
       project,

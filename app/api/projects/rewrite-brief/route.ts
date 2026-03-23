@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { readPrompt } from "@/lib/utils/read-prompt";
 import { executeTask } from "@/lib/providers/task-router";
 import { extractJsonFromText } from "@/lib/providers/result-normalizer";
+import { requireCurrentUser } from "@/lib/auth/current-user";
 
 interface RewriteInput {
   summary: string;
@@ -17,6 +18,7 @@ interface RewriteOutput {
 
 export async function POST(req: NextRequest) {
   try {
+    await requireCurrentUser();
     const body = (await req.json()) as Partial<RewriteInput>;
 
     const summary = body.summary?.trim() ?? "";

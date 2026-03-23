@@ -9,11 +9,29 @@ export async function GET() {
     await requireCurrentUser();
     const supabase = createAdminClient();
 
-    // Fetch all generation runs
-    const { data: generationRuns, error: grErr } = await supabase
-      .from("generation_runs")
-      .select("id, template_key, status, review_status, reviewed_at, promoted_at, baseline_tag")
-      .order("started_at", { ascending: false });
+    // Fetch all data in parallel
+    const [
+      { data: generationRuns, error: grErr },
+      { data: qualityRuns, error: qrErr },
+      { data: projects },
+      { data: blueprints },
+    ] = await Promise.all([
+      supabase
+        .from("generation_runs")
+        .select("id, template_key, status, review_status, reviewed_at, promoted_at, baseline_tag")
+        .order("started_at", { ascending: false }),
+      supabase
+        .from("quality_runs")
+        .select("generation_run_id, status")
+        .order("started_at", { ascending: false }),
+      supabase
+        .from("projects")
+        .select("id, template_key"),
+      supabase
+        .from("blueprints")
+        .select("project_id, review_status, version")
+        .order("version", { ascending: false }),
+    ]);
 
     if (grErr) {
       return NextResponse.json(
@@ -22,29 +40,12 @@ export async function GET() {
       );
     }
 
-    // Fetch all quality runs with template info via generation_run_id join
-    const { data: qualityRuns, error: qrErr } = await supabase
-      .from("quality_runs")
-      .select("generation_run_id, status")
-      .order("started_at", { ascending: false });
-
     if (qrErr) {
       return NextResponse.json(
         { error: "Failed to fetch quality runs", details: qrErr.message },
         { status: 500 }
       );
     }
-
-    // Fetch latest blueprint review_status per project
-    const { data: projects } = await supabase
-      .from("projects")
-      .select("id, template_key");
-
-    // Fetch all blueprints with review_status (latest per project)
-    const { data: blueprints } = await supabase
-      .from("blueprints")
-      .select("project_id, review_status, version")
-      .order("version", { ascending: false });
 
     // Build blueprint status per template: pick latest blueprint per project, then per template
     const bpByTemplate = new Map<string, string | null>();

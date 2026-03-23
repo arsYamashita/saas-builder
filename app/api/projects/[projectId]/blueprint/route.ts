@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/db/supabase/admin";
 import { blueprintSchema } from "@/lib/validation/blueprint";
+import { requireCurrentUser } from "@/lib/auth/current-user";
 
 type Props = {
   params: Promise<{ projectId: string }>;
@@ -8,6 +9,7 @@ type Props = {
 
 export async function POST(req: NextRequest, { params }: Props) {
   try {
+    await requireCurrentUser();
     const { projectId } = await params;
     const body = await req.json();
 

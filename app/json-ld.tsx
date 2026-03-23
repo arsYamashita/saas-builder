@@ -1,13 +1,18 @@
 export function JsonLd() {
+  const baseUrl =
+    process.env.NEXT_PUBLIC_APP_URL || "https://saas-builder-cyan.vercel.app";
+
   const data = {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
     name: "SaaS Builder",
     description:
       "AIの力でSaaSアプリケーションを自動生成。アイデアを入力するだけで、ブループリント、データベース設計、API、UIコードまで一気通貫で作成します。",
-    applicationCategory: "DeveloperApplication",
+    applicationCategory: "https://schema.org/DeveloperApplication",
     operatingSystem: "Web",
-    url: "https://saas-builder-cyan.vercel.app",
+    url: baseUrl,
+    softwareVersion: "1.0",
+    datePublished: "2026-03-23",
     offers: {
       "@type": "Offer",
       price: "0",
@@ -24,7 +29,7 @@ export function JsonLd() {
       "API・UIコードの一括生成",
       "Next.js + Supabase対応",
     ],
-    screenshot: "https://saas-builder-cyan.vercel.app/opengraph-image",
+    screenshot: `${baseUrl}/opengraph-image`,
   };
 
   return (
