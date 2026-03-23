@@ -11,12 +11,16 @@ import {
   LogOut,
   ChevronLeft,
   Blocks,
+  CircleHelp,
+  Plus,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Avatar } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { createClient } from "@/lib/db/supabase/client";
 
 const mainNav = [
   { href: "/projects", label: "プロジェクト", icon: FolderKanban },
@@ -30,12 +34,28 @@ const analyticsNav = [
 
 const systemNav = [
   { href: "/settings", label: "設定", icon: Settings },
+  { href: "#", label: "ヘルプ", icon: CircleHelp },
 ];
 
 export function BuilderSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
+  const [user, setUser] = useState<{ email: string; displayName: string } | null>(null);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data }) => {
+      if (data.user) {
+        const meta = data.user.user_metadata;
+        setUser({
+          email: data.user.email ?? "",
+          displayName:
+            meta?.display_name ?? meta?.full_name ?? data.user.email ?? "",
+        });
+      }
+    });
+  }, []);
 
   const handleLogout = async () => {
     const res = await fetch("/api/auth/logout", { method: "POST" });
@@ -129,6 +149,16 @@ export function BuilderSidebar() {
         </button>
       </div>
 
+      {/* Quick Action */}
+      <div className="px-3 pt-4">
+        <Button asChild className={cn("w-full", collapsed && "px-0")}>
+          <Link href="/projects/new">
+            <Plus className="h-4 w-4" />
+            {!collapsed && <span>新規プロジェクト</span>}
+          </Link>
+        </Button>
+      </div>
+
       {/* Navigation */}
       <nav className="flex-1 space-y-6 overflow-y-auto p-3 pt-4">
         {renderNavGroup(mainNav, "ビルド")}
@@ -146,14 +176,14 @@ export function BuilderSidebar() {
             collapsed && "justify-center p-1"
           )}
         >
-          <Avatar name="Admin User" size="sm" />
+          <Avatar name={user?.displayName || "U"} size="sm" />
           {!collapsed && (
             <div className="flex-1 min-w-0">
               <p className="truncate text-sm font-medium leading-tight">
-                管理者
+                {user?.displayName || "読み込み中..."}
               </p>
               <p className="truncate text-xs text-muted-foreground">
-                admin@saas.io
+                {user?.email || ""}
               </p>
             </div>
           )}
