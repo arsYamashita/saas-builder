@@ -7,147 +7,129 @@ import { PRESET_MAP } from "@/lib/templates/preset-map";
 import {
   TEMPLATE_CATALOG,
   getCatalogEntry,
+  type TemplateCatalogEntry,
 } from "@/lib/templates/template-catalog";
-import { getRecommendations } from "@/lib/templates/template-recommendation";
+import type { TemplateKey } from "@/types/project";
+import { Button } from "@/components/ui/button";
 import {
-  INTAKE_QUESTIONS,
-  DEFAULT_INTAKE_ANSWERS,
-  intakeToFormHints,
-  type IntakeAnswers,
-} from "@/lib/projects/project-intake-questions";
-import {
-  buildProjectDraft,
-  previewDraft,
-} from "@/lib/projects/project-draft-builder";
-import { buildReviewSummary } from "@/lib/projects/project-review-summary";
-import type { TemplateKey, BrandTone, BillingModel } from "@/types/project";
-import { buildValidationSummary } from "@/lib/projects/project-validation-summary";
-import { getTemplateGuidance } from "@/lib/projects/template-validation-messages";
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils/cn";
 
+/* ---------- Template icon mapping ---------- */
+const TEMPLATE_ICONS: Record<string, string> = {
+  membership_content_affiliate: "M",
+  reservation_saas: "R",
+  community_membership_saas: "C",
+  simple_crm_saas: "S",
+  internal_admin_ops_saas: "O",
+  custom: "+",
+};
+
+/* ---------- Template-aware defaults for problemToSolve ---------- */
+const TEMPLATE_PROBLEM_DEFAULTS: Record<string, string> = {
+  membership_content_affiliate:
+    "会員管理やコンテンツ販売の仕組みを効率的に構築したい",
+  reservation_saas: "予約の管理や顧客対応を効率化したい",
+  community_membership_saas:
+    "コミュニティの運営と会員管理を一元化したい",
+  simple_crm_saas: "顧客情報や営業プロセスを効率的に管理したい",
+  internal_admin_ops_saas:
+    "社内の業務プロセスや承認フローを効率化したい",
+};
+
+/* ---------- Step definitions ---------- */
+const STEPS = [
+  { number: 1, label: "テンプレート選択" },
+  { number: 2, label: "基本情報" },
+  { number: 3, label: "確認して作成" },
+] as const;
+
+type StepNumber = 1 | 2 | 3;
+
+/* ---------- Main Component ---------- */
 export default function NewProjectPage() {
-  const [form, setForm] = useState(defaultProjectFormValues);
+  const [currentStep, setCurrentStep] = useState<StepNumber>(1);
+  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
+  const [name, setName] = useState("");
+  const [summary, setSummary] = useState("");
+  const [targetUsers, setTargetUsers] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [intake, setIntake] = useState<IntakeAnswers>(DEFAULT_INTAKE_ANSWERS);
-  const [showDetails, setShowDetails] = useState(false);
-  const [draftApplied, setDraftApplied] = useState<string[] | null>(null);
-  const [rewriting, setRewriting] = useState(false);
-  const [rewriteError, setRewriteError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  const selectedCatalog = getCatalogEntry(form.templateKey);
-
-  const recommendations = useMemo(
-    () =>
-      getRecommendations({
-        summary: form.summary || "",
-        targetUsers: form.targetUsers || "",
-        requiredFeatures: form.requiredFeatures || [],
-        managedData: form.managedData || [],
-        billingModel: form.billingModel || "none",
-        affiliateEnabled: form.affiliateEnabled ?? false,
-      }),
-    [
-      form.summary,
-      form.targetUsers,
-      form.requiredFeatures,
-      form.managedData,
-      form.billingModel,
-      form.affiliateEnabled,
-    ]
+  /* ---------- Derived catalog entry ---------- */
+  const selectedCatalog = useMemo(
+    () => (selectedTemplate ? getCatalogEntry(selectedTemplate) : null),
+    [selectedTemplate]
   );
 
-  const draftPreview = useMemo(() => {
-    const draft = buildProjectDraft(
-      intake,
-      form as unknown as Record<string, unknown>,
-      recommendations
-    );
-    return previewDraft(draft, (key) => getCatalogEntry(key)?.label);
-  }, [intake, form, recommendations]);
+  /* ---------- Navigation ---------- */
+  const canGoNext = useCallback((): boolean => {
+    if (currentStep === 1) return selectedTemplate !== null;
+    if (currentStep === 2) return name.trim().length >= 2 && summary.trim().length >= 10;
+    return false;
+  }, [currentStep, selectedTemplate, name, summary]);
 
-  const applyIntake = useCallback(
-    (updated: IntakeAnswers) => {
-      setIntake(updated);
-      const hints = intakeToFormHints(updated);
-      setForm((prev) => ({ ...prev, ...hints }));
-    },
-    []
-  );
-
-  const handleIntakeChange = (id: string, value: string | boolean) => {
-    const updated = { ...intake, [id]: value };
-    applyIntake(updated);
-  };
-
-  const handleTemplateChange = (key: string) => {
-    const templateKey = key as TemplateKey;
-    const preset = PRESET_MAP[key];
-    if (preset) {
-      setForm((prev) => ({ ...prev, ...preset, templateKey }));
-    } else {
-      setForm((prev) => ({ ...prev, templateKey }));
-    }
-  };
-
-  const handleDraft = () => {
-    const draft = buildProjectDraft(
-      intake,
-      form as unknown as Record<string, unknown>,
-      recommendations
-    );
-    if (draft.filledFields.length === 0) {
-      setDraftApplied([]);
-      return;
-    }
-    // Apply templateKey via handleTemplateChange to also load preset
-    if (draft.values.templateKey) {
-      handleTemplateChange(draft.values.templateKey as string);
-      const { templateKey: _, ...rest } = draft.values;
-      setForm((prev) => ({ ...prev, ...rest }));
-    } else {
-      setForm((prev) => ({ ...prev, ...draft.values }));
-    }
-    setDraftApplied(draft.filledFields);
-  };
-
-  const handleRewrite = async () => {
-    setRewriting(true);
-    setRewriteError(null);
-    try {
-      const res = await fetch("/api/projects/rewrite-brief", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          summary: form.summary,
-          problemToSolve: form.problemToSolve,
-          targetUsers: form.targetUsers,
-        }),
-      });
-      if (!res.ok) {
-        const json = await res.json().catch(() => ({}));
-        setRewriteError(json.error || "整形に失敗しました");
+  const goNext = () => {
+    if (currentStep === 2) {
+      const newErrors: Record<string, string> = {};
+      if (name.trim().length < 2) newErrors.name = "サービス名は2文字以上で入力してください";
+      if (summary.trim().length < 10) newErrors.summary = "サービス概要は10文字以上で入力してください";
+      if (Object.keys(newErrors).length > 0) {
+        setErrors(newErrors);
         return;
       }
-      const data = await res.json();
-      setForm((prev) => ({
-        ...prev,
-        summary: data.rewrittenSummary || prev.summary,
-        problemToSolve: data.rewrittenProblemToSolve || prev.problemToSolve,
-        targetUsers: data.rewrittenTargetUsers || prev.targetUsers,
-      }));
-    } catch {
-      setRewriteError("通信エラーが発生しました");
-    } finally {
-      setRewriting(false);
+      setErrors({});
     }
+    if (currentStep < 3) setCurrentStep((s) => (s + 1) as StepNumber);
   };
 
-  const canRewrite =
-    !!(form.summary || form.problemToSolve || form.targetUsers) && !rewriting;
+  const goBack = () => {
+    if (currentStep > 1) setCurrentStep((s) => (s - 1) as StepNumber);
+  };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  /* ---------- Template selection ---------- */
+  const handleTemplateSelect = (key: string) => {
+    setSelectedTemplate(key);
+  };
 
-    const result = projectFormSchema.safeParse(form);
+  /* ---------- Build full form payload from wizard state ---------- */
+  const buildPayload = useCallback(() => {
+    const base = { ...defaultProjectFormValues };
+    const templateKey = (selectedTemplate || "custom") as TemplateKey;
+
+    // Apply preset if available
+    const preset = PRESET_MAP[templateKey];
+    if (preset) {
+      Object.assign(base, preset);
+    }
+
+    // Override with user-entered values
+    base.templateKey = templateKey;
+    base.name = name.trim();
+    base.summary = summary.trim();
+    base.targetUsers = targetUsers.trim() || selectedCatalog?.targetUsers || "一般ユーザー";
+
+    // Auto-fill problemToSolve from template if not customized
+    if (!base.problemToSolve || base.problemToSolve === defaultProjectFormValues.problemToSolve) {
+      base.problemToSolve =
+        TEMPLATE_PROBLEM_DEFAULTS[templateKey] ||
+        `${base.name}を通じてユーザーの課題を解決したい`;
+    }
+
+    return base;
+  }, [selectedTemplate, name, summary, targetUsers, selectedCatalog]);
+
+  /* ---------- Submit ---------- */
+  const handleSubmit = async () => {
+    const payload = buildPayload();
+    const result = projectFormSchema.safeParse(payload);
 
     if (!result.success) {
       const fieldErrors: Record<string, string> = {};
@@ -156,502 +138,528 @@ export default function NewProjectPage() {
         fieldErrors[key] = issue.message;
       }
       setErrors(fieldErrors);
-      setShowDetails(true);
       return;
     }
 
     setErrors({});
+    setSubmitting(true);
 
-    const res = await fetch("/api/projects", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(result.data),
-    });
+    try {
+      const res = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(result.data),
+      });
 
-    if (!res.ok) {
-      alert("プロジェクト作成に失敗しました");
-      return;
+      if (!res.ok) {
+        alert("プロジェクト作成に失敗しました");
+        return;
+      }
+
+      const json = await res.json();
+      window.location.href = `/projects/${json.project.id}`;
+    } catch {
+      alert("通信エラーが発生しました");
+    } finally {
+      setSubmitting(false);
     }
-
-    const json = await res.json();
-    window.location.href = `/projects/${json.project.id}`;
   };
 
+  /* ---------- Progress percentage ---------- */
+  const progressPercent = (currentStep / 3) * 100;
+
   return (
-    <main className="max-w-4xl mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-6">新規プロジェクト作成</h1>
-
-      <form onSubmit={handleSubmit} className="space-y-8">
-        {/* --- かんたん入力 --- */}
-        <section className="space-y-4 border rounded-lg p-5 bg-slate-50">
-          <h2 className="text-lg font-semibold">かんたん入力</h2>
-          <p className="text-sm text-gray-500">
-            質問に答えると、下のフォームが自動で埋まります
+    <main className="min-h-screen bg-background">
+      <div className="max-w-3xl mx-auto px-4 py-8 sm:px-6 sm:py-12">
+        {/* ===== Header ===== */}
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+            新規プロジェクト作成
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            3つのステップでプロジェクトを作成します
           </p>
-
-          {INTAKE_QUESTIONS.map((q) => (
-            <div key={q.id}>
-              <label className="block mb-1 font-medium text-sm">
-                {q.question}
-              </label>
-              <p className="text-xs text-gray-400 mb-1">{q.helpText}</p>
-
-              {q.type === "text" && (
-                <input
-                  className="w-full border rounded px-3 py-2 text-sm"
-                  value={(intake[q.id as keyof IntakeAnswers] as string) || ""}
-                  onChange={(e) => handleIntakeChange(q.id, e.target.value)}
-                  placeholder={q.helpText}
-                />
-              )}
-
-              {q.type === "select" && q.options && (
-                <select
-                  className="w-full border rounded px-3 py-2 text-sm"
-                  value={(intake[q.id as keyof IntakeAnswers] as string) || ""}
-                  onChange={(e) => handleIntakeChange(q.id, e.target.value)}
-                >
-                  <option value="">選択してください</option>
-                  {q.options.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              )}
-
-              {q.type === "boolean" && (
-                <div className="flex gap-4 text-sm">
-                  <label className="flex items-center gap-1.5">
-                    <input
-                      type="radio"
-                      name={q.id}
-                      checked={intake[q.id as keyof IntakeAnswers] === true}
-                      onChange={() => handleIntakeChange(q.id, true)}
-                    />
-                    はい
-                  </label>
-                  <label className="flex items-center gap-1.5">
-                    <input
-                      type="radio"
-                      name={q.id}
-                      checked={intake[q.id as keyof IntakeAnswers] !== true}
-                      onChange={() => handleIntakeChange(q.id, false)}
-                    />
-                    いいえ
-                  </label>
-                </div>
-              )}
-            </div>
-          ))}
-
-          {/* --- draft preview + button --- */}
-          {draftPreview.hasChanges && draftApplied === null && (
-            <div className="border border-amber-200 rounded p-3 bg-amber-50 text-sm space-y-1.5">
-              <p className="font-medium text-amber-800">
-                下書きで埋まる項目:
-              </p>
-              <ul className="list-disc list-inside text-amber-900 space-y-0.5">
-                {draftPreview.fields.map((f) => (
-                  <li key={f.key}>{f.label}</li>
-                ))}
-              </ul>
-              {draftPreview.suggestedTemplateLabel && (
-                <p className="text-amber-700 text-xs">
-                  おすすめテンプレート: {draftPreview.suggestedTemplateLabel}
-                </p>
-              )}
-              <p className="text-xs text-amber-600">
-                既存の入力は上書きしません
-              </p>
-            </div>
-          )}
-
-          <div className="flex items-center gap-3 pt-2">
-            <button
-              type="button"
-              className="rounded bg-blue-600 text-white px-4 py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
-              onClick={handleDraft}
-              disabled={!draftPreview.hasChanges}
-            >
-              下書きを作る
-            </button>
-            {draftApplied !== null && (
-              <span className="text-sm text-gray-600">
-                {draftApplied.length > 0
-                  ? `${draftApplied.length}件の項目を自動入力しました`
-                  : "入力済みの項目が多いため、追加の自動入力はありません"}
-              </span>
-            )}
-            {draftApplied === null && !draftPreview.hasChanges && (
-              <span className="text-sm text-gray-400">
-                自動入力できる空欄がありません
-              </span>
-            )}
-          </div>
-        </section>
-
-        {/* --- テンプレ選択 + recommendation --- */}
-        <section className="space-y-4">
-          <h2 className="text-lg font-semibold">テンプレート</h2>
-
-          <div>
-            <label className="block mb-1">テンプレカテゴリ</label>
-            <select
-              className="w-full border rounded px-3 py-2"
-              value={form.templateKey}
-              onChange={(e) => handleTemplateChange(e.target.value)}
-            >
-              {TEMPLATE_CATALOG.map((t) => (
-                <option key={t.templateKey} value={t.templateKey}>
-                  {t.label}
-                </option>
-              ))}
-              <option value="online_salon">オンラインサロン</option>
-              <option value="custom">カスタム</option>
-            </select>
-          </div>
-
-          {recommendations.length > 0 && (
-            <div className="border border-blue-200 rounded p-3 bg-blue-50 space-y-2 text-sm">
-              <p className="font-medium text-blue-800">
-                おすすめテンプレート
-              </p>
-              {recommendations.map((rec, idx) => {
-                const catalog = getCatalogEntry(rec.templateKey);
-                const label = catalog?.label ?? rec.templateKey;
-                const isSelected = form.templateKey === rec.templateKey;
-                return (
-                  <div
-                    key={rec.templateKey}
-                    className={`flex items-start gap-2 ${idx === 0 ? "" : "opacity-70"}`}
-                  >
-                    <span className="shrink-0 font-medium text-blue-700">
-                      {idx + 1}.
-                    </span>
-                    <div className="flex-1">
-                      <span className="font-medium">{label}</span>
-                      {isSelected && (
-                        <span className="ml-1.5 text-xs text-green-700">
-                          (選択中)
-                        </span>
-                      )}
-                      <span className="ml-1.5 text-xs text-blue-600">
-                        スコア: {rec.score}
-                      </span>
-                      {!isSelected && (
-                        <button
-                          type="button"
-                          className="ml-2 text-xs text-blue-600 underline hover:text-blue-800"
-                          onClick={() => handleTemplateChange(rec.templateKey)}
-                        >
-                          選択
-                        </button>
-                      )}
-                      <p className="text-gray-600 text-xs mt-0.5">
-                        {rec.reasons.join(" / ")}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {selectedCatalog && (
-            <div className="border rounded p-4 bg-gray-50 space-y-2 text-sm">
-              <div className="flex items-center gap-2">
-                <span className="font-semibold">{selectedCatalog.label}</span>
-                <span className="inline-block px-1.5 py-0.5 text-xs font-medium rounded bg-green-100 text-green-800">
-                  {selectedCatalog.statusBadge}
-                </span>
-              </div>
-              <p className="text-gray-700">
-                {selectedCatalog.shortDescription}
-              </p>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-gray-600">
-                <div>
-                  <span className="font-medium">対象:</span>{" "}
-                  {selectedCatalog.targetUsers}
-                </div>
-                <div>
-                  <span className="font-medium">推奨:</span>{" "}
-                  {selectedCatalog.recommendedFor}
-                </div>
-                <div>
-                  <span className="font-medium">主要エンティティ:</span>{" "}
-                  {selectedCatalog.coreEntities.join(", ")}
-                </div>
-                <div>
-                  <span className="font-medium">課金:</span>{" "}
-                  {selectedCatalog.includesBilling ? "あり" : "なし"}
-                  {" / "}
-                  <span className="font-medium">アフィリエイト:</span>{" "}
-                  {selectedCatalog.includesAffiliate ? "あり" : "なし"}
-                </div>
-              </div>
-            </div>
-          )}
-        </section>
-
-        {/* --- サービス名（常に表示） --- */}
-        <section className="space-y-4">
-          <div>
-            <label className="block mb-1">サービス名</label>
-            <input
-              className="w-full border rounded px-3 py-2"
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-            />
-            {errors.name && (
-              <p className="text-red-500 text-sm">{errors.name}</p>
-            )}
-          </div>
-        </section>
-
-        {/* --- 詳細設定（トグル） --- */}
-        <div>
-          <button
-            type="button"
-            className="text-sm text-gray-500 underline hover:text-gray-700"
-            onClick={() => setShowDetails(!showDetails)}
-          >
-            {showDetails ? "詳細設定を閉じる" : "詳細設定を開く"}
-          </button>
         </div>
 
-        {showDetails && (
-          <>
-            <section className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold">基本情報（詳細）</h2>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    className="rounded border border-purple-300 bg-purple-50 text-purple-700 px-3 py-1.5 text-xs font-medium hover:bg-purple-100 disabled:opacity-50"
-                    onClick={handleRewrite}
-                    disabled={!canRewrite}
-                  >
-                    {rewriting ? "整形中..." : "AIで整える"}
-                  </button>
-                  {rewriteError && (
-                    <span className="text-xs text-red-500">{rewriteError}</span>
+        {/* ===== Step Indicator ===== */}
+        <div className="mb-8">
+          {/* Progress bar */}
+          <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden mb-4">
+            <div
+              className="h-full rounded-full bg-primary transition-all duration-500 ease-out"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+
+          {/* Step labels */}
+          <div className="flex justify-between">
+            {STEPS.map((step) => (
+              <div
+                key={step.number}
+                className={cn(
+                  "flex items-center gap-2 text-sm transition-colors",
+                  currentStep >= step.number
+                    ? "text-primary font-medium"
+                    : "text-muted-foreground"
+                )}
+              >
+                <span
+                  className={cn(
+                    "inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-semibold transition-all",
+                    currentStep > step.number
+                      ? "bg-primary text-primary-foreground"
+                      : currentStep === step.number
+                        ? "bg-primary text-primary-foreground ring-2 ring-primary/30 ring-offset-2 ring-offset-background"
+                        : "bg-muted text-muted-foreground"
                   )}
+                >
+                  {currentStep > step.number ? (
+                    <CheckIcon />
+                  ) : (
+                    step.number
+                  )}
+                </span>
+                <span className="hidden sm:inline">{step.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ===== Step Content ===== */}
+        <div className="min-h-[400px]">
+          {/* ---------- Step 1: Template Selection ---------- */}
+          {currentStep === 1 && (
+            <section className="space-y-6 animate-in fade-in duration-300">
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">
+                  テンプレートを選択
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  プロジェクトの種類に合ったテンプレートを選んでください。
+                  テンプレートに応じて最適な設定が自動で適用されます。
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {TEMPLATE_CATALOG.map((template) => (
+                  <TemplateCard
+                    key={template.templateKey}
+                    template={template}
+                    selected={selectedTemplate === template.templateKey}
+                    onSelect={() => handleTemplateSelect(template.templateKey)}
+                  />
+                ))}
+
+                {/* Custom option */}
+                <Card
+                  className={cn(
+                    "cursor-pointer transition-all duration-200 hover:shadow-md",
+                    selectedTemplate === "custom"
+                      ? "ring-2 ring-primary border-primary"
+                      : "hover:border-primary/40"
+                  )}
+                  onClick={() => handleTemplateSelect("custom")}
+                >
+                  <CardHeader className="pb-3">
+                    <div className="flex items-start justify-between">
+                      <div
+                        className={cn(
+                          "w-10 h-10 rounded-lg flex items-center justify-center text-lg font-bold transition-colors",
+                          selectedTemplate === "custom"
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted text-muted-foreground"
+                        )}
+                      >
+                        +
+                      </div>
+                    </div>
+                    <CardTitle className="mt-2">カスタム</CardTitle>
+                    <CardDescription>
+                      テンプレートを使わず、ゼロからプロジェクトを構成します
+                    </CardDescription>
+                  </CardHeader>
+                </Card>
+              </div>
+            </section>
+          )}
+
+          {/* ---------- Step 2: Basic Info ---------- */}
+          {currentStep === 2 && (
+            <section className="space-y-6 animate-in fade-in duration-300">
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">
+                  基本情報を入力
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  サービスの概要を教えてください。AIが詳細なブループリントを自動生成します。
+                </p>
+              </div>
+
+              {/* Selected template reminder */}
+              {selectedCatalog && (
+                <div className="flex items-center gap-3 rounded-lg bg-muted/50 px-4 py-3 text-sm">
+                  <div className="w-8 h-8 rounded-md bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold shrink-0">
+                    {TEMPLATE_ICONS[selectedCatalog.templateKey] || "T"}
+                  </div>
+                  <div>
+                    <span className="font-medium text-foreground">
+                      {selectedCatalog.label}
+                    </span>
+                    <span className="text-muted-foreground ml-2">を使用</span>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-5">
+                {/* Service name */}
+                <div className="space-y-2">
+                  <label
+                    htmlFor="service-name"
+                    className="block text-sm font-medium text-foreground"
+                  >
+                    サービス名 <span className="text-destructive">*</span>
+                  </label>
+                  <Input
+                    id="service-name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="例: マイCRM"
+                    className="h-12 text-base"
+                  />
+                  {errors.name && (
+                    <p className="text-sm text-destructive">{errors.name}</p>
+                  )}
+                </div>
+
+                {/* Summary */}
+                <div className="space-y-2">
+                  <label
+                    htmlFor="service-summary"
+                    className="block text-sm font-medium text-foreground"
+                  >
+                    サービスの概要 <span className="text-destructive">*</span>
+                  </label>
+                  <Textarea
+                    id="service-summary"
+                    value={summary}
+                    onChange={(e) => setSummary(e.target.value)}
+                    placeholder="例: 中小企業向けの顧客管理システム。連絡先、商談、活動履歴を一元管理し、営業効率を向上させるSaaSサービス。"
+                    className="min-h-[120px] text-base leading-relaxed"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    どんなサービスで、誰のどんな課題を解決するか教えてください（10文字以上）
+                  </p>
+                  {errors.summary && (
+                    <p className="text-sm text-destructive">{errors.summary}</p>
+                  )}
+                </div>
+
+                {/* Target users */}
+                <div className="space-y-2">
+                  <label
+                    htmlFor="target-users"
+                    className="block text-sm font-medium text-foreground"
+                  >
+                    ターゲットユーザー
+                    <span className="ml-2 text-xs font-normal text-muted-foreground">
+                      任意
+                    </span>
+                  </label>
+                  <Input
+                    id="target-users"
+                    value={targetUsers}
+                    onChange={(e) => setTargetUsers(e.target.value)}
+                    placeholder={
+                      selectedCatalog?.targetUsers ||
+                      "例: 中小企業の営業チーム"
+                    }
+                    className="h-12 text-base"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    未入力の場合、テンプレートの推奨ターゲットが使用されます
+                  </p>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {/* ---------- Step 3: Review & Create ---------- */}
+          {currentStep === 3 && (
+            <section className="space-y-6 animate-in fade-in duration-300">
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">
+                  内容を確認して作成
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  以下の内容でプロジェクトを作成します。
+                </p>
+              </div>
+
+              {/* Review card */}
+              <Card>
+                <CardContent className="pt-6 space-y-4">
+                  <ReviewRow
+                    label="テンプレート"
+                    value={
+                      selectedTemplate === "custom"
+                        ? "カスタム（テンプレートなし）"
+                        : selectedCatalog?.label || selectedTemplate || ""
+                    }
+                  />
+                  <ReviewRow label="サービス名" value={name} />
+                  <ReviewRow label="サービス概要" value={summary} />
+                  <ReviewRow
+                    label="ターゲットユーザー"
+                    value={
+                      targetUsers ||
+                      selectedCatalog?.targetUsers ||
+                      "一般ユーザー"
+                    }
+                    muted={!targetUsers}
+                  />
+                  {selectedCatalog && (
+                    <>
+                      <div className="border-t pt-4 mt-4">
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
+                          テンプレートから自動設定
+                        </p>
+                        <div className="space-y-3">
+                          <ReviewRow
+                            label="課金"
+                            value={selectedCatalog.includesBilling ? "あり" : "なし"}
+                          />
+                          <ReviewRow
+                            label="アフィリエイト"
+                            value={selectedCatalog.includesAffiliate ? "あり" : "なし"}
+                          />
+                          <ReviewRow
+                            label="主要エンティティ"
+                            value={selectedCatalog.coreEntities.join(", ")}
+                          />
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* AI explanation */}
+              <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
+                <div className="flex gap-3">
+                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                    <SparklesIcon />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-foreground">
+                      AIがブループリントを自動生成します
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      テンプレートと入力情報をもとに、データベース設計、API仕様、
+                      画面構成などの技術ブループリントが自動で生成されます。
+                      作成後にいつでも編集できます。
+                    </p>
+                  </div>
                 </div>
               </div>
 
-              <div>
-                <label className="block mb-1">サービス概要</label>
-                <textarea
-                  className="w-full border rounded px-3 py-2 min-h-28"
-                  value={form.summary}
-                  onChange={(e) =>
-                    setForm({ ...form, summary: e.target.value })
-                  }
-                />
-              </div>
-
-              <div>
-                <label className="block mb-1">ターゲットユーザー</label>
-                <input
-                  className="w-full border rounded px-3 py-2"
-                  value={form.targetUsers}
-                  onChange={(e) =>
-                    setForm({ ...form, targetUsers: e.target.value })
-                  }
-                />
-              </div>
-
-              <div>
-                <label className="block mb-1">解決したい課題</label>
-                <textarea
-                  className="w-full border rounded px-3 py-2"
-                  value={form.problemToSolve}
-                  onChange={(e) =>
-                    setForm({ ...form, problemToSolve: e.target.value })
-                  }
-                />
-              </div>
-
-              <div>
-                <label className="block mb-1">参考サービス</label>
-                <input
-                  className="w-full border rounded px-3 py-2"
-                  value={form.referenceServices}
-                  onChange={(e) =>
-                    setForm({ ...form, referenceServices: e.target.value })
-                  }
-                />
-              </div>
-
-              <div>
-                <label className="block mb-1">ブランドトーン</label>
-                <select
-                  className="w-full border rounded px-3 py-2"
-                  value={form.brandTone}
-                  onChange={(e) =>
-                    setForm({ ...form, brandTone: e.target.value as BrandTone })
-                  }
-                >
-                  <option value="modern">Modern</option>
-                  <option value="minimal">Minimal</option>
-                  <option value="luxury">Luxury</option>
-                  <option value="friendly">Friendly</option>
-                  <option value="professional">Professional</option>
-                  <option value="playful">Playful</option>
-                </select>
-              </div>
+              {/* Validation errors */}
+              {Object.keys(errors).length > 0 && (
+                <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive space-y-1">
+                  <p className="font-medium">入力内容にエラーがあります</p>
+                  {Object.entries(errors).map(([key, message]) => (
+                    <p key={key}>{message}</p>
+                  ))}
+                </div>
+              )}
             </section>
+          )}
+        </div>
 
-            <section className="space-y-4">
-              <h2 className="text-lg font-semibold">機能要件（詳細）</h2>
-
-              <div>
-                <label className="block mb-1">課金方式</label>
-                <select
-                  className="w-full border rounded px-3 py-2"
-                  value={form.billingModel}
-                  onChange={(e) =>
-                    setForm({ ...form, billingModel: e.target.value as BillingModel })
-                  }
-                >
-                  <option value="subscription">サブスクリプション</option>
-                  <option value="one_time">買い切り</option>
-                  <option value="hybrid">ハイブリッド</option>
-                  <option value="none">なし</option>
-                </select>
-              </div>
-
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={form.affiliateEnabled}
-                  onChange={(e) =>
-                    setForm({ ...form, affiliateEnabled: e.target.checked })
-                  }
-                />
-                アフィリエイトを有効化
-              </label>
-
-              <div>
-                <label className="block mb-1">優先度</label>
-                <select
-                  className="w-full border rounded px-3 py-2"
-                  value={form.priority}
-                  onChange={(e) =>
-                    setForm({ ...form, priority: e.target.value as "low" | "medium" | "high" })
-                  }
-                >
-                  <option value="high">高</option>
-                  <option value="medium">中</option>
-                  <option value="low">低</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block mb-1">備考</label>
-                <textarea
-                  className="w-full border rounded px-3 py-2"
-                  value={form.notes}
-                  onChange={(e) =>
-                    setForm({ ...form, notes: e.target.value })
-                  }
-                />
-              </div>
-            </section>
-          </>
-        )}
-
-        {/* --- 作成前レビュー --- */}
-        <section className="border rounded-lg p-5 bg-gray-50 space-y-3">
-          <h2 className="text-lg font-semibold">この内容でプロジェクトを作成します</h2>
-          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
-            {buildReviewSummary(
-              form as unknown as Record<string, unknown>,
-              selectedCatalog?.label
-            ).items.map((ri) => (
-              <div key={ri.label} className="contents">
-                <dt className="font-medium text-gray-600">{ri.label}</dt>
-                <dd className={ri.empty ? "text-gray-400 italic" : "text-gray-900"}>
-                  {ri.value}
-                </dd>
-              </div>
-            ))}
-          </dl>
-        </section>
-
-        {/* --- validation summary --- */}
-        {(() => {
-          const vs = buildValidationSummary(
-            form as unknown as Record<string, unknown>
-          );
-          if (vs.missingItems.length === 0) {
-            return (
-              <div className="border border-green-200 rounded-lg p-4 bg-green-50 text-sm text-green-800">
-                このまま作成できます
-              </div>
-            );
-          }
-          return (
-            <div
-              className={`border rounded-lg p-4 text-sm space-y-2 ${
-                vs.isReady
-                  ? "border-amber-200 bg-amber-50"
-                  : "border-red-200 bg-red-50"
-              }`}
-            >
-              <p
-                className={`font-medium ${
-                  vs.isReady ? "text-amber-800" : "text-red-800"
-                }`}
+        {/* ===== Navigation Buttons ===== */}
+        <div className="flex items-center justify-between mt-8 pt-6 border-t">
+          <div>
+            {currentStep > 1 && (
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={goBack}
+                className="min-w-[100px]"
               >
-                {vs.isReady
-                  ? "入力を推奨する項目があります"
-                  : "作成前に確認してください"}
-              </p>
-              <ul className="space-y-1">
-                {vs.missingItems.map((mi) => (
-                  <li
-                    key={mi.key}
-                    className={
-                      vs.isReady ? "text-amber-700" : "text-red-700"
-                    }
-                  >
-                    <span className="font-medium">{mi.label}:</span>{" "}
-                    {mi.message}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          );
-        })()}
+                戻る
+              </Button>
+            )}
+          </div>
 
-        {/* --- template guidance --- */}
-        {(() => {
-          const guidance = getTemplateGuidance(
-            form.templateKey,
-            form as unknown as Record<string, unknown>
-          );
-          if (!guidance || guidance.messages.length === 0) return null;
-          return (
-            <div className="border border-indigo-200 rounded-lg p-4 bg-indigo-50 text-sm space-y-1.5">
-              <p className="font-medium text-indigo-800">{guidance.title}</p>
-              <ul className="list-disc list-inside text-indigo-700 space-y-0.5">
-                {guidance.messages.map((msg, i) => (
-                  <li key={i}>{msg}</li>
-                ))}
-              </ul>
-            </div>
-          );
-        })()}
-
-        <button
-          type="submit"
-          className="rounded bg-black text-white px-4 py-2"
-        >
-          プロジェクトを作成
-        </button>
-      </form>
+          <div>
+            {currentStep < 3 ? (
+              <Button
+                size="lg"
+                onClick={goNext}
+                disabled={!canGoNext()}
+                className="min-w-[140px]"
+              >
+                次へ
+              </Button>
+            ) : (
+              <Button
+                size="lg"
+                onClick={handleSubmit}
+                disabled={submitting}
+                className="min-w-[180px]"
+              >
+                {submitting ? (
+                  <span className="flex items-center gap-2">
+                    <LoadingSpinner />
+                    作成中...
+                  </span>
+                ) : (
+                  "プロジェクトを作成"
+                )}
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
     </main>
+  );
+}
+
+/* ========== Sub-components ========== */
+
+function TemplateCard({
+  template,
+  selected,
+  onSelect,
+}: {
+  template: TemplateCatalogEntry;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const icon = TEMPLATE_ICONS[template.templateKey] || "T";
+
+  return (
+    <Card
+      className={cn(
+        "cursor-pointer transition-all duration-200 hover:shadow-md",
+        selected
+          ? "ring-2 ring-primary border-primary"
+          : "hover:border-primary/40"
+      )}
+      onClick={onSelect}
+    >
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between">
+          <div
+            className={cn(
+              "w-10 h-10 rounded-lg flex items-center justify-center text-lg font-bold transition-colors",
+              selected
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground"
+            )}
+          >
+            {icon}
+          </div>
+          {template.statusBadge === "GREEN" && (
+            <span className="inline-flex items-center rounded-full bg-success/10 px-2.5 py-0.5 text-xs font-medium text-success">
+              おすすめ
+            </span>
+          )}
+        </div>
+        <CardTitle className="mt-2">{template.label}</CardTitle>
+        <CardDescription>{template.shortDescription}</CardDescription>
+      </CardHeader>
+      <CardContent className="pt-0">
+        <p className="text-xs text-muted-foreground">
+          {template.recommendedFor}
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ReviewRow({
+  label,
+  value,
+  muted = false,
+}: {
+  label: string;
+  value: string;
+  muted?: boolean;
+}) {
+  return (
+    <div className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-4">
+      <dt className="text-sm font-medium text-muted-foreground shrink-0 sm:w-40">
+        {label}
+      </dt>
+      <dd
+        className={cn(
+          "text-sm break-words",
+          muted ? "text-muted-foreground italic" : "text-foreground"
+        )}
+      >
+        {value}
+      </dd>
+    </div>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+      <path
+        d="M2.5 6L5 8.5L9.5 4"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function SparklesIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      className="text-primary"
+    >
+      <path
+        d="M8 1L9.5 5.5L14 7L9.5 8.5L8 13L6.5 8.5L2 7L6.5 5.5L8 1Z"
+        fill="currentColor"
+        opacity="0.7"
+      />
+      <path
+        d="M12.5 1L13.25 3L15 3.75L13.25 4.5L12.5 6.5L11.75 4.5L10 3.75L11.75 3L12.5 1Z"
+        fill="currentColor"
+        opacity="0.5"
+      />
+    </svg>
+  );
+}
+
+function LoadingSpinner() {
+  return (
+    <svg
+      className="animate-spin h-4 w-4"
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <circle
+        className="opacity-25"
+        cx="12"
+        cy="12"
+        r="10"
+        stroke="currentColor"
+        strokeWidth="4"
+      />
+      <path
+        className="opacity-75"
+        fill="currentColor"
+        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+      />
+    </svg>
   );
 }

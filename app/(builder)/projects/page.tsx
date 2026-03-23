@@ -16,6 +16,9 @@ import {
   ArrowRight,
   Clock,
   LayoutTemplate,
+  Layout,
+  PenLine,
+  Sparkles,
 } from "lucide-react";
 
 type ProjectStatus = "draft" | "approved" | "generating" | "deployed";
@@ -70,20 +73,74 @@ export default async function ProjectsPage() {
           </CardContent>
         </Card>
       ) : !projects || projects.length === 0 ? (
-        <Card>
-          <EmptyState
-            icon={FolderKanban}
-            title="プロジェクトがありません"
-            description="AIコード生成でSaaSアプリを構築しましょう。最初のプロジェクトを作成してください。"
-            action={
-              <Button asChild>
-                <Link href="/projects/new">
-                  <Plus className="h-4 w-4" />
-                  新規プロジェクト
+        <Card className="overflow-hidden">
+          <CardContent className="p-8 sm:p-12">
+            <div className="mx-auto max-w-lg text-center">
+              <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10">
+                <Sparkles className="h-8 w-8 text-primary" />
+              </div>
+              <h2 className="text-2xl font-bold tracking-tight text-foreground">
+                SaaS Builderへようこそ！
+              </h2>
+              <p className="mt-2 text-muted-foreground">
+                3つのステップであなたのSaaSを作りましょう
+              </p>
+
+              <div className="mt-8 grid gap-4 sm:grid-cols-3">
+                {[
+                  {
+                    step: 1,
+                    icon: Layout,
+                    title: "テンプレートを選ぶ",
+                    description: "用途に合ったテンプレートを選択",
+                  },
+                  {
+                    step: 2,
+                    icon: PenLine,
+                    title: "基本情報を入力",
+                    description: "サービス名と概要を入力",
+                  },
+                  {
+                    step: 3,
+                    icon: Sparkles,
+                    title: "AIが自動生成",
+                    description: "ブループリントとコードを自動生成",
+                  },
+                ].map((item) => (
+                  <div
+                    key={item.step}
+                    className="relative rounded-xl border bg-muted/30 p-4 text-center"
+                  >
+                    <span className="absolute -top-3 left-1/2 -translate-x-1/2 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground">
+                      {item.step}
+                    </span>
+                    <item.icon className="mx-auto mt-2 h-6 w-6 text-primary/70" />
+                    <p className="mt-2 text-sm font-semibold text-foreground">
+                      {item.title}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {item.description}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-8 flex flex-col items-center gap-3">
+                <Button size="lg" asChild>
+                  <Link href="/projects/new">
+                    <Plus className="h-4 w-4" />
+                    最初のプロジェクトを作成
+                  </Link>
+                </Button>
+                <Link
+                  href="/templates"
+                  className="text-sm text-muted-foreground underline-offset-4 hover:text-primary hover:underline transition-colors"
+                >
+                  テンプレートを見る
                 </Link>
-              </Button>
-            }
-          />
+              </div>
+            </div>
+          </CardContent>
         </Card>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

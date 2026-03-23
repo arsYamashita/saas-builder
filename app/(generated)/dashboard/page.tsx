@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireCurrentUser } from "@/lib/auth/current-user";
 import { getCurrentTenantForUser } from "@/lib/tenant/current-tenant";
 import {
@@ -6,17 +7,18 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { MetricCard } from "@/components/ui/metric-card";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/ui/page-header";
 import { Avatar } from "@/components/ui/avatar";
 import {
   Users,
   CreditCard,
-  Activity,
   Shield,
   Building2,
   Mail,
+  FileText,
+  Settings,
+  ArrowRight,
 } from "lucide-react";
 
 export default async function DashboardPage() {
@@ -30,32 +32,68 @@ export default async function DashboardPage() {
         description="SaaSアプリケーションの概要"
       />
 
-      {/* Metric Cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricCard
-          label="総ユーザー数"
-          value="--"
-          sublabel="データ取得中"
-          icon={Users}
-        />
-        <MetricCard
-          label="アクティブサブスクリプション"
-          value="--"
-          sublabel="データ取得中"
-          icon={CreditCard}
-        />
-        <MetricCard
-          label="月間売上"
-          value="--"
-          sublabel="データ取得中"
-          icon={Activity}
-        />
-        <MetricCard
-          label="コンバージョン率"
-          value="--"
-          sublabel="データ取得中"
-          icon={Shield}
-        />
+      {/* Quick Actions */}
+      <div>
+        <h2 className="mb-4 text-lg font-semibold text-foreground">
+          クイックアクション
+        </h2>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            {
+              href: "/content",
+              icon: FileText,
+              title: "コンテンツを管理",
+              description: "記事やコンテンツの作成・編集",
+              color: "bg-blue-100 text-blue-600",
+            },
+            {
+              href: "/plans",
+              icon: Settings,
+              title: "プランを設定",
+              description: "料金プランの作成・変更",
+              color: "bg-purple-100 text-purple-600",
+            },
+            {
+              href: "/billing",
+              icon: CreditCard,
+              title: "課金を確認",
+              description: "売上や決済状況の確認",
+              color: "bg-emerald-100 text-emerald-600",
+            },
+            {
+              href: "/users",
+              icon: Users,
+              title: "ユーザーを管理",
+              description: "ユーザー一覧と権限の管理",
+              color: "bg-amber-100 text-amber-600",
+            },
+          ].map((action) => (
+            <Link
+              key={action.href}
+              href={action.href}
+              className="group block"
+            >
+              <Card className="h-full transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5">
+                <CardContent className="flex items-start gap-4 p-5">
+                  <div
+                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${action.color}`}
+                  >
+                    <action.icon className="h-5 w-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-foreground group-hover:text-primary transition-colors">
+                      {action.title}
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {action.description}
+                    </p>
+                  </div>
+                  <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-all group-hover:opacity-100 group-hover:translate-x-0.5" />
+                </CardContent>
+              </Card>
+            </Link>
+          ))}
+        </div>
       </div>
 
       {/* Current User & Tenant Info */}
