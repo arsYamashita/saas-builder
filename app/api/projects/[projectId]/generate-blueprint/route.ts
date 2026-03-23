@@ -6,7 +6,7 @@ import { blueprintSchema } from "@/lib/validation/blueprint";
 import { executeTask } from "@/lib/providers/task-router";
 import { extractJsonFromText } from "@/lib/providers/result-normalizer";
 import { buildStepMeta, mergeStepMetas } from "@/lib/providers/step-meta";
-import { requireCurrentUser } from "@/lib/auth/current-user";
+import { requireProjectAccess } from "@/lib/auth/current-user";
 
 type Props = {
   params: Promise<{ projectId: string }>;
@@ -45,22 +45,9 @@ MVP範囲: ${JSON.stringify(meta.mvpScope ?? [])}
 
 export async function POST(_req: NextRequest, { params }: Props) {
   try {
-    await requireCurrentUser();
     const { projectId } = await params;
+    const { project } = await requireProjectAccess(projectId);
     const supabase = createAdminClient();
-
-    const { data: project, error: projectError } = await supabase
-      .from("projects")
-      .select("*")
-      .eq("id", projectId)
-      .single();
-
-    if (projectError || !project) {
-      return NextResponse.json(
-        { error: "Project not found", details: projectError?.message },
-        { status: 404 }
-      );
-    }
 
     const intakePromptTemplate = await readPrompt("01-gemini-intake.md");
     const blueprintPromptTemplate = await readPrompt("02-gemini-blueprint.md");
@@ -162,6 +149,9 @@ export async function POST(_req: NextRequest, { params }: Props) {
       error instanceof Error ? error.message : "Unknown server error";
     if (message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (message === "Not found") {
+      return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
     return NextResponse.json(
       { error: "Failed to generate blueprint", details: message },

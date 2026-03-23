@@ -23,19 +23,19 @@ export async function GET(_req: NextRequest, { params }: Props) {
       .single();
 
     if (error) {
+      console.error("Fetch plan error:", error.message);
       return NextResponse.json(
-        { error: "Plan not found", details: error.message },
+        { error: "Plan not found" },
         { status: 404 }
       );
     }
 
     return NextResponse.json({ plan: data });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Unknown error";
+    console.error("Fetch plan unexpected error:", error);
 
     return NextResponse.json(
-      { error: "Failed to fetch plan", details: message },
+      { error: "Failed to fetch plan" },
       { status: 500 }
     );
   }
@@ -68,8 +68,9 @@ export async function PATCH(req: NextRequest, { params }: Props) {
       .single();
 
     if (beforeError) {
+      console.error("Fetch plan for update error:", beforeError.message);
       return NextResponse.json(
-        { error: "Plan not found", details: beforeError.message },
+        { error: "Plan not found" },
         { status: 404 }
       );
     }
@@ -89,8 +90,9 @@ export async function PATCH(req: NextRequest, { params }: Props) {
       .single();
 
     if (error) {
+      console.error("Update plan error:", error.message);
       return NextResponse.json(
-        { error: "Failed to update plan", details: error.message },
+        { error: "Failed to update plan" },
         { status: 500 }
       );
     }
@@ -107,11 +109,10 @@ export async function PATCH(req: NextRequest, { params }: Props) {
 
     return NextResponse.json({ plan: data });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Unknown error";
+    console.error("Update plan unexpected error:", error);
 
     return NextResponse.json(
-      { error: "Failed to update plan", details: message },
+      { error: "Failed to update plan" },
       { status: 500 }
     );
   }
@@ -132,8 +133,9 @@ export async function DELETE(_req: NextRequest, { params }: Props) {
       .single();
 
     if (beforeError) {
+      console.error("Fetch plan for delete error:", beforeError.message);
       return NextResponse.json(
-        { error: "Plan not found", details: beforeError.message },
+        { error: "Plan not found" },
         { status: 404 }
       );
     }
@@ -146,12 +148,12 @@ export async function DELETE(_req: NextRequest, { params }: Props) {
 
     if (error) {
       const isFkViolation = error.code === "23503" || error.message?.includes("foreign key");
+      console.error("Delete plan error:", error.message);
       return NextResponse.json(
         {
           error: isFkViolation
             ? "Cannot delete plan: it is referenced by other records"
             : "Failed to delete plan",
-          details: error.message,
         },
         { status: isFkViolation ? 409 : 500 }
       );
@@ -169,11 +171,10 @@ export async function DELETE(_req: NextRequest, { params }: Props) {
 
     return NextResponse.json({ ok: true, deletedId: planId });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Unknown error";
+    console.error("Delete plan unexpected error:", error);
 
     return NextResponse.json(
-      { error: "Failed to delete plan", details: message },
+      { error: "Failed to delete plan" },
       { status: 500 }
     );
   }

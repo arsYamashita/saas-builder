@@ -533,7 +533,14 @@ export default function ProjectDetailPage() {
 
         {/* Progress summary */}
         <div className="flex items-center gap-3">
-          <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
+          <div
+            className="flex-1 h-2 rounded-full bg-muted overflow-hidden"
+            role="progressbar"
+            aria-valuenow={completedCount}
+            aria-valuemin={0}
+            aria-valuemax={steps.length}
+            aria-label="プロジェクト進捗"
+          >
             <div
               className="h-full rounded-full bg-emerald-500 transition-all duration-500"
               style={{ width: `${(completedCount / steps.length) * 100}%` }}

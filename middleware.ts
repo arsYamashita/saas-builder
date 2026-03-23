@@ -13,6 +13,13 @@ const protectedPrefixes = [
   "/settings",
   "/scoreboard",
   "/provider-scoreboard",
+  "/api/projects",
+  "/api/billing",
+  "/api/generation-runs",
+  "/api/domain",
+  "/api/documents",
+  "/api/scoreboard",
+  "/api/provider-scoreboard",
 ];
 
 export function middleware(req: NextRequest) {
@@ -31,6 +38,9 @@ export function middleware(req: NextRequest) {
     .some((c) => c.name.startsWith("sb-") && c.name.includes("auth-token"));
 
   if (!hasSupabaseCookie) {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     const loginUrl = new URL("/auth/login", req.url);
     return NextResponse.redirect(loginUrl);
   }
@@ -51,5 +61,12 @@ export const config = {
     "/settings/:path*",
     "/scoreboard/:path*",
     "/provider-scoreboard/:path*",
+    "/api/projects/:path*",
+    "/api/billing/:path*",
+    "/api/generation-runs/:path*",
+    "/api/domain/:path*",
+    "/api/documents/:path*",
+    "/api/scoreboard/:path*",
+    "/api/provider-scoreboard/:path*",
   ],
 };

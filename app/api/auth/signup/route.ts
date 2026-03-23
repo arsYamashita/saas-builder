@@ -2,9 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { signupSchema } from "@/lib/validation/auth";
 import { createClient } from "@/lib/db/supabase/server";
 import { runSignupFlow } from "@/lib/auth/signup-flow";
+import { rateLimit } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
   try {
+    const ip = req.headers.get("x-forwarded-for")?.split(",")[0] ?? "unknown";
+    if (!rateLimit(`signup:${ip}`, 3, 60_000)) {
+      return NextResponse.json(
+        { error: "リクエストが多すぎます。しばらくしてからお試しください。" },
+        { status: 429 }
+      );
+    }
+
     const body = await req.json();
     const parsed = signupSchema.safeParse(body);
 
@@ -33,8 +42,9 @@ export async function POST(req: NextRequest) {
       });
 
     if (signUpError) {
+      console.error("Signup error:", signUpError.message);
       return NextResponse.json(
-        { error: "Failed to sign up", details: signUpError.message },
+        { error: "Failed to sign up" },
         { status: 400 }
       );
     }
@@ -86,11 +96,10 @@ export async function POST(req: NextRequest) {
 
     return response;
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Unknown error";
+    console.error("Signup unexpected error:", error);
 
     return NextResponse.json(
-      { error: "Failed to complete signup", details: message },
+      { error: "Failed to complete signup" },
       { status: 500 }
     );
   }

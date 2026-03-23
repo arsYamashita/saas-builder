@@ -14,19 +14,19 @@ export async function GET() {
       .order("created_at", { ascending: false });
 
     if (error) {
+      console.error("Fetch subscriptions error:", error.message);
       return NextResponse.json(
-        { error: "Failed to fetch subscriptions", details: error.message },
+        { error: "Failed to fetch subscriptions" },
         { status: 500 }
       );
     }
 
     return NextResponse.json({ subscriptions: data });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Unknown error";
+    console.error("Fetch subscriptions unexpected error:", error);
 
     return NextResponse.json(
-      { error: "Failed to fetch subscriptions", details: message },
+      { error: "Failed to fetch subscriptions" },
       { status: 500 }
     );
   }

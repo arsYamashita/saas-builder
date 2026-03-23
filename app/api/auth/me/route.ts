@@ -12,11 +12,10 @@ export async function GET() {
       tenantMembership,
     });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Unknown error";
+    console.error("Auth me error:", error);
 
     return NextResponse.json(
-      { error: "Failed to fetch current auth state", details: message },
+      { error: "Failed to fetch current auth state" },
       { status: 401 }
     );
   }

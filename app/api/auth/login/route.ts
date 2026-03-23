@@ -1,9 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { loginSchema } from "@/lib/validation/auth";
 import { createClient } from "@/lib/db/supabase/server";
+import { rateLimit } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
   try {
+    const ip = req.headers.get("x-forwarded-for")?.split(",")[0] ?? "unknown";
+    if (!rateLimit(`login:${ip}`, 5, 60_000)) {
+      return NextResponse.json(
+        { error: "リクエストが多すぎます。しばらくしてからお試しください。" },
+        { status: 429 }
+      );
+    }
+
     const body = await req.json();
     const parsed = loginSchema.safeParse(body);
 
@@ -22,8 +31,9 @@ export async function POST(req: NextRequest) {
     });
 
     if (error) {
+      console.error("Login error:", error.message);
       return NextResponse.json(
-        { error: "Failed to login", details: error.message },
+        { error: "Failed to login" },
         { status: 400 }
       );
     }
@@ -33,11 +43,10 @@ export async function POST(req: NextRequest) {
       redirectTo: "/dashboard",
     });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Unknown error";
+    console.error("Login unexpected error:", error);
 
     return NextResponse.json(
-      { error: "Failed to login", details: message },
+      { error: "Failed to login" },
       { status: 500 }
     );
   }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/db/supabase/admin";
-import { requireCurrentUser } from "@/lib/auth/current-user";
+import { requireProjectAccess } from "@/lib/auth/current-user";
 
 type Props = {
   params: Promise<{ projectId: string }>;
@@ -8,22 +8,9 @@ type Props = {
 
 export async function GET(_req: NextRequest, { params }: Props) {
   try {
-    await requireCurrentUser();
     const { projectId } = await params;
+    const { project } = await requireProjectAccess(projectId);
     const supabase = createAdminClient();
-
-    const { data: project, error } = await supabase
-      .from("projects")
-      .select("*")
-      .eq("id", projectId)
-      .single();
-
-    if (error) {
-      return NextResponse.json(
-        { error: "Project not found", details: error.message },
-        { status: 404 }
-      );
-    }
 
     const [
       { data: blueprints },
@@ -73,8 +60,12 @@ export async function GET(_req: NextRequest, { params }: Props) {
     if (message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    if (message === "Not found") {
+      return NextResponse.json({ error: "Project not found" }, { status: 404 });
+    }
+    console.error("Fetch project unexpected error:", message);
     return NextResponse.json(
-      { error: "Failed to fetch project", details: message },
+      { error: "Failed to fetch project" },
       { status: 500 }
     );
   }

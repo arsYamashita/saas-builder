@@ -10,20 +10,24 @@ import { runInstall } from "@/lib/quality/run-install";
 import { runLint } from "@/lib/quality/run-lint";
 import { runTypecheck } from "@/lib/quality/run-typecheck";
 import { runPlaywright } from "@/lib/quality/run-playwright";
-import { requireCurrentUser } from "@/lib/auth/current-user";
+import { requireProjectAccess } from "@/lib/auth/current-user";
 
 type Props = {
   params: Promise<{ projectId: string }>;
 };
 
 export async function POST(_req: NextRequest, { params }: Props) {
+  const { projectId } = await params;
+
   try {
-    await requireCurrentUser();
-  } catch {
+    await requireProjectAccess(projectId);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Unauthorized";
+    if (msg === "Not found") {
+      return NextResponse.json({ error: "Project not found" }, { status: 404 });
+    }
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const { projectId } = await params;
   let qualityRunId = "";
 
   try {

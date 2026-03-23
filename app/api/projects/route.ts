@@ -6,17 +6,31 @@ import { requireCurrentUser } from "@/lib/auth/current-user";
 
 export async function GET() {
   try {
-    await requireCurrentUser();
+    const user = await requireCurrentUser();
     const supabase = createAdminClient();
+
+    const { data: tenantUser } = await supabase
+      .from("tenant_users")
+      .select("tenant_id")
+      .eq("user_id", user.id)
+      .eq("status", "active")
+      .limit(1)
+      .single();
+
+    if (!tenantUser) {
+      return NextResponse.json({ projects: [] });
+    }
 
     const { data: projects, error } = await supabase
       .from("projects")
       .select("id, name, template_key, status, description, created_at, updated_at")
+      .eq("tenant_id", tenantUser.tenant_id)
       .order("created_at", { ascending: false });
 
     if (error) {
+      console.error("Fetch projects error:", error.message);
       return NextResponse.json(
-        { error: "Failed to fetch projects", details: error.message },
+        { error: "Failed to fetch projects" },
         { status: 500 }
       );
     }
@@ -28,8 +42,9 @@ export async function GET() {
     if (message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    console.error("Fetch projects unexpected error:", message);
     return NextResponse.json(
-      { error: "Failed to fetch projects", details: message },
+      { error: "Failed to fetch projects" },
       { status: 500 }
     );
   }
@@ -37,7 +52,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    await requireCurrentUser();
+    const user = await requireCurrentUser();
     const body = await req.json();
     const parsed = projectFormSchema.safeParse(body);
 
@@ -69,11 +84,20 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (tenantError) {
+      console.error("Create tenant error:", tenantError.message);
       return NextResponse.json(
-        { error: "Failed to create tenant", details: tenantError.message },
+        { error: "Failed to create tenant" },
         { status: 500 }
       );
     }
+
+    // Link the creating user to the new tenant
+    await supabase.from("tenant_users").insert({
+      tenant_id: tenant.id,
+      user_id: user.id,
+      role: "owner",
+      status: "active",
+    });
 
     const { data: project, error: projectError } = await supabase
       .from("projects")
@@ -107,8 +131,9 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (projectError) {
+      console.error("Create project error:", projectError.message);
       return NextResponse.json(
-        { error: "Failed to create project", details: projectError.message },
+        { error: "Failed to create project" },
         { status: 500 }
       );
     }
@@ -120,8 +145,9 @@ export async function POST(req: NextRequest) {
     if (message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    console.error("Create project unexpected error:", message);
     return NextResponse.json(
-      { error: "Failed to create project", details: message },
+      { error: "Failed to create project" },
       { status: 500 }
     );
   }

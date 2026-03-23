@@ -91,11 +91,10 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ url: session.url }, { status: 200 });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Unknown error";
+    console.error("Create checkout session error:", error);
 
     return NextResponse.json(
-      { error: "Failed to create checkout session", details: message },
+      { error: "Failed to create checkout session" },
       { status: 500 }
     );
   }

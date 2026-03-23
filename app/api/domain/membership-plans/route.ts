@@ -17,19 +17,19 @@ export async function GET() {
       .order("created_at", { ascending: false });
 
     if (error) {
+      console.error("Fetch plans error:", error.message);
       return NextResponse.json(
-        { error: "Failed to fetch plans", details: error.message },
+        { error: "Failed to fetch plans" },
         { status: 500 }
       );
     }
 
     return NextResponse.json({ plans: data });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Unknown error";
+    console.error("Fetch plans unexpected error:", error);
 
     return NextResponse.json(
-      { error: "Failed to fetch plans", details: message },
+      { error: "Failed to fetch plans" },
       { status: 500 }
     );
   }
@@ -66,8 +66,9 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (error) {
+      console.error("Create plan error:", error.message);
       return NextResponse.json(
-        { error: "Failed to create plan", details: error.message },
+        { error: "Failed to create plan" },
         { status: 500 }
       );
     }
@@ -83,11 +84,10 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ plan: data }, { status: 201 });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Unknown error";
+    console.error("Create plan unexpected error:", error);
 
     return NextResponse.json(
-      { error: "Failed to create plan", details: message },
+      { error: "Failed to create plan" },
       { status: 500 }
     );
   }
