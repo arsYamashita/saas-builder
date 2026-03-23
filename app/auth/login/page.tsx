@@ -45,7 +45,7 @@ export default function LoginPage() {
         return;
       }
 
-      router.push(json.redirectTo || "/dashboard");
+      router.push(json.redirectTo || "/projects");
       router.refresh();
     } catch {
       setError("予期しないエラーが発生しました。");

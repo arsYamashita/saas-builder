@@ -11,6 +11,7 @@ import {
   Users,
   Tag,
   Blocks,
+  FolderKanban,
 } from "lucide-react";
 
 const navItems = [
@@ -63,7 +64,14 @@ export function AdminNav() {
         </nav>
 
         {/* Right side */}
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-3">
+          <Link
+            href="/projects"
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-primary bg-primary/10 hover:bg-primary/20 transition-colors whitespace-nowrap"
+          >
+            <FolderKanban className="h-3.5 w-3.5" />
+            プロジェクト管理
+          </Link>
           <LogoutButton />
         </div>
       </div>
