@@ -6,7 +6,7 @@ import { executeTask } from "@/lib/providers/task-router";
 import { buildStepMeta } from "@/lib/providers/step-meta";
 import { createAdminClient } from "@/lib/db/supabase/admin";
 import { resolveFinalPromptPath } from "@/lib/ai/template-prompt-resolver";
-import { requireCurrentUser } from "@/lib/auth/current-user";
+import { requireProjectAccess } from "@/lib/auth/current-user";
 
 type Props = {
   params: Promise<{ projectId: string }>;
@@ -30,14 +30,8 @@ function buildBlueprintJsonForClaude(blueprint: Record<string, unknown>) {
 
 export async function POST(_req: NextRequest, { params }: Props) {
   try {
-    await requireCurrentUser();
     const { projectId } = await params;
-    const supabase = createAdminClient();
-    const { data: project } = await supabase
-      .from("projects")
-      .select("template_key")
-      .eq("id", projectId)
-      .single();
+    const { project } = await requireProjectAccess(projectId);
     const templateKey = project?.template_key ?? "membership_content_affiliate";
 
     const blueprint = await getLatestBlueprintByProjectId(projectId);
@@ -73,6 +67,9 @@ export async function POST(_req: NextRequest, { params }: Props) {
       error instanceof Error ? error.message : "Unknown server error";
     if (message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (message === "Not found") {
+      return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
     return NextResponse.json(
       { error: "Failed to generate schema", details: message },

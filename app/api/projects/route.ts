@@ -6,12 +6,25 @@ import { requireCurrentUser } from "@/lib/auth/current-user";
 
 export async function GET() {
   try {
-    await requireCurrentUser();
+    const user = await requireCurrentUser();
     const supabase = createAdminClient();
+
+    const { data: tenantUser } = await supabase
+      .from("tenant_users")
+      .select("tenant_id")
+      .eq("user_id", user.id)
+      .eq("status", "active")
+      .limit(1)
+      .single();
+
+    if (!tenantUser) {
+      return NextResponse.json({ projects: [] });
+    }
 
     const { data: projects, error } = await supabase
       .from("projects")
       .select("id, name, template_key, status, description, created_at, updated_at")
+      .eq("tenant_id", tenantUser.tenant_id)
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -37,7 +50,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    await requireCurrentUser();
+    const user = await requireCurrentUser();
     const body = await req.json();
     const parsed = projectFormSchema.safeParse(body);
 
@@ -74,6 +87,14 @@ export async function POST(req: NextRequest) {
         { status: 500 }
       );
     }
+
+    // Link the creating user to the new tenant
+    await supabase.from("tenant_users").insert({
+      tenant_id: tenant.id,
+      user_id: user.id,
+      role: "owner",
+      status: "active",
+    });
 
     const { data: project, error: projectError } = await supabase
       .from("projects")
