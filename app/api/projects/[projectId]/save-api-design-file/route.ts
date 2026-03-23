@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getLatestImplementationRun } from "@/lib/db/latest-run";
 import { getLatestBlueprintByProjectId } from "@/lib/db/blueprints";
 import { saveGeneratedFile } from "@/lib/db/generated-files";
+import { requireCurrentUser } from "@/lib/auth/current-user";
 
 type Props = {
   params: Promise<{ projectId: string }>;
@@ -9,6 +10,7 @@ type Props = {
 
 export async function POST(_req: NextRequest, { params }: Props) {
   try {
+    await requireCurrentUser();
     const { projectId } = await params;
 
     const latestApiRun = await getLatestImplementationRun(

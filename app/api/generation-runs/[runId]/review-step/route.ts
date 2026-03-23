@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/db/supabase/admin";
 import type { GenerationStep, StepReviewStatus } from "@/types/generation-run";
+import { requireCurrentUser } from "@/lib/auth/current-user";
 import { applyStepReview, computeRunReviewStatus } from "@/lib/db/step-review";
 import type { GenerationRunReviewStatus } from "@/types/generation-run";
 
@@ -12,6 +13,7 @@ const VALID_ACTIONS: StepReviewStatus[] = ["approved", "rejected"];
 
 export async function POST(req: NextRequest, { params }: Props) {
   try {
+    await requireCurrentUser();
     const { runId } = await params;
     const body = await req.json();
     const { stepKey, action, reason } = body as {

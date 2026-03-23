@@ -8,9 +8,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parsePdf, parsePdfFromBase64 } from "@/lib/document-analysis/pdf-parser";
 import { parseRequestSchema } from "@/lib/validation/document-analysis";
+import { requireCurrentUser } from "@/lib/auth/current-user";
 
 export async function POST(request: NextRequest) {
   try {
+    await requireCurrentUser();
     const contentType = request.headers.get("content-type") ?? "";
 
     let buffer: Buffer;
