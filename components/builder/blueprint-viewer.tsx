@@ -118,7 +118,7 @@ export function BlueprintViewer({
     return (
       <div className="space-y-6 animate-fade-in">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" asChild>
+          <Button variant="ghost" size="icon" asChild aria-label="プロジェクトに戻る">
             <Link href={`/projects/${projectId}`}>
               <ArrowLeft className="h-4 w-4" />
             </Link>
@@ -182,7 +182,7 @@ export function BlueprintViewer({
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" asChild>
+          <Button variant="ghost" size="icon" asChild aria-label="プロジェクトに戻る">
             <Link href={`/projects/${projectId}`}>
               <ArrowLeft className="h-4 w-4" />
             </Link>
@@ -258,12 +258,16 @@ export function BlueprintViewer({
 
       {/* Tabs */}
       <div className="border-b">
-        <nav className="flex gap-1" aria-label="Blueprint sections">
+        <div role="tablist" className="flex gap-1" aria-label="設計書セクション">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             return (
               <button
                 key={tab.key}
+                role="tab"
+                aria-selected={activeTab === tab.key}
+                aria-controls={`tabpanel-${tab.key}`}
+                id={`tab-${tab.key}`}
                 onClick={() => setActiveTab(tab.key)}
                 className={cn(
                   "flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors",
@@ -277,11 +281,16 @@ export function BlueprintViewer({
               </button>
             );
           })}
-        </nav>
+        </div>
       </div>
 
       {/* Tab Content */}
-      <div className="animate-fade-in">
+      <div
+        role="tabpanel"
+        id={`tabpanel-${activeTab}`}
+        aria-labelledby={`tab-${activeTab}`}
+        className="animate-fade-in"
+      >
         {/* Section guide */}
         <div className="mb-4 flex items-start gap-2 rounded-lg bg-muted/50 px-4 py-3">
           <Info className="h-4 w-4 shrink-0 text-muted-foreground mt-0.5" />

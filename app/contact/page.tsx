@@ -84,7 +84,7 @@ export default function ContactPage() {
 
         {submitted ? (
           /* ---------- Success state ---------- */
-          <Card className="text-center">
+          <Card className="text-center" role="status">
             <CardContent className="pt-10 pb-10 px-8">
               <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-50">
                 <CheckCircle2 className="h-10 w-10 text-emerald-600" />
