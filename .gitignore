@@ -13,3 +13,4 @@ exports/
 tests/playwright/.auth/
 .DS_Store
 .claude/
+.vercel
