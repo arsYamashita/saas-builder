@@ -330,7 +330,7 @@ function StepCard({
                 )}
               </div>
               <CardDescription
-                className={cn(isDisabled && "text-muted-foreground/60")}
+                className={cn(isDisabled && "text-muted-foreground")}
               >
                 {step.description}
               </CardDescription>

@@ -98,7 +98,7 @@ function MetricTable({
 
   return (
     <div>
-      <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground/60">
+      <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
         {title}
       </h3>
       <div className="overflow-x-auto rounded-lg border">
@@ -151,7 +151,7 @@ function MetricTable({
                   )}
                 >
                   {m.successRate}%
-                  <span className="ml-1 text-muted-foreground/60">
+                  <span className="ml-1 text-muted-foreground">
                     ({m.completedSteps}/{m.totalSteps})
                   </span>
                 </td>
@@ -159,7 +159,7 @@ function MetricTable({
                   {m.promotedSteps > 0 ? (
                     <span className="text-emerald-600">
                       {m.promotedStepRate}%{" "}
-                      <span className="text-muted-foreground/60">
+                      <span className="text-muted-foreground">
                         ({m.promotedSteps})
                       </span>
                     </span>
@@ -176,7 +176,7 @@ function MetricTable({
                       }
                     >
                       {m.fallbackRate}%{" "}
-                      <span className="text-muted-foreground/60">
+                      <span className="text-muted-foreground">
                         ({m.fallbackCount})
                       </span>
                     </span>

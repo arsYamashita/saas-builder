@@ -109,7 +109,7 @@ export default function BillingPage() {
 
       {/* Available Plans */}
       <div>
-        <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted-foreground/60">
+        <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
           利用可能なプラン
         </h2>
         {plans.length === 0 ? (
@@ -160,7 +160,7 @@ export default function BillingPage() {
 
       {/* Current Subscriptions */}
       <div>
-        <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted-foreground/60">
+        <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
           現在のサブスクリプション
         </h2>
         {subscriptions.length === 0 ? (

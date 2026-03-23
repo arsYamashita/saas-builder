@@ -128,7 +128,7 @@ export default function TemplatesPage() {
 
                 {templateUseCases[template.templateKey] && (
                   <div>
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground/60">
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                       このテンプレートで作れるもの
                     </p>
                     <ul className="space-y-1">
@@ -148,14 +148,14 @@ export default function TemplatesPage() {
                 )}
 
                 <div>
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground/60">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     対象ユーザー
                   </p>
                   <p className="text-sm">{template.targetUsers}</p>
                 </div>
 
                 <div>
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground/60">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     主要エンティティ
                   </p>
                   <div className="flex flex-wrap gap-1.5">
