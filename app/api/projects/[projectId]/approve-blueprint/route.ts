@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/db/supabase/admin";
-import { requireCurrentUser } from "@/lib/auth/current-user";
+import { requireProjectAccess } from "@/lib/auth/current-user";
 
 type Props = {
   params: Promise<{ projectId: string }>;
@@ -8,8 +8,8 @@ type Props = {
 
 export async function POST(req: NextRequest, { params }: Props) {
   try {
-    await requireCurrentUser();
     const { projectId } = await params;
+    await requireProjectAccess(projectId);
     const body = await req.json().catch(() => ({}));
     const supabase = createAdminClient();
 
@@ -55,6 +55,12 @@ export async function POST(req: NextRequest, { params }: Props) {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Unknown server error";
+    if (message === "Unauthorized") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (message === "Not found") {
+      return NextResponse.json({ error: "Project not found" }, { status: 404 });
+    }
     return NextResponse.json(
       { error: "Failed to approve blueprint", details: message },
       { status: 500 }
