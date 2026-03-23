@@ -1,6 +1,3 @@
-"use client";
-
-import { useCallback, useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -8,9 +5,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { MetricCard } from "@/components/ui/metric-card";
 import { PageHeader } from "@/components/ui/page-header";
-import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/utils/cn";
 import {
@@ -18,10 +13,12 @@ import {
   CheckCircle2,
   XCircle,
   Trophy,
-  TrendingUp,
   Clock,
-  Shield,
 } from "lucide-react";
+import { createAdminClient } from "@/lib/db/supabase/admin";
+import { buildScoreboard } from "@/lib/providers/template-scoreboard";
+import { TEMPLATE_REGISTRY } from "@/lib/templates/template-registry";
+import { requireCurrentUser } from "@/lib/auth/current-user";
 
 type TemplateScore = {
   templateKey: string;
@@ -41,11 +38,6 @@ type TemplateScore = {
   blueprintReviewStatus: string | null;
   lastApprovedAt: string | null;
   lastPromotedAt: string | null;
-};
-
-type ScoreboardData = {
-  templates: TemplateScore[];
-  generatedAt: string;
 };
 
 function RateCircle({ rate, size = "lg" }: { rate: number; size?: "sm" | "lg" }) {
@@ -71,53 +63,95 @@ function RateCircle({ rate, size = "lg" }: { rate: number; size?: "sm" | "lg" })
   );
 }
 
-export default function ScoreboardPage() {
-  const [data, setData] = useState<ScoreboardData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+async function fetchScoreboardData() {
+  await requireCurrentUser();
+  const supabase = createAdminClient();
 
-  const fetchScoreboard = useCallback(async () => {
-    try {
-      const res = await fetch("/api/scoreboard");
-      if (!res.ok) throw new Error("Failed to fetch scoreboard");
-      const json = await res.json();
-      setData(json);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const [
+    { data: generationRuns, error: grErr },
+    { data: qualityRuns, error: qrErr },
+    { data: projects },
+    { data: blueprints },
+  ] = await Promise.all([
+    supabase
+      .from("generation_runs")
+      .select("id, template_key, status, review_status, reviewed_at, promoted_at, baseline_tag")
+      .order("started_at", { ascending: false }),
+    supabase
+      .from("quality_runs")
+      .select("generation_run_id, status")
+      .order("started_at", { ascending: false }),
+    supabase
+      .from("projects")
+      .select("id, template_key"),
+    supabase
+      .from("blueprints")
+      .select("project_id, review_status, version")
+      .order("version", { ascending: false }),
+  ]);
 
-  useEffect(() => {
-    fetchScoreboard();
-  }, [fetchScoreboard]);
+  if (grErr) throw new Error("Failed to fetch generation runs");
+  if (qrErr) throw new Error("Failed to fetch quality runs");
 
-  if (loading) {
-    return (
-      <div className="space-y-6 animate-fade-in">
-        <div className="space-y-2">
-          <Skeleton className="h-8 w-56" />
-          <Skeleton className="h-4 w-40" />
-        </div>
-        <div className="grid gap-4 md:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-28 rounded-xl" />
-          ))}
-        </div>
-        <Skeleton className="h-48 rounded-xl" />
-      </div>
+  const bpByTemplate = new Map<string, string | null>();
+  if (projects && blueprints) {
+    const projectTemplateMap = new Map(
+      projects.map((p: { id: string; template_key: string }) => [p.id, p.template_key])
     );
+    const seen = new Set<string>();
+    for (const bp of blueprints) {
+      if (seen.has(bp.project_id)) continue;
+      seen.add(bp.project_id);
+      const tmpl = projectTemplateMap.get(bp.project_id);
+      if (tmpl && !bpByTemplate.has(tmpl)) {
+        bpByTemplate.set(tmpl, bp.review_status ?? "pending");
+      }
+    }
   }
 
-  if (error || !data) {
+  const templateLabels = Object.entries(TEMPLATE_REGISTRY).map(
+    ([key, entry]) => ({
+      templateKey: key,
+      label: entry.label,
+    })
+  );
+
+  const blueprintStatuses = Array.from(bpByTemplate.entries()).map(([k, v]) => ({
+    project_template_key: k,
+    review_status: v,
+  }));
+
+  return buildScoreboard(
+    (generationRuns ?? []).map((r) => ({
+      id: r.id,
+      template_key: r.template_key,
+      status: r.status,
+      review_status: r.review_status ?? "pending",
+      reviewed_at: r.reviewed_at ?? null,
+      promoted_at: r.promoted_at ?? null,
+      baseline_tag: r.baseline_tag ?? null,
+    })),
+    (qualityRuns ?? []).map((q) => ({
+      generation_run_id: q.generation_run_id,
+      status: q.status,
+    })),
+    templateLabels,
+    blueprintStatuses
+  );
+}
+
+export default async function ScoreboardPage() {
+  let data: { templates: TemplateScore[]; generatedAt: string };
+  try {
+    data = await fetchScoreboardData();
+  } catch {
     return (
       <div className="space-y-6 animate-fade-in">
         <PageHeader title="テンプレートスコアボード" />
         <Card>
           <CardContent className="py-10 text-center">
             <p className="text-sm text-destructive">
-              {error || "スコアボードの読み込みに失敗しました"}
+              スコアボードの読み込みに失敗しました
             </p>
           </CardContent>
         </Card>
