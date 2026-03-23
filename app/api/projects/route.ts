@@ -28,8 +28,9 @@ export async function GET() {
       .order("created_at", { ascending: false });
 
     if (error) {
+      console.error("Fetch projects error:", error.message);
       return NextResponse.json(
-        { error: "Failed to fetch projects", details: error.message },
+        { error: "Failed to fetch projects" },
         { status: 500 }
       );
     }
@@ -41,8 +42,9 @@ export async function GET() {
     if (message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    console.error("Fetch projects unexpected error:", message);
     return NextResponse.json(
-      { error: "Failed to fetch projects", details: message },
+      { error: "Failed to fetch projects" },
       { status: 500 }
     );
   }
@@ -82,8 +84,9 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (tenantError) {
+      console.error("Create tenant error:", tenantError.message);
       return NextResponse.json(
-        { error: "Failed to create tenant", details: tenantError.message },
+        { error: "Failed to create tenant" },
         { status: 500 }
       );
     }
@@ -128,8 +131,9 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (projectError) {
+      console.error("Create project error:", projectError.message);
       return NextResponse.json(
-        { error: "Failed to create project", details: projectError.message },
+        { error: "Failed to create project" },
         { status: 500 }
       );
     }
@@ -141,8 +145,9 @@ export async function POST(req: NextRequest) {
     if (message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    console.error("Create project unexpected error:", message);
     return NextResponse.json(
-      { error: "Failed to create project", details: message },
+      { error: "Failed to create project" },
       { status: 500 }
     );
   }

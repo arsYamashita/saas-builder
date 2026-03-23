@@ -63,8 +63,9 @@ export async function GET(_req: NextRequest, { params }: Props) {
     if (message === "Not found") {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
+    console.error("Fetch project unexpected error:", message);
     return NextResponse.json(
-      { error: "Failed to fetch project", details: message },
+      { error: "Failed to fetch project" },
       { status: 500 }
     );
   }

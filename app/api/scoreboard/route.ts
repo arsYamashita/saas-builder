@@ -99,8 +99,9 @@ export async function GET() {
     if (message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    console.error("Build scoreboard error:", message);
     return NextResponse.json(
-      { error: "Failed to build scoreboard", details: message },
+      { error: "Failed to build scoreboard" },
       { status: 500 }
     );
   }

@@ -5,7 +5,6 @@ import { saveImplementationRun } from "@/lib/db/implementation-runs";
 import { getLatestImplementationRun } from "@/lib/db/latest-run";
 import { executeTask } from "@/lib/providers/task-router";
 import { buildStepMeta } from "@/lib/providers/step-meta";
-import { createAdminClient } from "@/lib/db/supabase/admin";
 import { resolveFinalPromptPath } from "@/lib/ai/template-prompt-resolver";
 import { requireProjectAccess } from "@/lib/auth/current-user";
 
