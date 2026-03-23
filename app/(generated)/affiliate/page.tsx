@@ -136,7 +136,7 @@ export default async function AffiliatePage() {
 
       {/* Commissions */}
       <div>
-        <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted-foreground/60">
+        <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
           コミッション
         </h2>
         {!commissions || commissions.length === 0 ? (

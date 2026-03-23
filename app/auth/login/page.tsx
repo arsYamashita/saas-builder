@@ -171,7 +171,7 @@ export default function LoginPage() {
         </Card>
 
         {/* Footer */}
-        <p className="mt-6 text-center text-xs text-muted-foreground/60">
+        <p className="mt-6 text-center text-xs text-muted-foreground">
           Powered by SaaS Builder
         </p>
       </div>

@@ -278,7 +278,7 @@ export default function HomePage() {
 
           {/* Trust indicators */}
           <p
-            className="mt-8 text-center text-sm text-muted-foreground/70"
+            className="mt-8 text-center text-sm text-muted-foreground"
             style={{ animation: "fade-in-up 0.7s ease-out 0.45s both" }}
           >
             クレジットカード不要 &middot; 5分で最初のSaaS &middot; コード100%所有
@@ -413,7 +413,7 @@ export default function HomePage() {
         <div className="mx-auto max-w-6xl px-6">
           <ScrollReveal>
             <div className="mx-auto max-w-2xl text-center">
-              <p className="text-sm font-semibold uppercase tracking-widest text-primary">
+              <p className="text-sm font-semibold uppercase tracking-widest text-primary" lang="en">
                 Features
               </p>
               <h2 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">
@@ -470,7 +470,7 @@ export default function HomePage() {
         <div className="relative mx-auto max-w-5xl px-6">
           <ScrollReveal>
             <div className="mx-auto max-w-2xl text-center">
-              <p className="text-sm font-semibold uppercase tracking-widest text-primary">
+              <p className="text-sm font-semibold uppercase tracking-widest text-primary" lang="en">
                 How it works
               </p>
               <h2 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">
@@ -555,7 +555,7 @@ export default function HomePage() {
         <div className="mx-auto max-w-6xl px-6">
           <ScrollReveal>
             <div className="mx-auto max-w-2xl text-center">
-              <p className="text-sm font-semibold uppercase tracking-widest text-primary">
+              <p className="text-sm font-semibold uppercase tracking-widest text-primary" lang="en">
                 Templates
               </p>
               <h2 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">
@@ -612,7 +612,7 @@ export default function HomePage() {
         <div className="mx-auto max-w-4xl px-6">
           <ScrollReveal>
             <div className="mx-auto max-w-2xl text-center">
-              <p className="text-sm font-semibold uppercase tracking-widest text-primary">
+              <p className="text-sm font-semibold uppercase tracking-widest text-primary" lang="en">
                 Comparison
               </p>
               <h2 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">
@@ -736,7 +736,7 @@ export default function HomePage() {
                 </Link>
               </Button>
             </div>
-            <p className="mt-4 text-sm text-muted-foreground/60">
+            <p className="mt-4 text-sm text-muted-foreground">
               アカウント作成は30秒で完了
             </p>
           </div>
