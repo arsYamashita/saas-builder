@@ -22,6 +22,7 @@ import {
   FileText,
   Sparkles,
   ArrowLeft,
+  Info,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -34,12 +35,25 @@ interface BlueprintViewerProps {
 type TabKey = "entities" | "screens" | "roles" | "billing" | "raw";
 
 const tabs: { key: TabKey; label: string; icon: React.ElementType }[] = [
-  { key: "entities", label: "Entities", icon: Database },
-  { key: "screens", label: "Screens", icon: Monitor },
-  { key: "roles", label: "Roles", icon: Users },
-  { key: "billing", label: "Billing", icon: CreditCard },
-  { key: "raw", label: "Raw JSON", icon: FileText },
+  { key: "entities", label: "データ構造", icon: Database },
+  { key: "screens", label: "画面一覧", icon: Monitor },
+  { key: "roles", label: "ユーザー権限", icon: Users },
+  { key: "billing", label: "課金設定", icon: CreditCard },
+  { key: "raw", label: "JSON詳細", icon: FileText },
 ];
+
+const sectionGuides: Record<TabKey, string> = {
+  entities:
+    "「データ構造」は、アプリで管理する情報の種類です。例えば「ユーザー」「予約」「商品」など。各項目の名前とデータ型が正しいか確認してください。",
+  screens:
+    "「画面一覧」は、アプリにどんなページがあるかの一覧です。ログイン画面、一覧画面、設定画面など、必要な画面が揃っているか確認してください。",
+  roles:
+    "「ユーザー権限」は、誰がどの機能を使えるかの設定です。管理者・一般ユーザーなど、役割ごとにできることが正しいか確認してください。",
+  billing:
+    "「課金設定」は、料金プランや支払い方法の設定です。無料プラン・有料プランの内容と価格が正しいか確認してください。",
+  raw:
+    "設計書の生データ（JSON形式）です。技術者向けの詳細情報が含まれています。通常は確認不要です。",
+};
 
 export function BlueprintViewer({
   projectId,
@@ -110,7 +124,7 @@ export function BlueprintViewer({
             </Link>
           </Button>
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Blueprint</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">設計書（ブループリント）</h1>
             <p className="text-sm text-muted-foreground">{projectName}</p>
           </div>
         </div>
@@ -118,19 +132,19 @@ export function BlueprintViewer({
         <Card>
           <EmptyState
             icon={Sparkles}
-            title="No blueprint generated"
-            description="Generate a blueprint to define the entities, screens, roles, and billing model for your project."
+            title="設計書がまだ作成されていません"
+            description="AIがあなたのプロジェクトに最適なデータ構造、画面、ユーザー権限、課金モデルを自動設計します。"
             action={
               <Button onClick={handleGenerate} disabled={loading} size="lg">
                 {loading ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Generating...
+                    設計書を生成中...
                   </>
                 ) : (
                   <>
                     <Sparkles className="h-4 w-4" />
-                    Generate Blueprint
+                    AIで設計書を生成
                   </>
                 )}
               </Button>
@@ -175,13 +189,13 @@ export function BlueprintViewer({
           </Button>
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-semibold tracking-tight">Blueprint</h1>
-              <Badge variant={statusVariant} className="capitalize">
-                {status}
+              <h1 className="text-2xl font-semibold tracking-tight">設計書（ブループリント）</h1>
+              <Badge variant={statusVariant}>
+                {status === "approved" ? "承認済み" : status === "rejected" ? "却下" : "確認待ち"}
               </Badge>
             </div>
             <p className="text-sm text-muted-foreground">
-              {projectName} &middot; Version {version}
+              {projectName} &middot; バージョン {version}
             </p>
           </div>
         </div>
@@ -199,7 +213,7 @@ export function BlueprintViewer({
               ) : (
                 <X className="h-4 w-4" />
               )}
-              Reject
+              やり直す
             </Button>
             <Button
               variant="success"
@@ -211,7 +225,7 @@ export function BlueprintViewer({
               ) : (
                 <Check className="h-4 w-4" />
               )}
-              Approve
+              この設計で進める
             </Button>
           </div>
         )}
@@ -221,6 +235,25 @@ export function BlueprintViewer({
         <div className="rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3">
           <p className="text-sm text-destructive">{error}</p>
         </div>
+      )}
+
+      {/* Guidance for non-technical users */}
+      {status !== "approved" && (
+        <Card className="border-blue-200 bg-blue-50/50">
+          <CardContent className="flex items-start gap-3 p-4">
+            <Info className="h-5 w-5 shrink-0 text-blue-600 mt-0.5" />
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-blue-900">
+                設計書の確認方法
+              </p>
+              <p className="text-sm text-blue-700">
+                AIがあなたのプロジェクトに必要な機能を自動設計しました。各タブを確認して、
+                内容に問題がなければ「この設計で進める」を押してください。
+                修正が必要な場合は「やり直す」で再生成できます。
+              </p>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Tabs */}
@@ -249,6 +282,13 @@ export function BlueprintViewer({
 
       {/* Tab Content */}
       <div className="animate-fade-in">
+        {/* Section guide */}
+        <div className="mb-4 flex items-start gap-2 rounded-lg bg-muted/50 px-4 py-3">
+          <Info className="h-4 w-4 shrink-0 text-muted-foreground mt-0.5" />
+          <p className="text-sm text-muted-foreground">
+            {sectionGuides[activeTab]}
+          </p>
+        </div>
         {activeTab === "entities" && (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {entities.length > 0 ? (
@@ -267,8 +307,8 @@ export function BlueprintViewer({
                           <p className="text-xs text-muted-foreground">
                             {Array.isArray(entity.fields)
                               ? entity.fields.length
-                              : 0}{" "}
-                            fields
+                              : 0}
+                            項目
                           </p>
                         )}
                       </div>
@@ -292,7 +332,7 @@ export function BlueprintViewer({
                         ))}
                         {entity.fields.length > 5 && (
                           <p className="text-xs text-muted-foreground">
-                            +{entity.fields.length - 5} more
+                            他 {entity.fields.length - 5} 件
                           </p>
                         )}
                       </div>
@@ -304,8 +344,8 @@ export function BlueprintViewer({
               <div className="col-span-full">
                 <EmptyState
                   icon={Database}
-                  title="No entities defined"
-                  description="Entities will appear here after blueprint generation."
+                  title="データ構造が未定義です"
+                  description="設計書を生成すると、アプリで扱うデータの種類がここに表示されます。"
                 />
               </div>
             )}
@@ -340,8 +380,8 @@ export function BlueprintViewer({
               <div className="col-span-full">
                 <EmptyState
                   icon={Monitor}
-                  title="No screens defined"
-                  description="Screens will appear here after blueprint generation."
+                  title="画面が未定義です"
+                  description="設計書を生成すると、アプリの画面一覧がここに表示されます。"
                 />
               </div>
             )}
@@ -369,8 +409,8 @@ export function BlueprintViewer({
                           <p className="text-xs text-muted-foreground">
                             {Array.isArray(role.permissions)
                               ? role.permissions.length
-                              : 0}{" "}
-                            permissions
+                              : 0}
+                            権限
                           </p>
                         )}
                       </div>
@@ -380,8 +420,8 @@ export function BlueprintViewer({
               ) : (
                 <EmptyState
                   icon={Users}
-                  title="No roles defined"
-                  description="Roles will appear here after blueprint generation."
+                  title="ユーザー権限が未定義です"
+                  description="設計書を生成すると、利用者の種類と権限がここに表示されます。"
                 />
               )}
             </CardContent>
@@ -396,7 +436,7 @@ export function BlueprintViewer({
                   {billing.model && (
                     <div className="rounded-lg border p-4">
                       <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                        Model
+                        課金モデル
                       </p>
                       <p className="mt-1 text-lg font-semibold">{billing.model}</p>
                     </div>
@@ -404,7 +444,7 @@ export function BlueprintViewer({
                   {billing.currency && (
                     <div className="rounded-lg border p-4">
                       <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                        Currency
+                        通貨
                       </p>
                       <p className="mt-1 text-lg font-semibold uppercase">
                         {billing.currency}
@@ -414,7 +454,7 @@ export function BlueprintViewer({
                   {billing.plans && (
                     <div className="rounded-lg border p-4">
                       <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                        Plans
+                        プラン数
                       </p>
                       <p className="mt-1 text-lg font-semibold">
                         {Array.isArray(billing.plans) ? billing.plans.length : 0}
@@ -424,10 +464,10 @@ export function BlueprintViewer({
                   {billing.trial_days != null && (
                     <div className="rounded-lg border p-4">
                       <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                        Trial Period
+                        無料お試し期間
                       </p>
                       <p className="mt-1 text-lg font-semibold">
-                        {billing.trial_days} days
+                        {billing.trial_days} 日間
                       </p>
                     </div>
                   )}
@@ -435,8 +475,8 @@ export function BlueprintViewer({
               ) : (
                 <EmptyState
                   icon={CreditCard}
-                  title="No billing configuration"
-                  description="Billing configuration will appear here after blueprint generation."
+                  title="課金設定が未定義です"
+                  description="設計書を生成すると、料金プランや課金モデルがここに表示されます。"
                 />
               )}
             </CardContent>
