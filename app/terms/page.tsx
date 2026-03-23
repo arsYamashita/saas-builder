@@ -3,7 +3,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "利用規約 | SaaS Builder",
+  title: "利用規約",
   description:
     "SaaS Builderの利用規約です。サービスのご利用前に必ずお読みください。",
 };
