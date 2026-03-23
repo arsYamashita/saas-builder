@@ -62,6 +62,7 @@ export default function NewProjectPage() {
   const [targetUsers, setTargetUsers] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   /* ---------- Derived catalog entry ---------- */
   const selectedCatalog = useMemo(
@@ -143,6 +144,7 @@ export default function NewProjectPage() {
 
     setErrors({});
     setSubmitting(true);
+    setSubmitError(null);
 
     try {
       const res = await fetch("/api/projects", {
@@ -152,14 +154,14 @@ export default function NewProjectPage() {
       });
 
       if (!res.ok) {
-        alert("プロジェクト作成に失敗しました");
+        setSubmitError("プロジェクト作成に失敗しました");
         return;
       }
 
       const json = await res.json();
       window.location.href = `/projects/${json.project.id}`;
     } catch {
-      alert("通信エラーが発生しました");
+      setSubmitError("通信エラーが発生しました");
     } finally {
       setSubmitting(false);
     }
@@ -251,34 +253,40 @@ export default function NewProjectPage() {
                 ))}
 
                 {/* Custom option */}
-                <Card
-                  className={cn(
-                    "cursor-pointer transition-all duration-200 hover:shadow-md",
-                    selectedTemplate === "custom"
-                      ? "ring-2 ring-primary border-primary"
-                      : "hover:border-primary/40"
-                  )}
+                <button
+                  type="button"
                   onClick={() => handleTemplateSelect("custom")}
+                  className="w-full text-left focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 rounded-xl"
+                  aria-pressed={selectedTemplate === "custom"}
                 >
-                  <CardHeader className="pb-3">
-                    <div className="flex items-start justify-between">
-                      <div
-                        className={cn(
-                          "w-10 h-10 rounded-lg flex items-center justify-center text-lg font-bold transition-colors",
-                          selectedTemplate === "custom"
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-muted text-muted-foreground"
-                        )}
-                      >
-                        +
+                  <Card
+                    className={cn(
+                      "cursor-pointer transition-all duration-200 hover:shadow-md",
+                      selectedTemplate === "custom"
+                        ? "ring-2 ring-primary border-primary"
+                        : "hover:border-primary/40"
+                    )}
+                  >
+                    <CardHeader className="pb-3">
+                      <div className="flex items-start justify-between">
+                        <div
+                          className={cn(
+                            "w-10 h-10 rounded-lg flex items-center justify-center text-lg font-bold transition-colors",
+                            selectedTemplate === "custom"
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-muted text-muted-foreground"
+                          )}
+                        >
+                          +
+                        </div>
                       </div>
-                    </div>
-                    <CardTitle className="mt-2">カスタム</CardTitle>
-                    <CardDescription>
-                      テンプレートを使わず、ゼロからプロジェクトを構成します
-                    </CardDescription>
-                  </CardHeader>
-                </Card>
+                      <CardTitle className="mt-2">カスタム</CardTitle>
+                      <CardDescription>
+                        テンプレートを使わず、ゼロからプロジェクトを構成します
+                      </CardDescription>
+                    </CardHeader>
+                  </Card>
+                </button>
               </div>
             </section>
           )}
@@ -321,13 +329,15 @@ export default function NewProjectPage() {
                   </label>
                   <Input
                     id="service-name"
+                    aria-describedby={errors.name ? "service-name-error" : undefined}
+                    aria-invalid={!!errors.name}
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder="例: マイCRM"
                     className="h-12 text-base"
                   />
                   {errors.name && (
-                    <p className="text-sm text-destructive">{errors.name}</p>
+                    <p id="service-name-error" className="text-sm text-destructive">{errors.name}</p>
                   )}
                 </div>
 
@@ -341,16 +351,18 @@ export default function NewProjectPage() {
                   </label>
                   <Textarea
                     id="service-summary"
+                    aria-describedby={errors.summary ? "service-summary-error" : "service-summary-hint"}
+                    aria-invalid={!!errors.summary}
                     value={summary}
                     onChange={(e) => setSummary(e.target.value)}
                     placeholder="例: 中小企業向けの顧客管理システム。連絡先、商談、活動履歴を一元管理し、営業効率を向上させるSaaSサービス。"
                     className="min-h-[120px] text-base leading-relaxed"
                   />
-                  <p className="text-xs text-muted-foreground">
+                  <p id="service-summary-hint" className="text-xs text-muted-foreground">
                     どんなサービスで、誰のどんな課題を解決するか教えてください（10文字以上）
                   </p>
                   {errors.summary && (
-                    <p className="text-sm text-destructive">{errors.summary}</p>
+                    <p id="service-summary-error" className="text-sm text-destructive">{errors.summary}</p>
                   )}
                 </div>
 
@@ -475,6 +487,13 @@ export default function NewProjectPage() {
           )}
         </div>
 
+        {/* ===== Submit Error ===== */}
+        {submitError && (
+          <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+            {submitError}
+          </div>
+        )}
+
         {/* ===== Navigation Buttons ===== */}
         <div className="flex items-center justify-between mt-8 pt-6 border-t">
           <div>
@@ -538,42 +557,48 @@ function TemplateCard({
   const icon = TEMPLATE_ICONS[template.templateKey] || "T";
 
   return (
-    <Card
-      className={cn(
-        "cursor-pointer transition-all duration-200 hover:shadow-md",
-        selected
-          ? "ring-2 ring-primary border-primary"
-          : "hover:border-primary/40"
-      )}
+    <button
+      type="button"
       onClick={onSelect}
+      className="w-full text-left focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 rounded-xl"
+      aria-pressed={selected}
     >
-      <CardHeader className="pb-3">
-        <div className="flex items-start justify-between">
-          <div
-            className={cn(
-              "w-10 h-10 rounded-lg flex items-center justify-center text-lg font-bold transition-colors",
-              selected
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted text-muted-foreground"
+      <Card
+        className={cn(
+          "cursor-pointer transition-all duration-200 hover:shadow-md",
+          selected
+            ? "ring-2 ring-primary border-primary"
+            : "hover:border-primary/40"
+        )}
+      >
+        <CardHeader className="pb-3">
+          <div className="flex items-start justify-between">
+            <div
+              className={cn(
+                "w-10 h-10 rounded-lg flex items-center justify-center text-lg font-bold transition-colors",
+                selected
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground"
+              )}
+            >
+              {icon}
+            </div>
+            {template.statusBadge === "GREEN" && (
+              <span className="inline-flex items-center rounded-full bg-success/10 px-2.5 py-0.5 text-xs font-medium text-success">
+                おすすめ
+              </span>
             )}
-          >
-            {icon}
           </div>
-          {template.statusBadge === "GREEN" && (
-            <span className="inline-flex items-center rounded-full bg-success/10 px-2.5 py-0.5 text-xs font-medium text-success">
-              おすすめ
-            </span>
-          )}
-        </div>
-        <CardTitle className="mt-2">{template.label}</CardTitle>
-        <CardDescription>{template.shortDescription}</CardDescription>
-      </CardHeader>
-      <CardContent className="pt-0">
-        <p className="text-xs text-muted-foreground">
-          {template.recommendedFor}
-        </p>
-      </CardContent>
-    </Card>
+          <CardTitle className="mt-2">{template.label}</CardTitle>
+          <CardDescription>{template.shortDescription}</CardDescription>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <p className="text-xs text-muted-foreground">
+            {template.recommendedFor}
+          </p>
+        </CardContent>
+      </Card>
+    </button>
   );
 }
 
