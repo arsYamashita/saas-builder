@@ -6,6 +6,9 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_APP_URL || "https://saas-builder-cyan.vercel.app"
+  ),
   title: {
     default: "SaaS Builder — AIでSaaSを構築",
     template: "%s | SaaS Builder",
