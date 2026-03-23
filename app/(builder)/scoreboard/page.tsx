@@ -190,7 +190,7 @@ export default function ScoreboardPage() {
                       <p className="text-xs font-medium text-muted-foreground">
                         成功率
                       </p>
-                      <p className="text-xs text-muted-foreground/70">
+                      <p className="text-xs text-muted-foreground">
                         {t.completedRuns}/{t.totalRuns} 回
                       </p>
                     </div>
@@ -205,7 +205,7 @@ export default function ScoreboardPage() {
                       <p className="text-xs font-medium text-muted-foreground">
                         品質合格
                       </p>
-                      <p className="text-xs text-muted-foreground/70">
+                      <p className="text-xs text-muted-foreground">
                         {t.qualityTotalRuns > 0
                           ? `${t.qualityPassedRuns}/${t.qualityTotalRuns} 回`
                           : "未実行"}
@@ -223,7 +223,7 @@ export default function ScoreboardPage() {
                       <p className="text-xs font-medium text-muted-foreground">
                         承認
                       </p>
-                      <p className="text-xs text-muted-foreground/70">
+                      <p className="text-xs text-muted-foreground">
                         {t.rejectedRuns} 却下
                       </p>
                     </div>
@@ -239,7 +239,7 @@ export default function ScoreboardPage() {
                       <p className="text-xs font-medium text-muted-foreground">
                         昇格
                       </p>
-                      <p className="text-xs text-muted-foreground/70">
+                      <p className="text-xs text-muted-foreground">
                         {t.approvedRuns > 0
                           ? `承認の${t.promotionRate}%`
                           : `${t.failedRuns} 失敗`}
