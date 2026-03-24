@@ -61,3 +61,40 @@ export async function requireProjectAccess(projectId: string) {
 
   return { user, project, tenantId: tenantUser.tenant_id };
 }
+
+/**
+ * Verify the current user has access to the specified generation run via
+ * tenant membership. Joins generation_runs → projects to confirm the run
+ * belongs to a project owned by the user's active tenant. Prevents IDOR.
+ */
+export async function requireRunAccess(runId: string) {
+  const user = await requireCurrentUser();
+  const supabase = createAdminClient();
+
+  const { data: tenantUser } = await supabase
+    .from("tenant_users")
+    .select("tenant_id")
+    .eq("user_id", user.id)
+    .eq("status", "active")
+    .limit(1)
+    .single();
+
+  if (!tenantUser) {
+    throw new Error("Unauthorized");
+  }
+
+  const { data: run } = await supabase
+    .from("generation_runs")
+    .select(
+      "id, project_id, template_key, status, review_status, steps_json, projects!inner(tenant_id)"
+    )
+    .eq("id", runId)
+    .eq("projects.tenant_id", tenantUser.tenant_id)
+    .single();
+
+  if (!run) {
+    throw new Error("Not found");
+  }
+
+  return { user, run, tenantId: tenantUser.tenant_id };
+}

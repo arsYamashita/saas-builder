@@ -175,6 +175,6 @@ export async function POST(req: Request) {
     const message =
       error instanceof Error ? error.message : "Unknown webhook error";
 
-    return new Response(message, { status: 400 });
+    return new Response("Webhook processing failed", { status: 400 });
   }
 }

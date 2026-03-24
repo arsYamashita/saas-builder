@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/db/supabase/admin";
-import { requireCurrentUser } from "@/lib/auth/current-user";
+import { requireRunAccess } from "@/lib/auth/current-user";
 
 type Props = {
   params: Promise<{ runId: string }>;
@@ -8,22 +8,9 @@ type Props = {
 
 export async function POST(_req: NextRequest, { params }: Props) {
   try {
-    await requireCurrentUser();
     const { runId } = await params;
+    const { run } = await requireRunAccess(runId);
     const supabase = createAdminClient();
-
-    const { data: run, error: fetchErr } = await supabase
-      .from("generation_runs")
-      .select("id, status")
-      .eq("id", runId)
-      .single();
-
-    if (fetchErr || !run) {
-      return NextResponse.json(
-        { error: "Generation run not found" },
-        { status: 404 }
-      );
-    }
 
     const { error: updateErr } = await supabase
       .from("generation_runs")
@@ -35,7 +22,7 @@ export async function POST(_req: NextRequest, { params }: Props) {
 
     if (updateErr) {
       return NextResponse.json(
-        { error: "Failed to reject run", details: updateErr.message },
+        { error: "Failed to reject run" },
         { status: 500 }
       );
     }
@@ -46,8 +33,14 @@ export async function POST(_req: NextRequest, { params }: Props) {
     if (message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    if (message === "Not found") {
+      return NextResponse.json(
+        { error: "Generation run not found" },
+        { status: 404 }
+      );
+    }
     return NextResponse.json(
-      { error: "Failed to reject run", details: message },
+      { error: "Failed to reject run" },
       { status: 500 }
     );
   }

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getLatestImplementationRun } from "@/lib/db/latest-run";
 import { getLatestBlueprintByProjectId } from "@/lib/db/blueprints";
 import { saveGeneratedFile } from "@/lib/db/generated-files";
-import { requireCurrentUser } from "@/lib/auth/current-user";
+import { requireProjectAccess } from "@/lib/auth/current-user";
 
 type Props = {
   params: Promise<{ projectId: string }>;
@@ -19,8 +19,8 @@ function buildMigrationFilePath(projectId: string) {
 
 export async function POST(_req: NextRequest, { params }: Props) {
   try {
-    await requireCurrentUser();
     const { projectId } = await params;
+    await requireProjectAccess(projectId);
 
     const latestSchemaRun = await getLatestImplementationRun(
       projectId,
@@ -47,8 +47,10 @@ export async function POST(_req: NextRequest, { params }: Props) {
     const message =
       error instanceof Error ? error.message : "Unknown server error";
 
+    if (message === "Unauthorized") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (message === "Not found") return NextResponse.json({ error: "Project not found" }, { status: 404 });
     return NextResponse.json(
-      { error: "Failed to save schema migration", details: message },
+      { error: "Failed to save schema migration" },
       { status: 500 }
     );
   }

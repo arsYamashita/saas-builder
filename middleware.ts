@@ -45,6 +45,15 @@ export function middleware(req: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
+  // CSRF: verify Origin for state-changing API requests
+  if (pathname.startsWith("/api/") && req.method !== "GET") {
+    const origin = req.headers.get("origin");
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+    if (origin && appUrl && !origin.startsWith(appUrl)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+  }
+
   return NextResponse.next();
 }
 
