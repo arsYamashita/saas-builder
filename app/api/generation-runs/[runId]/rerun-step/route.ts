@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/db/supabase/admin";
 import type { GenerationStep } from "@/types/generation-run";
 import type { GenerationStepMeta } from "@/types/generation-run";
-import { requireCurrentUser } from "@/lib/auth/current-user";
+import { requireRunAccess } from "@/lib/auth/current-user";
 import {
   getStepRouteInfo,
   applyStepRerunResult,
@@ -16,7 +16,6 @@ type Props = {
 
 export async function POST(req: NextRequest, { params }: Props) {
   try {
-    await requireCurrentUser();
     const { runId } = await params;
     const body = await req.json();
     const { stepKey } = body as { stepKey?: string };
@@ -37,21 +36,8 @@ export async function POST(req: NextRequest, { params }: Props) {
       );
     }
 
+    const { run } = await requireRunAccess(runId);
     const supabase = createAdminClient();
-
-    // Fetch run with project_id
-    const { data: run, error: fetchErr } = await supabase
-      .from("generation_runs")
-      .select("id, project_id, status, review_status, steps_json")
-      .eq("id", runId)
-      .single();
-
-    if (fetchErr || !run) {
-      return NextResponse.json(
-        { error: "Generation run not found" },
-        { status: 404 }
-      );
-    }
 
     if (run.status !== "completed") {
       return NextResponse.json(
@@ -113,7 +99,7 @@ export async function POST(req: NextRequest, { params }: Props) {
           status: "completed" as const,
           meta: {
             ...(s.meta ?? {}),
-            rerunError: `Rerun failed: ${routeRes.status} ${text.slice(0, 200)}`,
+            rerunError: `Rerun failed: ${routeRes.status}`,
           },
         };
       });
@@ -124,7 +110,7 @@ export async function POST(req: NextRequest, { params }: Props) {
         .eq("id", runId);
 
       return NextResponse.json(
-        { error: "Step rerun failed", details: text.slice(0, 500) },
+        { error: "Step rerun failed" },
         { status: 500 }
       );
     }
@@ -178,8 +164,17 @@ export async function POST(req: NextRequest, { params }: Props) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
+    if (message === "Unauthorized") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (message === "Not found") {
+      return NextResponse.json(
+        { error: "Generation run not found" },
+        { status: 404 }
+      );
+    }
     return NextResponse.json(
-      { error: "Failed to rerun step", details: message },
+      { error: "Failed to rerun step" },
       { status: 500 }
     );
   }
