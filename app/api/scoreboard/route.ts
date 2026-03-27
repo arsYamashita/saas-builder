@@ -2,47 +2,59 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/db/supabase/admin";
 import { buildScoreboard } from "@/lib/providers/template-scoreboard";
 import { TEMPLATE_REGISTRY } from "@/lib/templates/template-registry";
-import { requireCurrentUser } from "@/lib/auth/current-user";
+import { requireTenantUser } from "@/lib/auth/current-user";
 
 export async function GET() {
   try {
-    await requireCurrentUser();
+    const { tenantId } = await requireTenantUser();
     const supabase = createAdminClient();
 
-    // Fetch all data in parallel
+    // Fetch tenant-scoped projects first
+    const { data: projects } = await supabase
+      .from("projects")
+      .select("id, template_key")
+      .eq("tenant_id", tenantId);
+
+    const projectIds = (projects ?? []).map((p: { id: string }) => p.id);
+    const safeIds = projectIds.length > 0 ? projectIds : ["__none__"];
+
+    // Fetch generation_runs and blueprints scoped to tenant's projects
     const [
       { data: generationRuns, error: grErr },
-      { data: qualityRuns, error: qrErr },
-      { data: projects },
       { data: blueprints },
     ] = await Promise.all([
       supabase
         .from("generation_runs")
         .select("id, template_key, status, review_status, reviewed_at, promoted_at, baseline_tag")
+        .in("project_id", safeIds)
         .order("started_at", { ascending: false }),
-      supabase
-        .from("quality_runs")
-        .select("generation_run_id, status")
-        .order("started_at", { ascending: false }),
-      supabase
-        .from("projects")
-        .select("id, template_key"),
       supabase
         .from("blueprints")
         .select("project_id, review_status, version")
+        .in("project_id", safeIds)
         .order("version", { ascending: false }),
     ]);
 
     if (grErr) {
       return NextResponse.json(
-        { error: "Failed to fetch generation runs", details: grErr.message },
+        { error: "Failed to fetch generation runs" },
         { status: 500 }
       );
     }
 
+    // Fetch quality_runs scoped to tenant's generation runs
+    const runIds = (generationRuns ?? []).map((r) => r.id);
+    const safeRunIds = runIds.length > 0 ? runIds : ["__none__"];
+
+    const { data: qualityRuns, error: qrErr } = await supabase
+      .from("quality_runs")
+      .select("generation_run_id, status")
+      .in("generation_run_id", safeRunIds)
+      .order("started_at", { ascending: false });
+
     if (qrErr) {
       return NextResponse.json(
-        { error: "Failed to fetch quality runs", details: qrErr.message },
+        { error: "Failed to fetch quality runs" },
         { status: 500 }
       );
     }
@@ -51,7 +63,7 @@ export async function GET() {
     const bpByTemplate = new Map<string, string | null>();
     if (projects && blueprints) {
       const projectTemplateMap = new Map(projects.map((p: { id: string; template_key: string }) => [p.id, p.template_key]));
-      const seen = new Set<string>(); // track first (latest) blueprint per project
+      const seen = new Set<string>();
       for (const bp of blueprints) {
         if (seen.has(bp.project_id)) continue;
         seen.add(bp.project_id);
@@ -62,7 +74,6 @@ export async function GET() {
       }
     }
 
-    // Build template labels from registry
     const templateLabels = Object.entries(TEMPLATE_REGISTRY).map(
       ([key, entry]) => ({
         templateKey: key,

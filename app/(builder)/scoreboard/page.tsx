@@ -18,7 +18,7 @@ import {
 import { createAdminClient } from "@/lib/db/supabase/admin";
 import { buildScoreboard } from "@/lib/providers/template-scoreboard";
 import { TEMPLATE_REGISTRY } from "@/lib/templates/template-registry";
-import { requireCurrentUser } from "@/lib/auth/current-user";
+import { requireTenantUser } from "@/lib/auth/current-user";
 
 type TemplateScore = {
   templateKey: string;
@@ -64,33 +64,46 @@ function RateCircle({ rate, size = "lg" }: { rate: number; size?: "sm" | "lg" })
 }
 
 async function fetchScoreboardData() {
-  await requireCurrentUser();
+  const { tenantId } = await requireTenantUser();
   const supabase = createAdminClient();
+
+  // Fetch tenant-scoped projects first
+  const { data: projects } = await supabase
+    .from("projects")
+    .select("id, template_key")
+    .eq("tenant_id", tenantId);
+
+  const projectIds = (projects ?? []).map((p: { id: string }) => p.id);
+  const safeIds = projectIds.length > 0 ? projectIds : ["__none__"];
 
   const [
     { data: generationRuns, error: grErr },
-    { data: qualityRuns, error: qrErr },
-    { data: projects },
     { data: blueprints },
   ] = await Promise.all([
     supabase
       .from("generation_runs")
       .select("id, template_key, status, review_status, reviewed_at, promoted_at, baseline_tag")
+      .in("project_id", safeIds)
       .order("started_at", { ascending: false }),
-    supabase
-      .from("quality_runs")
-      .select("generation_run_id, status")
-      .order("started_at", { ascending: false }),
-    supabase
-      .from("projects")
-      .select("id, template_key"),
     supabase
       .from("blueprints")
       .select("project_id, review_status, version")
+      .in("project_id", safeIds)
       .order("version", { ascending: false }),
   ]);
 
   if (grErr) throw new Error("Failed to fetch generation runs");
+
+  // Fetch quality_runs scoped to tenant's generation runs
+  const runIds = (generationRuns ?? []).map((r) => r.id);
+  const safeRunIds = runIds.length > 0 ? runIds : ["__none__"];
+
+  const { data: qualityRuns, error: qrErr } = await supabase
+    .from("quality_runs")
+    .select("generation_run_id, status")
+    .in("generation_run_id", safeRunIds)
+    .order("started_at", { ascending: false });
+
   if (qrErr) throw new Error("Failed to fetch quality runs");
 
   const bpByTemplate = new Map<string, string | null>();

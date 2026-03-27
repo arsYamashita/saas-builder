@@ -28,11 +28,10 @@ export async function requireCurrentUser() {
 }
 
 /**
- * Verify the current user has access to the specified project via tenant
- * membership. Prevents IDOR by ensuring the project belongs to the user's
- * active tenant.
+ * Return the current user and their active tenant_id.
+ * Useful for queries that need tenant scoping without a specific resource.
  */
-export async function requireProjectAccess(projectId: string) {
+export async function requireTenantUser() {
   const user = await requireCurrentUser();
   const supabase = createAdminClient();
 
@@ -48,18 +47,30 @@ export async function requireProjectAccess(projectId: string) {
     throw new Error("Unauthorized");
   }
 
+  return { user, tenantId: tenantUser.tenant_id };
+}
+
+/**
+ * Verify the current user has access to the specified project via tenant
+ * membership. Prevents IDOR by ensuring the project belongs to the user's
+ * active tenant.
+ */
+export async function requireProjectAccess(projectId: string) {
+  const { user, tenantId } = await requireTenantUser();
+  const supabase = createAdminClient();
+
   const { data: project } = await supabase
     .from("projects")
     .select("*")
     .eq("id", projectId)
-    .eq("tenant_id", tenantUser.tenant_id)
+    .eq("tenant_id", tenantId)
     .single();
 
   if (!project) {
     throw new Error("Not found");
   }
 
-  return { user, project, tenantId: tenantUser.tenant_id };
+  return { user, project, tenantId };
 }
 
 /**
@@ -68,20 +79,8 @@ export async function requireProjectAccess(projectId: string) {
  * belongs to a project owned by the user's active tenant. Prevents IDOR.
  */
 export async function requireRunAccess(runId: string) {
-  const user = await requireCurrentUser();
+  const { user, tenantId } = await requireTenantUser();
   const supabase = createAdminClient();
-
-  const { data: tenantUser } = await supabase
-    .from("tenant_users")
-    .select("tenant_id")
-    .eq("user_id", user.id)
-    .eq("status", "active")
-    .limit(1)
-    .single();
-
-  if (!tenantUser) {
-    throw new Error("Unauthorized");
-  }
 
   const { data: run } = await supabase
     .from("generation_runs")
@@ -89,12 +88,12 @@ export async function requireRunAccess(runId: string) {
       "id, project_id, template_key, status, review_status, steps_json, projects!inner(tenant_id)"
     )
     .eq("id", runId)
-    .eq("projects.tenant_id", tenantUser.tenant_id)
+    .eq("projects.tenant_id", tenantId)
     .single();
 
   if (!run) {
     throw new Error("Not found");
   }
 
-  return { user, run, tenantId: tenantUser.tenant_id };
+  return { user, run, tenantId };
 }

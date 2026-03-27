@@ -12,7 +12,7 @@ import { Zap, Globe } from "lucide-react";
 import { createAdminClient } from "@/lib/db/supabase/admin";
 import { buildProviderScoreboard } from "@/lib/providers/provider-scoreboard";
 import type { GenerationStep } from "@/types/generation-run";
-import { requireCurrentUser } from "@/lib/auth/current-user";
+import { requireTenantUser } from "@/lib/auth/current-user";
 
 type ProviderTaskMetric = {
   provider: string;
@@ -211,19 +211,30 @@ function MetricTable({
 }
 
 async function fetchProviderScoreboardData(): Promise<ProviderScoreboardData> {
-  await requireCurrentUser();
+  const { tenantId } = await requireTenantUser();
   const supabase = createAdminClient();
+
+  // Fetch tenant-scoped project IDs
+  const { data: projects } = await supabase
+    .from("projects")
+    .select("id")
+    .eq("tenant_id", tenantId);
+
+  const projectIds = (projects ?? []).map((p: { id: string }) => p.id);
+  const safeIds = projectIds.length > 0 ? projectIds : ["__none__"];
 
   let runs: Record<string, unknown>[] = [];
   const { data: fullRuns, error: fullErr } = await supabase
     .from("generation_runs")
     .select("id, template_key, status, steps_json, promoted_at, review_status")
+    .in("project_id", safeIds)
     .order("started_at", { ascending: false });
 
   if (fullErr && fullErr.message.includes("does not exist")) {
     const { data: coreRuns, error: coreErr } = await supabase
       .from("generation_runs")
       .select("id, template_key, status, steps_json")
+      .in("project_id", safeIds)
       .order("started_at", { ascending: false });
 
     if (coreErr) throw new Error("Failed to fetch generation runs");
