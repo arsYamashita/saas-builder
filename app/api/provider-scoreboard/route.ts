@@ -2,18 +2,28 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/db/supabase/admin";
 import { buildProviderScoreboard } from "@/lib/providers/provider-scoreboard";
 import type { GenerationStep } from "@/types/generation-run";
-import { requireCurrentUser } from "@/lib/auth/current-user";
+import { requireTenantUser } from "@/lib/auth/current-user";
 
 export async function GET() {
   try {
-    await requireCurrentUser();
+    const { tenantId } = await requireTenantUser();
     const supabase = createAdminClient();
+
+    // Fetch tenant-scoped project IDs
+    const { data: projects } = await supabase
+      .from("projects")
+      .select("id")
+      .eq("tenant_id", tenantId);
+
+    const projectIds = (projects ?? []).map((p: { id: string }) => p.id);
+    const safeIds = projectIds.length > 0 ? projectIds : ["__none__"];
 
     // Try full select first; fall back to core columns if promoted_at/review_status don't exist yet
     let runs: Record<string, unknown>[] = [];
     const { data: fullRuns, error: fullErr } = await supabase
       .from("generation_runs")
       .select("id, template_key, status, steps_json, promoted_at, review_status")
+      .in("project_id", safeIds)
       .order("started_at", { ascending: false });
 
     if (fullErr && fullErr.message.includes("does not exist")) {
@@ -21,18 +31,19 @@ export async function GET() {
       const { data: coreRuns, error: coreErr } = await supabase
         .from("generation_runs")
         .select("id, template_key, status, steps_json")
+        .in("project_id", safeIds)
         .order("started_at", { ascending: false });
 
       if (coreErr) {
         return NextResponse.json(
-          { error: "Failed to fetch generation runs", details: coreErr.message },
+          { error: "Failed to fetch generation runs" },
           { status: 500 }
         );
       }
       runs = coreRuns ?? [];
     } else if (fullErr) {
       return NextResponse.json(
-        { error: "Failed to fetch generation runs", details: fullErr.message },
+        { error: "Failed to fetch generation runs" },
         { status: 500 }
       );
     } else {
@@ -57,7 +68,7 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     return NextResponse.json(
-      { error: "Failed to build provider scoreboard", details: message },
+      { error: "Failed to build provider scoreboard" },
       { status: 500 }
     );
   }
