@@ -74,7 +74,14 @@ async function fetchScoreboardData() {
     .eq("tenant_id", tenantId);
 
   const projectIds = (projects ?? []).map((p: { id: string }) => p.id);
-  const safeIds = projectIds.length > 0 ? projectIds : ["__none__"];
+
+  // If tenant has no projects, return empty scoreboard immediately
+  if (projectIds.length === 0) {
+    const templateLabels = Object.entries(TEMPLATE_REGISTRY).map(
+      ([key, entry]) => ({ templateKey: key, label: entry.label })
+    );
+    return buildScoreboard([], [], templateLabels, []);
+  }
 
   const [
     { data: generationRuns, error: grErr },
@@ -83,12 +90,12 @@ async function fetchScoreboardData() {
     supabase
       .from("generation_runs")
       .select("id, template_key, status, review_status, reviewed_at, promoted_at, baseline_tag")
-      .in("project_id", safeIds)
+      .in("project_id", projectIds)
       .order("started_at", { ascending: false }),
     supabase
       .from("blueprints")
       .select("project_id, review_status, version")
-      .in("project_id", safeIds)
+      .in("project_id", projectIds)
       .order("version", { ascending: false }),
   ]);
 
@@ -96,15 +103,18 @@ async function fetchScoreboardData() {
 
   // Fetch quality_runs scoped to tenant's generation runs
   const runIds = (generationRuns ?? []).map((r) => r.id);
-  const safeRunIds = runIds.length > 0 ? runIds : ["__none__"];
+  let qualityRuns: { generation_run_id: string; status: string }[] = [];
 
-  const { data: qualityRuns, error: qrErr } = await supabase
-    .from("quality_runs")
-    .select("generation_run_id, status")
-    .in("generation_run_id", safeRunIds)
-    .order("started_at", { ascending: false });
+  if (runIds.length > 0) {
+    const { data: qr, error: qrErr } = await supabase
+      .from("quality_runs")
+      .select("generation_run_id, status")
+      .in("generation_run_id", runIds)
+      .order("started_at", { ascending: false });
 
-  if (qrErr) throw new Error("Failed to fetch quality runs");
+    if (qrErr) throw new Error("Failed to fetch quality runs");
+    qualityRuns = qr ?? [];
+  }
 
   const bpByTemplate = new Map<string, string | null>();
   if (projects && blueprints) {

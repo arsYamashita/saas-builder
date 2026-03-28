@@ -221,20 +221,24 @@ async function fetchProviderScoreboardData(): Promise<ProviderScoreboardData> {
     .eq("tenant_id", tenantId);
 
   const projectIds = (projects ?? []).map((p: { id: string }) => p.id);
-  const safeIds = projectIds.length > 0 ? projectIds : ["__none__"];
+
+  // If tenant has no projects, return empty scoreboard immediately
+  if (projectIds.length === 0) {
+    return buildProviderScoreboard([]);
+  }
 
   let runs: Record<string, unknown>[] = [];
   const { data: fullRuns, error: fullErr } = await supabase
     .from("generation_runs")
     .select("id, template_key, status, steps_json, promoted_at, review_status")
-    .in("project_id", safeIds)
+    .in("project_id", projectIds)
     .order("started_at", { ascending: false });
 
   if (fullErr && fullErr.message.includes("does not exist")) {
     const { data: coreRuns, error: coreErr } = await supabase
       .from("generation_runs")
       .select("id, template_key, status, steps_json")
-      .in("project_id", safeIds)
+      .in("project_id", projectIds)
       .order("started_at", { ascending: false });
 
     if (coreErr) throw new Error("Failed to fetch generation runs");
