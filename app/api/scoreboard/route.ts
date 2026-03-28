@@ -16,7 +16,15 @@ export async function GET() {
       .eq("tenant_id", tenantId);
 
     const projectIds = (projects ?? []).map((p: { id: string }) => p.id);
-    const safeIds = projectIds.length > 0 ? projectIds : ["__none__"];
+
+    // If tenant has no projects, return empty scoreboard immediately
+    if (projectIds.length === 0) {
+      const templateLabels = Object.entries(TEMPLATE_REGISTRY).map(
+        ([key, entry]) => ({ templateKey: key, label: entry.label })
+      );
+      const scoreboard = buildScoreboard([], [], templateLabels, []);
+      return NextResponse.json(scoreboard);
+    }
 
     // Fetch generation_runs and blueprints scoped to tenant's projects
     const [
@@ -26,12 +34,12 @@ export async function GET() {
       supabase
         .from("generation_runs")
         .select("id, template_key, status, review_status, reviewed_at, promoted_at, baseline_tag")
-        .in("project_id", safeIds)
+        .in("project_id", projectIds)
         .order("started_at", { ascending: false }),
       supabase
         .from("blueprints")
         .select("project_id, review_status, version")
-        .in("project_id", safeIds)
+        .in("project_id", projectIds)
         .order("version", { ascending: false }),
     ]);
 
@@ -44,19 +52,22 @@ export async function GET() {
 
     // Fetch quality_runs scoped to tenant's generation runs
     const runIds = (generationRuns ?? []).map((r) => r.id);
-    const safeRunIds = runIds.length > 0 ? runIds : ["__none__"];
+    let qualityRuns: { generation_run_id: string; status: string }[] = [];
 
-    const { data: qualityRuns, error: qrErr } = await supabase
-      .from("quality_runs")
-      .select("generation_run_id, status")
-      .in("generation_run_id", safeRunIds)
-      .order("started_at", { ascending: false });
+    if (runIds.length > 0) {
+      const { data: qr, error: qrErr } = await supabase
+        .from("quality_runs")
+        .select("generation_run_id, status")
+        .in("generation_run_id", runIds)
+        .order("started_at", { ascending: false });
 
-    if (qrErr) {
-      return NextResponse.json(
-        { error: "Failed to fetch quality runs" },
-        { status: 500 }
-      );
+      if (qrErr) {
+        return NextResponse.json(
+          { error: "Failed to fetch quality runs" },
+          { status: 500 }
+        );
+      }
+      qualityRuns = qr ?? [];
     }
 
     // Build blueprint status per template: pick latest blueprint per project, then per template
@@ -96,7 +107,7 @@ export async function GET() {
         promoted_at: r.promoted_at ?? null,
         baseline_tag: r.baseline_tag ?? null,
       })),
-      (qualityRuns ?? []).map((q) => ({
+      qualityRuns.map((q) => ({
         generation_run_id: q.generation_run_id,
         status: q.status,
       })),
