@@ -34,3 +34,9 @@ owner / admin / staff / member / affiliate_manager
 ## First Template
 
 `membership_content_affiliate` — 会員サイト / コンテンツ販売 / 月額課金 / 紹介制度
+
+## Next Steps
+
+Phase 1: 共通パッケージ抽出 (@ars/env-validator, @ars/stripe-utils)
+
+See [docs/integration-design.md](docs/integration-design.md) for the full CLAN/Aria integration roadmap.
