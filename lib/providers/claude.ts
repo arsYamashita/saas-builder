@@ -10,7 +10,7 @@ import type {
   ProviderRawResult,
 } from "./provider-interface";
 
-const CLAUDE_MODEL = "claude-sonnet-4-5";
+const CLAUDE_MODEL = "claude-sonnet-4-6";
 
 export class ClaudeAdapter implements ProviderAdapter {
   readonly providerId = "claude" as const;
