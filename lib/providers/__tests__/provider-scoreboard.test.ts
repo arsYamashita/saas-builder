@@ -29,7 +29,7 @@ function makeStep(
     meta: {
       taskKind: key,
       provider: "claude",
-      model: "claude-3-sonnet",
+      model: "claude-sonnet-4-6",
       durationMs: 5000,
       ...meta,
     },
