@@ -6,6 +6,7 @@ const serverEnvSchema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   STRIPE_SECRET_KEY: z.string().startsWith("sk_"),
   STRIPE_WEBHOOK_SECRET: z.string().startsWith("whsec_"),
+  NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: z.string().startsWith("pk_"),
   NEXT_PUBLIC_APP_URL: z.string().url().optional(),
   GEMINI_API_KEY: z.string().min(1).optional(),
   CLAUDE_API_KEY: z.string().min(1).optional(),
