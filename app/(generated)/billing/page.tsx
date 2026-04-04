@@ -21,8 +21,55 @@ import {
   Sparkles,
 } from "lucide-react";
 
+type BillingPriceSummary = {
+  id: string;
+  stripe_price_id: string | null;
+  amount: number;
+  currency: string;
+  interval: "month" | "year" | null;
+  interval_count: number | null;
+  trial_days: number | null;
+  status: string;
+};
+
+type MembershipPlan = {
+  id: string;
+  name: string;
+  description?: string | null;
+  price_id: string | null;
+  status: string;
+  billing_prices?: BillingPriceSummary | BillingPriceSummary[] | null;
+};
+
+function formatPrice(price: BillingPriceSummary): string {
+  const amount = new Intl.NumberFormat("ja-JP", {
+    style: "currency",
+    currency: price.currency.toUpperCase(),
+    minimumFractionDigits: 0,
+  }).format(price.amount);
+
+  const intervalLabel =
+    price.interval === "month"
+      ? "/ 月"
+      : price.interval === "year"
+        ? "/ 年"
+        : "";
+
+  return `${amount}${intervalLabel ? " " + intervalLabel : ""}`;
+}
+
+function getActiveBillingPrice(
+  billing_prices: BillingPriceSummary | BillingPriceSummary[] | null | undefined
+): BillingPriceSummary | null {
+  if (!billing_prices) return null;
+  if (Array.isArray(billing_prices)) {
+    return billing_prices.find((p) => p.status === "active") ?? null;
+  }
+  return billing_prices.status === "active" ? billing_prices : null;
+}
+
 export default function BillingPage() {
-  const [plans, setPlans] = useState<any[]>([]);
+  const [plans, setPlans] = useState<MembershipPlan[]>([]);
   const [subscriptions, setSubscriptions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
@@ -122,38 +169,52 @@ export default function BillingPage() {
           </Card>
         ) : (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {plans.map((plan) => (
-              <Card
-                key={plan.id}
-                className="flex flex-col transition-all duration-200 hover:shadow-card-hover"
-              >
-                <CardHeader>
-                  <CardTitle className="text-lg">{plan.name}</CardTitle>
-                  {plan.description && (
-                    <CardDescription>{plan.description}</CardDescription>
-                  )}
-                </CardHeader>
-                <CardContent className="flex-1">
-                  {plan.price_id && (
-                    <p className="mb-4 text-xs text-muted-foreground font-mono">
-                      {plan.price_id}
-                    </p>
-                  )}
-                  <Button
-                    className="w-full"
-                    onClick={() => handleCheckout(plan.id)}
-                    disabled={checkoutLoading !== null}
-                  >
-                    {checkoutLoading === plan.id ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <CreditCard className="h-4 w-4" />
+            {plans.map((plan) => {
+              const activePrice = getActiveBillingPrice(plan.billing_prices);
+              return (
+                <Card
+                  key={plan.id}
+                  className="flex flex-col transition-all duration-200 hover:shadow-card-hover"
+                >
+                  <CardHeader>
+                    <CardTitle className="text-lg">{plan.name}</CardTitle>
+                    {plan.description && (
+                      <CardDescription>{plan.description}</CardDescription>
                     )}
-                    登録する
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardHeader>
+                  <CardContent className="flex-1 flex flex-col gap-4">
+                    {activePrice ? (
+                      <div className="space-y-1">
+                        <p className="text-2xl font-bold tracking-tight">
+                          {formatPrice(activePrice)}
+                        </p>
+                        {activePrice.trial_days && activePrice.trial_days > 0 ? (
+                          <p className="text-xs text-muted-foreground">
+                            {activePrice.trial_days}日間無料トライアル
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        料金情報未設定
+                      </p>
+                    )}
+                    <Button
+                      className="w-full mt-auto"
+                      onClick={() => handleCheckout(plan.id)}
+                      disabled={checkoutLoading !== null || !activePrice}
+                    >
+                      {checkoutLoading === plan.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <CreditCard className="h-4 w-4" />
+                      )}
+                      登録する
+                    </Button>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         )}
       </div>

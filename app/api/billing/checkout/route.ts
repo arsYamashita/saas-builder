@@ -27,7 +27,20 @@ export async function POST(req: NextRequest) {
 
     const { data: plan, error: planError } = await supabase
       .from("membership_plans")
-      .select("*")
+      .select(
+        `
+        *,
+        billing_prices (
+          id,
+          stripe_price_id,
+          amount,
+          currency,
+          interval,
+          trial_days,
+          status
+        )
+      `
+      )
       .eq("id", membershipPlanId)
       .eq("tenant_id", tenantId)
       .single();
@@ -42,6 +55,20 @@ export async function POST(req: NextRequest) {
     if (!plan.price_id) {
       return NextResponse.json(
         { error: "price_id is not set on the plan" },
+        { status: 400 }
+      );
+    }
+
+    // Resolve the Stripe price ID from the linked billing_prices row
+    const billingPrice = Array.isArray(plan.billing_prices)
+      ? plan.billing_prices[0]
+      : plan.billing_prices;
+
+    const stripePriceId = billingPrice?.stripe_price_id ?? null;
+
+    if (!stripePriceId) {
+      return NextResponse.json(
+        { error: "Stripe price is not configured for this plan. Please sync billing settings." },
         { status: 400 }
       );
     }
@@ -72,7 +99,7 @@ export async function POST(req: NextRequest) {
       mode: "subscription",
       line_items: [
         {
-          price: plan.price_id,
+          price: stripePriceId,
           quantity: 1,
         },
       ],
