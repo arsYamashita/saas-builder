@@ -14,3 +14,11 @@ tests/playwright/.auth/
 .DS_Store
 .claude/
 .vercel
+
+# Firebase / Google credentials (DO NOT COMMIT)
+**/google-services.json
+**/GoogleService-Info.plist
+**/firebase_options.dart
+ios/Runner/GoogleService-Info.plist
+android/app/google-services.json
+android/key.properties
