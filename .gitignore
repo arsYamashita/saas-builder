@@ -2,8 +2,10 @@ node_modules/
 .next/
 out/
 .env
+.env.*
 .env.local
 .env.*.local
+!.env.example
 *.tsbuildinfo
 next-env.d.ts
 test-results/
@@ -22,3 +24,4 @@ tests/playwright/.auth/
 ios/Runner/GoogleService-Info.plist
 android/app/google-services.json
 android/key.properties
+serviceAccountKey*.json
