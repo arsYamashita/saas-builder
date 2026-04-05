@@ -38,7 +38,7 @@ export const TASK_EXPECTED_FORMAT: Record<TaskKind, ExpectedFormat> = {
 
 // ── Provider IDs ────────────────────────────────────────────
 
-export type ProviderId = "gemini" | "claude" | "openai";
+export type ProviderId = "gemini" | "claude" | "openai" | "groq";
 
 // ── Raw Result ──────────────────────────────────────────────
 

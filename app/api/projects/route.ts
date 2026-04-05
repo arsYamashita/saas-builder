@@ -3,6 +3,7 @@ import { projectFormSchema } from "@/lib/validation/project-form";
 import { createAdminClient } from "@/lib/db/supabase/admin";
 import { slugify } from "@/lib/utils/slugify";
 import { requireCurrentUser } from "@/lib/auth/current-user";
+import { notify } from "@/lib/notifications/inbox";
 
 export async function GET() {
   try {
@@ -137,6 +138,14 @@ export async function POST(req: NextRequest) {
         { status: 500 }
       );
     }
+
+    // プロジェクト作成通知
+    await notify(
+      user.id,
+      "プロジェクトを作成しました",
+      `「${project.name}」が作成されました`,
+      { projectId: project.id, tenantId: project.tenant_id }
+    ).catch((err) => console.warn("Project creation notify failed:", err));
 
     return NextResponse.json({ project }, { status: 201 });
   } catch (error) {

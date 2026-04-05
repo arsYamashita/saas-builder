@@ -6,6 +6,7 @@ import { executeTask } from "@/lib/providers/task-router";
 import { buildStepMeta } from "@/lib/providers/step-meta";
 import { resolveTemplatePrefixPath } from "@/lib/ai/template-prompt-resolver";
 import { requireProjectAccess } from "@/lib/auth/current-user";
+import { aiRatelimit, checkRateLimit, getIp, rateLimitResponse } from "@/lib/ratelimit";
 
 type Props = {
   params: Promise<{ projectId: string }>;
@@ -27,8 +28,14 @@ function buildBlueprintJsonForClaude(blueprint: Record<string, unknown>) {
   );
 }
 
-export async function POST(_req: NextRequest, { params }: Props) {
+export async function POST(req: NextRequest, { params }: Props) {
   try {
+    const ip = getIp(req)
+    const rl = await checkRateLimit(aiRatelimit, ip)
+    if (rl && !rl.success) {
+      return rateLimitResponse(rl.limit, rl.remaining, rl.reset)
+    }
+
     const { projectId } = await params;
     const { project } = await requireProjectAccess(projectId);
     const templateKey = project?.template_key ?? "membership_content_affiliate";

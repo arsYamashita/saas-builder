@@ -4,6 +4,7 @@ import { getStripeClient } from "@/lib/billing/stripe";
 import { createAdminClient } from "@/lib/db/supabase/admin";
 import { markReferralConverted } from "@/lib/affiliate/mark-referral-converted";
 import { createCommission } from "@/lib/affiliate/commission";
+import { notify } from "@/lib/notifications/inbox";
 
 function getWebhookSecret() {
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -142,6 +143,23 @@ export async function POST(req: Request) {
       webhookSecret
     );
 
+    // べき等性チェック: 同一 event_id の二重処理をスキップ
+    const supabaseAdmin = createAdminClient();
+    const { data: existing } = await supabaseAdmin
+      .from("stripe_webhook_events")
+      .select("event_id")
+      .eq("event_id", event.id)
+      .maybeSingle();
+
+    if (existing) {
+      return new Response("ok", { status: 200 });
+    }
+
+    await supabaseAdmin.from("stripe_webhook_events").insert({
+      event_id: event.id,
+      event_type: event.type,
+    });
+
     if (event.type === "checkout.session.completed") {
       const session = event.data.object as Stripe.Checkout.Session;
 
@@ -168,6 +186,35 @@ export async function POST(req: Request) {
     if (event.type === "customer.subscription.deleted") {
       const subscription = event.data.object as Stripe.Subscription;
       await upsertSubscriptionFromStripeSubscription(subscription);
+    }
+
+    if (event.type === "invoice.payment_succeeded") {
+      const invoice = event.data.object as Stripe.Invoice;
+      const tenantId = invoice.metadata?.tenant_id ?? invoice.subscription_details?.metadata?.tenant_id;
+      const userId = invoice.metadata?.app_user_id ?? invoice.subscription_details?.metadata?.app_user_id;
+      const amount = invoice.amount_paid;
+      if (userId) {
+        await notify(
+          userId,
+          "支払いが完了しました",
+          `¥${amount.toLocaleString("ja-JP")} の請求が確認されました`,
+          { tenantId, invoiceId: invoice.id }
+        );
+      }
+    }
+
+    if (event.type === "invoice.payment_failed") {
+      const invoice = event.data.object as Stripe.Invoice;
+      const userId = invoice.metadata?.app_user_id ?? invoice.subscription_details?.metadata?.app_user_id;
+      const tenantId = invoice.metadata?.tenant_id ?? invoice.subscription_details?.metadata?.tenant_id;
+      if (userId) {
+        await notify(
+          userId,
+          "支払いに失敗しました",
+          "カード情報を確認してください",
+          { tenantId, invoiceId: invoice.id }
+        );
+      }
     }
 
     return new Response("ok", { status: 200 });

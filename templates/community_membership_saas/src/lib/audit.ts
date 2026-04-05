@@ -29,7 +29,32 @@ export type AuditAction =
   | "subscription.updated"
   | "subscription.canceled"
   | "purchase.completed"
-  | "purchase.refunded";
+  | "purchase.refunded"
+  | "course.create"
+  | "course.update"
+  | "course.delete"
+  | "module.create"
+  | "module.update"
+  | "module.delete"
+  | "lesson.create"
+  | "lesson.update"
+  | "lesson.delete"
+  | "category.create"
+  | "category.update"
+  | "category.delete"
+  | "post.create"
+  | "post.update"
+  | "post.delete"
+  | "comment.create"
+  | "comment.update"
+  | "comment.delete"
+  | "level_config.update"
+  | "invite.create"
+  | "invite.delete"
+  | "membership_question.create"
+  | "membership_question.update"
+  | "membership_question.delete"
+  | "application.review";
 
 export async function writeAuditLog(params: {
   tenantId: string;
