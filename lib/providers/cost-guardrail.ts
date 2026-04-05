@@ -68,6 +68,7 @@ export const DEFAULT_STEP_COST_ESTIMATES: Record<ProviderId, number> = {
   gemini: 0.002,   // gemini-2.0-flash: very cheap
   claude: 0.066,   // claude-sonnet-4: moderate
   openai: 0.04,    // gpt-4o: moderate
+  groq: 0.001,     // groq llama: very cheap (fast inference)
 };
 
 /**
