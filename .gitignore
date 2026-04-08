@@ -16,6 +16,7 @@ tests/playwright/.auth/
 .DS_Store
 .claude/
 .vercel
+.playwright-mcp/
 
 # X launch content generated output
 scripts/x-launch-content/output/
