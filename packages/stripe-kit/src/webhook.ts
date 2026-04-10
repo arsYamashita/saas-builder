@@ -87,7 +87,7 @@ export type HandledEventType =
   | 'customer.subscription.updated'
   | 'customer.subscription.deleted';
 
-export const HANDLED_EVENT_TYPES: ReadonlySet<HandledEventType> = new Set([
+export const HANDLED_EVENT_TYPES: ReadonlySet<HandledEventType> = new Set<HandledEventType>([
   'checkout.session.completed',
   'invoice.paid',
   'customer.subscription.updated',

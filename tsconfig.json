@@ -14,9 +14,10 @@
     "incremental": true,
     "plugins": [{ "name": "next" }],
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "@clan/stripe-kit": ["./packages/stripe-kit/src/index.ts"]
     }
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules", "exports", "templates", "packages"]
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", "packages/stripe-kit/src/**/*.ts"],
+  "exclude": ["node_modules", "exports", "templates"]
 }
