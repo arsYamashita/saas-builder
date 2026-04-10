@@ -7,6 +7,7 @@ import { executeTask } from "@/lib/providers/task-router";
 import { extractJsonFromText } from "@/lib/providers/result-normalizer";
 import { buildStepMeta, mergeStepMetas } from "@/lib/providers/step-meta";
 import { requireProjectAccess } from "@/lib/auth/current-user";
+import { aiRatelimit, checkRateLimit, getIp, rateLimitResponse } from "@/lib/ratelimit";
 
 type Props = {
   params: Promise<{ projectId: string }>;
@@ -43,8 +44,14 @@ MVP範囲: ${JSON.stringify(meta.mvpScope ?? [])}
 `.trim();
 }
 
-export async function POST(_req: NextRequest, { params }: Props) {
+export async function POST(req: NextRequest, { params }: Props) {
   try {
+    const ip = getIp(req)
+    const rl = await checkRateLimit(aiRatelimit, ip)
+    if (rl && !rl.success) {
+      return rateLimitResponse(rl.limit, rl.remaining, rl.reset)
+    }
+
     const { projectId } = await params;
     const { project } = await requireProjectAccess(projectId);
     const supabase = createAdminClient();

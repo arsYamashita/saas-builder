@@ -17,6 +17,7 @@ import { TASK_EXPECTED_FORMAT as FORMAT_MAP } from "./provider-interface";
 import { GeminiAdapter } from "./gemini";
 import { ClaudeAdapter } from "./claude";
 import { OpenAIAdapter } from "./openai";
+import { GroqAdapter } from "./groq";
 import {
   normalizeResult,
   validateNormalizedResult,
@@ -62,16 +63,16 @@ export interface TaskRoute {
  */
 const ROUTE_TABLE: Record<TaskKind, TaskRoute> = {
   intake: {
-    primary: "gemini",
-    fallback: "claude",
+    primary: "groq",
+    fallback: "gemini",
   },
   blueprint: {
     primary: "gemini",
     fallback: "claude",
   },
   brief_rewrite: {
-    primary: "gemini",
-    fallback: "claude",
+    primary: "groq",
+    fallback: "gemini",
   },
   implementation: {
     primary: "claude",
@@ -113,6 +114,7 @@ const adapters: Record<ProviderId, ProviderAdapter> = {
   gemini: new GeminiAdapter(),
   claude: new ClaudeAdapter(),
   openai: new OpenAIAdapter(),
+  groq: new GroqAdapter(),
 };
 
 // ── Router ──────────────────────────────────────────────────

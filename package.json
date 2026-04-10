@@ -2,6 +2,10 @@
   "name": "saas-builder",
   "version": "0.1.0",
   "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -23,10 +27,11 @@
     "regression:nightly": "bash scripts/run-nightly-regression.sh",
     "autopilot": "tsx scripts/run-template-autopilot.ts",
     "autopilot:live": "tsx scripts/run-template-autopilot.ts --live",
-    "autopilot:dry": "tsx scripts/run-template-autopilot.ts --dry-run"
+    "autopilot:dry": "tsx scripts/run-template-autopilot.ts --dry-run",
+    "generate:x-posts": "tsx scripts/x-launch-content/generate-posts.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.30.0",
+    "@anthropic-ai/sdk": "^0.82.0",
     "@google/generative-ai": "^0.21.0",
     "@hookform/resolvers": "^3.9.0",
     "@radix-ui/react-slot": "^1.2.4",
@@ -48,11 +53,13 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.45.0",
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.14.0",
     "@types/pdf-parse": "^1.1.5",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
     "autoprefixer": "^10.4.0",
+    "js-yaml": "^4.1.1",
     "postcss": "^8.4.0",
     "tailwindcss": "^3.4.0",
     "typescript": "^5.5.0",

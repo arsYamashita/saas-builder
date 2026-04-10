@@ -14,36 +14,134 @@ import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  AlertCircle,
+  CheckCircle2,
   CreditCard,
   ExternalLink,
   Loader2,
   Receipt,
   Sparkles,
+  Trash2,
 } from "lucide-react";
 
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+type BillingPriceSummary = {
+  id: string;
+  stripe_price_id: string | null;
+  amount: number;
+  currency: string;
+  interval: "month" | "year" | null;
+  interval_count: number | null;
+  trial_days: number | null;
+  status: string;
+};
+
+type MembershipPlan = {
+  id: string;
+  name: string;
+  description?: string | null;
+  price_id: string | null;
+  status: string;
+  billing_prices?: BillingPriceSummary | BillingPriceSummary[] | null;
+};
+
+type Subscription = {
+  id: string;
+  stripe_subscription_id: string;
+  stripe_price_id: string | null;
+  status: string;
+  current_period_start: string | null;
+  current_period_end: string | null;
+  cancel_at_period_end: boolean;
+  canceled_at: string | null;
+};
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function formatPrice(price: BillingPriceSummary): string {
+  const amount = new Intl.NumberFormat("ja-JP", {
+    style: "currency",
+    currency: price.currency.toUpperCase(),
+    minimumFractionDigits: 0,
+  }).format(price.amount);
+
+  const intervalLabel =
+    price.interval === "month"
+      ? "/ 月"
+      : price.interval === "year"
+        ? "/ 年"
+        : "";
+
+  return `${amount}${intervalLabel ? " " + intervalLabel : ""}`;
+}
+
+function formatDate(iso: string | null): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString("ja-JP", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
+
+function getActiveBillingPrice(
+  billing_prices: BillingPriceSummary | BillingPriceSummary[] | null | undefined
+): BillingPriceSummary | null {
+  if (!billing_prices) return null;
+  if (Array.isArray(billing_prices)) {
+    return billing_prices.find((p) => p.status === "active") ?? null;
+  }
+  return billing_prices.status === "active" ? billing_prices : null;
+}
+
+/** Return true if the user has an active/trialing subscription that matches this plan's price. */
+function isCurrentPlan(
+  plan: MembershipPlan,
+  subscriptions: Subscription[]
+): boolean {
+  const activePrice = getActiveBillingPrice(plan.billing_prices);
+  if (!activePrice?.stripe_price_id) return false;
+  return subscriptions.some(
+    (s) =>
+      s.stripe_price_id === activePrice.stripe_price_id &&
+      (s.status === "active" || s.status === "trialing")
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
 export default function BillingPage() {
-  const [plans, setPlans] = useState<any[]>([]);
-  const [subscriptions, setSubscriptions] = useState<any[]>([]);
+  const [plans, setPlans] = useState<MembershipPlan[]>([]);
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [loading, setLoading] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
+  const [cancelLoading, setCancelLoading] = useState(false);
+
+  const fetchData = async () => {
+    try {
+      const [plansRes, subRes] = await Promise.all([
+        fetch("/api/domain/membership-plans"),
+        fetch("/api/billing/subscriptions"),
+      ]);
+      const plansJson = await plansRes.json();
+      const subJson = await subRes.json();
+      setPlans(plansJson.plans ?? []);
+      setSubscriptions(subJson.subscriptions ?? []);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const run = async () => {
-      try {
-        const plansRes = await fetch("/api/domain/membership-plans");
-        const plansJson = await plansRes.json();
-        setPlans(plansJson.plans ?? []);
-
-        const subRes = await fetch("/api/billing/subscriptions");
-        const subJson = await subRes.json();
-        setSubscriptions(subJson.subscriptions ?? []);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    run();
+    fetchData();
   }, []);
 
   const handleCheckout = async (planId: string) => {
@@ -85,6 +183,27 @@ export default function BillingPage() {
     }
   };
 
+  const handleCancel = async () => {
+    if (!confirm("サブスクリプションをキャンセルしますか？現在の期間終了まで引き続きご利用いただけます。")) {
+      return;
+    }
+    setCancelLoading(true);
+    try {
+      const res = await fetch("/api/billing/subscriptions", { method: "DELETE" });
+      const json = await res.json();
+
+      if (!res.ok) {
+        alert(json.error || "キャンセルに失敗しました");
+        return;
+      }
+
+      // Refresh subscription list to reflect cancel_at_period_end=true
+      await fetchData();
+    } finally {
+      setCancelLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="space-y-6 animate-fade-in">
@@ -99,6 +218,12 @@ export default function BillingPage() {
       </div>
     );
   }
+
+  const hasActiveSub = subscriptions.some(
+    (s) =>
+      (s.status === "active" || s.status === "trialing") &&
+      !s.cancel_at_period_end
+  );
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -122,38 +247,65 @@ export default function BillingPage() {
           </Card>
         ) : (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {plans.map((plan) => (
-              <Card
-                key={plan.id}
-                className="flex flex-col transition-all duration-200 hover:shadow-card-hover"
-              >
-                <CardHeader>
-                  <CardTitle className="text-lg">{plan.name}</CardTitle>
-                  {plan.description && (
-                    <CardDescription>{plan.description}</CardDescription>
-                  )}
-                </CardHeader>
-                <CardContent className="flex-1">
-                  {plan.price_id && (
-                    <p className="mb-4 text-xs text-muted-foreground font-mono">
-                      {plan.price_id}
-                    </p>
-                  )}
-                  <Button
-                    className="w-full"
-                    onClick={() => handleCheckout(plan.id)}
-                    disabled={checkoutLoading !== null}
-                  >
-                    {checkoutLoading === plan.id ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <CreditCard className="h-4 w-4" />
+            {plans.map((plan) => {
+              const activePrice = getActiveBillingPrice(plan.billing_prices);
+              const isCurrent = isCurrentPlan(plan, subscriptions);
+              return (
+                <Card
+                  key={plan.id}
+                  className={`flex flex-col transition-all duration-200 hover:shadow-card-hover ${
+                    isCurrent ? "ring-2 ring-primary" : ""
+                  }`}
+                >
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-lg">{plan.name}</CardTitle>
+                      {isCurrent && (
+                        <Badge variant="success" className="flex items-center gap-1">
+                          <CheckCircle2 className="h-3 w-3" />
+                          現在のプラン
+                        </Badge>
+                      )}
+                    </div>
+                    {plan.description && (
+                      <CardDescription>{plan.description}</CardDescription>
                     )}
-                    登録する
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardHeader>
+                  <CardContent className="flex-1 flex flex-col gap-4">
+                    {activePrice ? (
+                      <div className="space-y-1">
+                        <p className="text-2xl font-bold tracking-tight">
+                          {formatPrice(activePrice)}
+                        </p>
+                        {activePrice.trial_days && activePrice.trial_days > 0 ? (
+                          <p className="text-xs text-muted-foreground">
+                            {activePrice.trial_days}日間無料トライアル
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        料金情報未設定
+                      </p>
+                    )}
+                    {!isCurrent && (
+                      <Button
+                        className="w-full mt-auto"
+                        onClick={() => handleCheckout(plan.id)}
+                        disabled={checkoutLoading !== null || !activePrice}
+                      >
+                        {checkoutLoading === plan.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <CreditCard className="h-4 w-4" />
+                        )}
+                        登録する
+                      </Button>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         )}
       </div>
@@ -180,22 +332,34 @@ export default function BillingPage() {
                     <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
                       <Receipt className="h-5 w-5 text-primary" />
                     </div>
-                    <div>
+                    <div className="space-y-1">
                       <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium capitalize">
-                          {sub.status}
-                        </p>
                         <Badge
                           variant={
-                            sub.status === "active" ? "success" : "warning"
+                            sub.status === "active" || sub.status === "trialing"
+                              ? "success"
+                              : "warning"
                           }
                           className="capitalize"
                         >
-                          {sub.status}
+                          {sub.status === "active"
+                            ? "有効"
+                            : sub.status === "trialing"
+                              ? "トライアル中"
+                              : sub.status === "canceled"
+                                ? "キャンセル済み"
+                                : sub.status}
                         </Badge>
+                        {sub.cancel_at_period_end && (
+                          <Badge variant="warning" className="flex items-center gap-1">
+                            <AlertCircle className="h-3 w-3" />
+                            期間終了でキャンセル
+                          </Badge>
+                        )}
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        {sub.current_period_start} - {sub.current_period_end}
+                        {formatDate(sub.current_period_start)} -{" "}
+                        {formatDate(sub.current_period_end)}
                       </p>
                     </div>
                   </div>
@@ -205,7 +369,7 @@ export default function BillingPage() {
           </div>
         )}
 
-        <div className="mt-4">
+        <div className="mt-4 flex flex-wrap gap-2">
           <Button
             variant="outline"
             onClick={handlePortal}
@@ -218,6 +382,21 @@ export default function BillingPage() {
             )}
             カスタマーポータルを開く
           </Button>
+
+          {hasActiveSub && (
+            <Button
+              variant="destructive"
+              onClick={handleCancel}
+              disabled={cancelLoading}
+            >
+              {cancelLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4" />
+              )}
+              サブスクリプションをキャンセル
+            </Button>
+          )}
         </div>
       </div>
     </div>

@@ -1,6 +1,6 @@
 {
   "template_key": "community_membership_saas",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "category": "community",
   "status": "GREEN",
 
@@ -8,7 +8,9 @@
     "会員制コミュニティのコンテンツ配信",
     "オンライン教育プラットフォーム",
     "有料ニュースレター / ファンクラブ",
-    "クリエイター向け課金コンテンツサイト"
+    "クリエイター向け課金コンテンツサイト",
+    "Skool型コミュニティ + コース + ゲーミフィケーション",
+    "掲示板 / フォーラム付きコミュニティ"
   ],
 
   "required_integrations": [
@@ -32,7 +34,22 @@
     { "name": "purchases", "description": "単品購入レコード" },
     { "name": "tags", "description": "テナント内タグ定義" },
     { "name": "user_tags", "description": "ユーザーへのタグ割当" },
-    { "name": "audit_logs", "description": "監査ログ (immutable)" }
+    { "name": "audit_logs", "description": "監査ログ (immutable)" },
+    { "name": "categories", "description": "フォーラムカテゴリ" },
+    { "name": "posts", "description": "フォーラム投稿 (ProseMirror JSONB)" },
+    { "name": "comments", "description": "投稿へのコメント (1段スレッド対応)" },
+    { "name": "reactions", "description": "いいね / リアクション (ポリモーフィック)" },
+    { "name": "courses", "description": "コース定義" },
+    { "name": "course_modules", "description": "コースモジュール" },
+    { "name": "course_lessons", "description": "レッスン (動画/テキスト/ドリップ)" },
+    { "name": "course_access_rules", "description": "コースアクセスルール (OR評価)" },
+    { "name": "user_lesson_progress", "description": "レッスン進捗トラッキング" },
+    { "name": "member_points", "description": "メンバーポイント集計 (リーダーボード)" },
+    { "name": "point_events", "description": "ポイントイベントログ (イベントソース)" },
+    { "name": "level_configs", "description": "レベル設定 (Skool互換デフォルト)" },
+    { "name": "invites", "description": "招待リンク / トークン" },
+    { "name": "membership_questions", "description": "参加申請スクリーニング質問" },
+    { "name": "membership_applications", "description": "メンバーシップ申請" }
   ],
 
   "roles": [
@@ -88,27 +105,34 @@
   ],
 
   "known_limitations": [
-    "v1 は 1 user = 1 tenant (マルチテナント移籍は非対応)",
-    "invite テーブルなし — tenantId を知っていれば参加可能",
-    "membership の UPDATE / DELETE API は未実装",
+    "v2 は 1 user = 1 tenant (マルチテナント移籍は非対応)",
     "最後の owner 保護は未実装",
     "self-downgrade は未対応",
     "アクセスルールは OR 評価のみ (AND / NOT は非対応)",
-    "drip content / scheduled release は非対応",
-    "stripe_event_id による完全な冪等性は未実装 (subscription は upsert で冪等、purchase は PI 重複チェック)"
+    "Chat / DM は未実装 (v3 予定)",
+    "アフィリエイトプログラムは未実装 (v3 予定)",
+    "ビデオ通話は外部サービス (Zoom/Meet) へのリンクのみ",
+    "stripe_event_id による完全な冪等性は未実装"
   ],
 
-  "v2_backlog": [
-    { "id": "v2-001", "title": "invite トークンフロー", "description": "invites テーブル + トークン + 有効期限 + invited_role", "priority": "high" },
-    { "id": "v2-002", "title": "membership UPDATE/DELETE API", "description": "role 変更、メンバー削除、status 変更", "priority": "high" },
-    { "id": "v2-003", "title": "最後の owner 保護", "description": "owner が 1 人の場合は削除/降格を拒否", "priority": "high" },
-    { "id": "v2-004", "title": "self-downgrade", "description": "自分自身の role を下げる機能", "priority": "medium" },
-    { "id": "v2-005", "title": "AND/NOT アクセスルール", "description": "rules_based で AND 条件・否定条件をサポート", "priority": "medium" },
-    { "id": "v2-006", "title": "drip content", "description": "join 日からの経過日数ベースのコンテンツ解放", "priority": "medium" },
-    { "id": "v2-007", "title": "scheduled release", "description": "公開日時指定によるコンテンツ自動公開", "priority": "medium" },
-    { "id": "v2-008", "title": "Stripe event_id 冪等性", "description": "processed_events テーブルで完全な重複排除", "priority": "low" },
-    { "id": "v2-009", "title": "マルチテナント移籍", "description": "1 user が複数 tenant に所属", "priority": "low" },
-    { "id": "v2-010", "title": "affiliate 機能", "description": "紹介リンク・コミッション管理", "priority": "low" }
+  "v2_resolved": [
+    { "id": "v2-001", "title": "invite トークンフロー", "resolved_in": "00006_member_mgmt.sql" },
+    { "id": "v2-002", "title": "membership UPDATE/DELETE API", "resolved_in": "00006_member_mgmt.sql" },
+    { "id": "v2-006", "title": "drip content", "resolved_in": "00004_classroom.sql (course_lessons.drip_days)" }
+  ],
+
+  "v3_backlog": [
+    { "id": "v3-001", "title": "最後の owner 保護", "description": "owner が 1 人の場合は削除/降格を拒否", "priority": "high" },
+    { "id": "v3-002", "title": "self-downgrade", "description": "自分自身の role を下げる機能", "priority": "medium" },
+    { "id": "v3-003", "title": "AND/NOT アクセスルール", "description": "rules_based で AND 条件・否定条件をサポート", "priority": "medium" },
+    { "id": "v3-004", "title": "scheduled release", "description": "公開日時指定によるコンテンツ自動公開", "priority": "medium" },
+    { "id": "v3-005", "title": "Chat / DM", "description": "ダイレクトメッセージ + Supabase Realtime", "priority": "medium" },
+    { "id": "v3-006", "title": "affiliate 機能", "description": "紹介リンク・コミッション・Cookie帰属・支払い管理", "priority": "medium" },
+    { "id": "v3-007", "title": "Calendar / Events", "description": "イベント・RSVP・タイムゾーン・リマインダー", "priority": "medium" },
+    { "id": "v3-008", "title": "Analytics Dashboard", "description": "日次メトリクス集計・エンゲージメント・MRR", "priority": "medium" },
+    { "id": "v3-009", "title": "Webhooks / Zapier", "description": "outgoing webhook + 配信キュー + リトライ", "priority": "low" },
+    { "id": "v3-010", "title": "Stripe event_id 冪等性", "description": "processed_events テーブルで完全な重複排除", "priority": "low" },
+    { "id": "v3-011", "title": "マルチテナント移籍", "description": "1 user が複数 tenant に所属", "priority": "low" }
   ],
 
   "generation_inputs": {

@@ -1,0 +1,356 @@
+---
+# saas-builder X ローンチ告知テンプレート（48本）
+# カテゴリ: 機能紹介(16本) / ユースケース(12本) / 技術解説(8本) / 開発裏話(8本) / CTA(4本)
+# 各投稿は 280 文字以内
+
+posts:
+  # ===============================
+  # 機能紹介 (16本)
+  # ===============================
+  - id: feat-01
+    category: 機能紹介
+    title: "AI テンプレート生成"
+    body_template: "✨ saas-builder の AI テンプレート機能、使ってみた？\n\n業種・規模を入力するだけで、マーケティング文章・メール・SNS投稿を一括生成。\n\n手動作業が 1/10 に。今すぐ無料で試せます👇"
+    hashtags: ["saasbuilder", "AI活用", "業務効率化"]
+    scheduled_at: "2026-04-08T09:00:00+09:00"
+
+  - id: feat-02
+    category: 機能紹介
+    title: "CRM 顧客管理"
+    body_template: "📊 顧客データ、バラバラに管理してませんか？\n\nsaas-builder の CRM 機能でタグ・購買履歴・コミュニケーション履歴を一元管理。\n\n中小企業向けに設計されたシンプルな UI で、すぐ使い始められます。"
+    hashtags: ["CRM", "顧客管理", "saasbuilder"]
+    scheduled_at: "2026-04-08T18:00:00+09:00"
+
+  - id: feat-03
+    category: 機能紹介
+    title: "予約管理システム"
+    body_template: "📅 予約管理を自動化したい方へ。\n\nsaas-builder の予約機能：\n✅ LINE通知連携\n✅ カレンダー自動同期\n✅ リマインダー送信\n\n「ダブルブッキング」「連絡ミス」から解放されます。"
+    hashtags: ["予約管理", "LINE連携", "saasbuilder"]
+    scheduled_at: "2026-04-09T09:00:00+09:00"
+
+  - id: feat-04
+    category: 機能紹介
+    title: "Stripe 決済連携"
+    body_template: "💳 サブスクリプション収益を自動化。\n\nsaas-builder × Stripe で：\n→ プラン選択から決済まで自動\n→ 請求書発行・失敗時リトライも自動\n→ MRR/チャーン率をリアルタイム計測\n\n開発ゼロで EC 機能を追加できます。"
+    hashtags: ["Stripe", "サブスク", "saasbuilder"]
+    scheduled_at: "2026-04-09T18:00:00+09:00"
+
+  - id: feat-05
+    category: 機能紹介
+    title: "LINE マーケティング"
+    body_template: "📱 LINE 公式アカウントを最大活用。\n\nsaas-builder の LINE 機能：\n• ステップ配信で顧客育成\n• セグメント別一斉送信\n• クリック率・開封率を可視化\n\nメルマガより高い開封率（約60%）で売上直結。"
+    hashtags: ["LINE公式アカウント", "マーケティング", "saasbuilder"]
+    scheduled_at: "2026-04-10T09:00:00+09:00"
+
+  - id: feat-06
+    category: 機能紹介
+    title: "AI コンテンツ生成"
+    body_template: "✍️ コンテンツ作成、時間かかりすぎてませんか？\n\nsaas-builder の AI コンテンツ機能：\n→ ブランドボイスを学習\n→ SNS・メール・LP を一括生成\n→ 修正も AI がサポート\n\n1本30分の作業が5分に。"
+    hashtags: ["AIコンテンツ", "コピーライティング", "saasbuilder"]
+    scheduled_at: "2026-04-10T18:00:00+09:00"
+
+  - id: feat-07
+    category: 機能紹介
+    title: "ダッシュボード分析"
+    body_template: "📈 データドリブン経営を始めよう。\n\nsaas-builder のダッシュボード：\n• 売上・顧客数・チャーン率をリアルタイム表示\n• 週次・月次レポートを自動生成\n• 目標 vs 実績の差分をアラート\n\n「なんとなく経営」から卒業。"
+    hashtags: ["データ分析", "KPI管理", "saasbuilder"]
+    scheduled_at: "2026-04-11T09:00:00+09:00"
+
+  - id: feat-08
+    category: 機能紹介
+    title: "マルチチャネル配信"
+    body_template: "🔀 LINE・メール・SMS を一括管理。\n\nチャネルをまたいだ顧客ジャーニーを設計できる、それが saas-builder。\n\n「LINE 未読 → メールでフォロー → SMS で最終プッシュ」\nこんな自動化が、ノーコードで実現。"
+    hashtags: ["マルチチャネル", "マーケティングオートメーション", "saasbuilder"]
+    scheduled_at: "2026-04-11T18:00:00+09:00"
+
+  - id: feat-09
+    category: 機能紹介
+    title: "テンプレートライブラリ"
+    body_template: "📚 500+ のプロが作ったテンプレートを即使える。\n\n業種別・シーン別に整理された saas-builder のテンプレートライブラリ。\n\n飲食・サロン・EC・士業など、あなたの業種のテンプレートがきっとある。\nゼロから作る必要なし。"
+    hashtags: ["テンプレート", "業務効率化", "saasbuilder"]
+    scheduled_at: "2026-04-12T09:00:00+09:00"
+
+  - id: feat-10
+    category: 機能紹介
+    title: "セキュリティ機能"
+    body_template: "🔒 顧客データを安全に守る。\n\nsaas-builder のセキュリティ：\n✅ エンドツーエンド暗号化\n✅ 役割ベースアクセス制御\n✅ 監査ログ完備\n✅ GDPR/個人情報保護法準拠\n\n信頼されるビジネスの土台を作ります。"
+    hashtags: ["セキュリティ", "個人情報保護", "saasbuilder"]
+    scheduled_at: "2026-04-12T18:00:00+09:00"
+
+  - id: feat-11
+    category: 機能紹介
+    title: "API 連携"
+    body_template: "🔗 既存システムとシームレスに連携。\n\nsaas-builder は REST API + Webhook で既存ツールと統合。\n\n• Notion / Slack / Google Workspace\n• 業務システム・基幹システム\n• カスタム連携も対応\n\n「乗り換え」不要。今の環境に追加するだけ。"
+    hashtags: ["API連携", "システム統合", "saasbuilder"]
+    scheduled_at: "2026-04-13T09:00:00+09:00"
+
+  - id: feat-12
+    category: 機能紹介
+    title: "チームコラボ機能"
+    body_template: "👥 チームで使うほど強くなる。\n\nsaas-builder のチーム機能：\n• 役割別アクセス権設定\n• コメント・承認ワークフロー\n• 変更履歴・バージョン管理\n\n「誰が何を変えた？」をゼロ摩擦で追跡。リモートチームに最適。"
+    hashtags: ["チームコラボ", "リモートワーク", "saasbuilder"]
+    scheduled_at: "2026-04-13T18:00:00+09:00"
+
+  - id: feat-13
+    category: 機能紹介
+    title: "モバイル対応"
+    body_template: "📱 スマホからでも全機能使える。\n\nsaas-builder はモバイルファースト設計。\n\n移動中でも：\n→ 顧客フォロー\n→ 売上確認\n→ コンテンツ投稿\n\nオフィスを持ち歩く感覚で、どこでもビジネスを動かせる。"
+    hashtags: ["モバイル対応", "スマホ", "saasbuilder"]
+    scheduled_at: "2026-04-14T09:00:00+09:00"
+
+  - id: feat-14
+    category: 機能紹介
+    title: "自動化ワークフロー"
+    body_template: "⚙️ 繰り返し作業をゼロにする。\n\nsaas-builder のワークフロー自動化：\n→ 「新規登録 → ウェルカムメール → 3日後フォロー」\n→ 「購入 → 領収書 → レビュー依頼」\n\nトリガー設定だけで、面倒な手順が全自動に。"
+    hashtags: ["自動化", "ワークフロー", "saasbuilder"]
+    scheduled_at: "2026-04-14T18:00:00+09:00"
+
+  - id: feat-15
+    category: 機能紹介
+    title: "フォーム・アンケート"
+    body_template: "📋 顧客の声を自動で収集・分析。\n\nsaas-builder のフォーム機能：\n• ドラッグ&ドロップで作成\n• 回答を自動で CRM に同期\n• AI が回答のトレンドを分析\n\n「アンケートを作ったけど集計が大変」から解放されます。"
+    hashtags: ["フォーム", "顧客満足度", "saasbuilder"]
+    scheduled_at: "2026-04-15T09:00:00+09:00"
+
+  - id: feat-16
+    category: 機能紹介
+    title: "無料トライアル"
+    body_template: "🎁 14日間、全機能を無料で試せます。\n\nクレジットカード不要。\nキャンセルも1クリック。\n\nsaas-builder で何ができるか、まず体験してみてください。\n→ 登録30秒で即スタート。"
+    hashtags: ["無料トライアル", "saasbuilder", "SaaS"]
+    scheduled_at: "2026-04-15T18:00:00+09:00"
+
+  # ===============================
+  # ユースケース (12本)
+  # ===============================
+  - id: use-01
+    category: ユースケース
+    title: "美容サロン向け"
+    body_template: "💇 美容サロンのオーナーさんへ。\n\nこんな悩みありませんか？\n「予約管理が煩雑」\n「リピーター獲得に苦労」\n「SNS 更新が追いつかない」\n\nsaas-builder を使えば、これを全部解決できます。詳しくはリンクから。"
+    hashtags: ["美容サロン", "サロン経営", "saasbuilder"]
+    scheduled_at: "2026-04-16T09:00:00+09:00"
+
+  - id: use-02
+    category: ユースケース
+    title: "飲食店向け"
+    body_template: "🍽️ 飲食店に saas-builder を導入した結果。\n\n• LINE 予約自動化 → 電話対応 70% 削減\n• 来店前リマインダー → ドタキャン 40% 減\n• 誕生日クーポン自動送信 → リピート率 25% 増\n\n月額コスト以上の効果を1ヶ月で回収。"
+    hashtags: ["飲食店", "レストラン経営", "saasbuilder"]
+    scheduled_at: "2026-04-16T18:00:00+09:00"
+
+  - id: use-03
+    category: ユースケース
+    title: "EC サイト向け"
+    body_template: "🛒 EC 運営者の方に聞きたい。\n\n「カゴ落ち」に悩んでいませんか？\n\nsaas-builder で自動フォローを設定すると：\n→ カゴ落ち後1時間でリマインドメール\n→ 24時間後に割引クーポン\n→ 回収率が平均 15% 改善"
+    hashtags: ["EC", "カゴ落ち対策", "saasbuilder"]
+    scheduled_at: "2026-04-17T09:00:00+09:00"
+
+  - id: use-04
+    category: ユースケース
+    title: "フリーランス・コンサルタント向け"
+    body_template: "💼 個人事業主・フリーランスの方へ。\n\n提案書・請求書・フォローアップ、全部自分でやってる？\n\nsaas-builder で：\n→ 提案書テンプレートを AI が生成\n→ 承認後に自動請求書発行\n→ 返信なし → 自動リマインド\n\n事務作業から解放されよう。"
+    hashtags: ["フリーランス", "個人事業主", "saasbuilder"]
+    scheduled_at: "2026-04-17T18:00:00+09:00"
+
+  - id: use-05
+    category: ユースケース
+    title: "士業・専門職向け"
+    body_template: "⚖️ 士業・専門職の先生方へ。\n\n「新規顧客獲得に時間を取られている」\n「既存客のフォローが後手に回る」\n\nsaas-builder で顧客育成を自動化すると、本業に集中できる環境が整います。\n\n相談無料、導入サポートあり。"
+    hashtags: ["士業", "専門家", "saasbuilder"]
+    scheduled_at: "2026-04-18T09:00:00+09:00"
+
+  - id: use-06
+    category: ユースケース
+    title: "スクール・教育事業向け"
+    body_template: "🎓 オンラインスクール・教室運営の方へ。\n\nsaas-builder の活用例：\n• 体験レッスン申込 → 自動で案内送信\n• 入会後のオンボーディングを自動化\n• 休会者へのウィンバック配信\n\n「生徒が自然と増える仕組み」を作れます。"
+    hashtags: ["オンラインスクール", "教育事業", "saasbuilder"]
+    scheduled_at: "2026-04-18T18:00:00+09:00"
+
+  - id: use-07
+    category: ユースケース
+    title: "不動産向け"
+    body_template: "🏠 不動産会社の営業担当の方へ。\n\n反響から成約まで、フォローの自動化で差がつく時代。\n\nsaas-builder で：\n→ 問い合わせ後 5分以内に自動返信\n→ 物件情報を自動でパーソナライズ送信\n→ 内見後のフォローを自動化\n\n成約率を上げる仕組みを作ろう。"
+    hashtags: ["不動産", "営業自動化", "saasbuilder"]
+    scheduled_at: "2026-04-19T09:00:00+09:00"
+
+  - id: use-08
+    category: ユースケース
+    title: "整体・治療院向け"
+    body_template: "💆 整体・接骨院・鍼灸院の先生へ。\n\n「新患が来ない」「リピート率が低い」\n\nこれは仕組みの問題かも。\n\nsaas-builder で：\n→ 施術後フォローを自動化\n→ 次回予約を促す LINE メッセージ\n→ 季節ごとのキャンペーン配信\n\n口コミが自然と増える仕組みを。"
+    hashtags: ["整体院", "治療院", "saasbuilder"]
+    scheduled_at: "2026-04-19T18:00:00+09:00"
+
+  - id: use-09
+    category: ユースケース
+    title: "ジム・フィットネス向け"
+    body_template: "🏋️ ジム・フィットネスのオーナーさんへ。\n\n会員の退会、止めたいですよね。\n\nsaas-builder で退会防止：\n→ 来店頻度が下がったら自動でフォロー\n→ 誕生月に特典プレゼント\n→ 目標達成で自動メッセージ\n\n会員を「顧客」から「ファン」に育てよう。"
+    hashtags: ["ジム", "フィットネス", "saasbuilder"]
+    scheduled_at: "2026-04-20T09:00:00+09:00"
+
+  - id: use-10
+    category: ユースケース
+    title: "Web制作・制作会社向け"
+    body_template: "🖥️ Web 制作者・デザイナーの方へ。\n\nクライアントに saas-builder を提案すると：\n→ 受注単価が上がる\n→ 月額保守契約に繋げやすい\n→ 成果が出ると紹介が増える\n\nパートナープログラムもあります。一緒に成長しましょう。"
+    hashtags: ["Web制作", "デジタル支援", "saasbuilder"]
+    scheduled_at: "2026-04-20T18:00:00+09:00"
+
+  - id: use-11
+    category: ユースケース
+    title: "スタートアップ向け"
+    body_template: "🚀 ゼロから saas-builder でスタートした話。\n\n創業初期、人手が足りない状況で：\n→ マーケは AI が代替\n→ 顧客管理は自動化\n→ 決済は Stripe で放置\n\n2名で 100社の顧客を管理できる体制ができた。スタートアップこそ使うべきツール。"
+    hashtags: ["スタートアップ", "起業", "saasbuilder"]
+    scheduled_at: "2026-04-21T09:00:00+09:00"
+
+  - id: use-12
+    category: ユースケース
+    title: "地方中小企業向け"
+    body_template: "🏘️ 地方の中小企業・老舗店舗の方へ。\n\n「IT ツールは難しい」と思ってませんか？\n\nsaas-builder は直感的な UI で、IT 知識がなくても使えます。\n\n導入サポート付き。地方でも、デジタルで売上を上げる仕組みを作れます。"
+    hashtags: ["中小企業", "地方創生", "saasbuilder"]
+    scheduled_at: "2026-04-21T18:00:00+09:00"
+
+  # ===============================
+  # 技術解説 (8本)
+  # ===============================
+  - id: tech-01
+    category: 技術解説
+    title: "Anthropic Claude 活用"
+    body_template: "🤖 saas-builder の AI エンジンは Anthropic Claude。\n\nなぜ Claude を選んだか？\n→ 日本語の品質が高い\n→ 安全性・倫理性のコントロールが優秀\n→ Extended Thinking で複雑な戦略立案も可能\n\n技術選定の詳細はブログで公開中。"
+    hashtags: ["Anthropic", "Claude", "saasbuilder"]
+    scheduled_at: "2026-04-22T09:00:00+09:00"
+
+  - id: tech-02
+    category: 技術解説
+    title: "Firebase + Next.js アーキテクチャ"
+    body_template: "⚙️ saas-builder の技術スタック公開。\n\n• Frontend: Next.js 14 (App Router)\n• BaaS: Firebase (Auth/Firestore/Functions)\n• AI: Anthropic Claude + Google Gemini\n• 決済: Stripe\n• デプロイ: Vercel\n\nシンプルだけど、スケールする構成を選んだ理由を解説します。"
+    hashtags: ["Nextjs", "Firebase", "saasbuilder"]
+    scheduled_at: "2026-04-22T18:00:00+09:00"
+
+  - id: tech-03
+    category: 技術解説
+    title: "LINE Webhook 実装"
+    body_template: "📡 LINE Bot を本番運用するときの落とし穴。\n\n開発時に詰まったポイント：\n→ rawBody と署名検証のタイミング\n→ Firebase Functions でのタイムアウト設定\n→ ユーザーごとの Channel Secret 管理\n\n実装で困ったら DM へ。コードも公開予定。"
+    hashtags: ["LINE", "Firebase", "saasbuilder"]
+    scheduled_at: "2026-04-23T09:00:00+09:00"
+
+  - id: tech-04
+    category: 技術解説
+    title: "Stripe Webhook セキュリティ"
+    body_template: "🔐 Stripe Webhook を安全に実装する方法。\n\n必須：`stripe.webhooks.constructEvent()` での署名検証。\n\nこれをしないと第三者が偽の決済完了通知を送れてしまう。\n\nsaas-builder では全 Webhook エンドポイントで検証済み。セキュリティは妥協しない。"
+    hashtags: ["Stripe", "セキュリティ", "saasbuilder"]
+    scheduled_at: "2026-04-23T18:00:00+09:00"
+
+  - id: tech-05
+    category: 技術解説
+    title: "Supabase RLS の活用"
+    body_template: "🔒 マルチテナント SaaS での RLS（Row Level Security）の重要性。\n\n「全ユーザーが自分のデータだけ見える」を DB レベルで保証。\n\nアプリ層でのアクセス制御だけでは不十分。\nsaas-builder では Supabase RLS を全テーブルに適用して多層防御を実現。"
+    hashtags: ["Supabase", "RLS", "saasbuilder"]
+    scheduled_at: "2026-04-24T09:00:00+09:00"
+
+  - id: tech-06
+    category: 技術解説
+    title: "AI プロンプトエンジニアリング"
+    body_template: "🧠 ビジネス文章生成 AI のプロンプト設計で大事なこと。\n\n1. ブランドボイスをシステムプロンプトに注入\n2. 出力形式を厳密に指定（JSON schema）\n3. few-shot example で品質を安定化\n4. Extended Thinking で複雑な戦略文書に対応\n\n詳細な実装パターンはブログで公開予定。"
+    hashtags: ["プロンプトエンジニアリング", "AI", "saasbuilder"]
+    scheduled_at: "2026-04-24T18:00:00+09:00"
+
+  - id: tech-07
+    category: 技術解説
+    title: "レートリミット実装"
+    body_template: "⚡ API 乱用を防ぐレートリミットの実装。\n\nsaas-builder では Upstash Redis + @upstash/ratelimit を使用。\n\n• Sliding Window アルゴリズムで正確な制御\n• エンドポイント別に閾値を設定\n• 429 レスポンスに Retry-After ヘッダーを付与\n\nサーバーコストと UX を両立する設計。"
+    hashtags: ["レートリミット", "API設計", "saasbuilder"]
+    scheduled_at: "2026-04-25T09:00:00+09:00"
+
+  - id: tech-08
+    category: 技術解説
+    title: "CI/CD パイプライン"
+    body_template: "🚀 saas-builder の CI/CD 構成。\n\nGitHub Actions で：\n→ PR 作成 → 自動テスト（Vitest + Playwright）\n→ main マージ → Vercel 自動デプロイ\n→ Firebase Functions → GitHub Actions で自動デプロイ\n\n「デプロイ忘れ」「テストスキップ」をゼロにする仕組み。"
+    hashtags: ["CICD", "DevOps", "saasbuilder"]
+    scheduled_at: "2026-04-25T18:00:00+09:00"
+
+  # ===============================
+  # 開発裏話 (8本)
+  # ===============================
+  - id: story-01
+    category: 開発裏話
+    title: "なぜ作ったか"
+    body_template: "💡 なぜ saas-builder を作ったのか。\n\n「中小企業・個人事業主がデジタルマーケを使いこなせていない」\n\n大企業向けツールは高すぎる。安いツールは機能が足りない。\n\nその「ちょうどいい」を作ろうと思って、1年間コードを書き続けた話。"
+    hashtags: ["起業家精神", "プロダクト", "saasbuilder"]
+    scheduled_at: "2026-04-26T09:00:00+09:00"
+
+  - id: story-02
+    category: 開発裏話
+    title: "最初の失敗"
+    body_template: "🔥 最初のプロトタイプは完全に失敗した。\n\n「機能を詰め込みすぎて誰も使いこなせない UI」\n\n10人にテストしてもらって全員が途中でやめた。\n\nその失敗から学んだ「シンプルさ」の重要性と、今の saas-builder がどう変わったか。"
+    hashtags: ["プロダクト開発", "失敗談", "saasbuilder"]
+    scheduled_at: "2026-04-26T18:00:00+09:00"
+
+  - id: story-03
+    category: 開発裏話
+    title: "ユーザーインタビューで気づいたこと"
+    body_template: "👂 ユーザーインタビューで気づいた衝撃の事実。\n\n「LINE が使いやすい」と言っていたユーザーが\n実は「LINE しか使えない」だった。\n\nそこから「LINE ファースト」の設計に転換。\n機能の優先順位が180度変わった話。"
+    hashtags: ["UX", "ユーザーインタビュー", "saasbuilder"]
+    scheduled_at: "2026-04-27T09:00:00+09:00"
+
+  - id: story-04
+    category: 開発裏話
+    title: "AI 機能の試行錯誤"
+    body_template: "🤖 AI コンテンツ生成、100回以上 A/B テストした話。\n\nプロンプトを変えるだけで生成品質が劇的に変わる。\n\n最終的に「業種 × ターゲット × トーン × 目的」の4軸でプロンプトを構造化。\n\nこの発見で生成品質が 3倍になった。"
+    hashtags: ["AI", "プロンプト", "saasbuilder"]
+    scheduled_at: "2026-04-27T18:00:00+09:00"
+
+  - id: story-05
+    category: 開発裏話
+    title: "Stripe 連携で詰まった話"
+    body_template: "💳 Stripe 連携で1週間詰まった話。\n\nWebhook の署名検証でずっと 400 エラー。\n\n原因：Next.js の bodyParser が raw body を消していた。\n\n解決策：API route で `bodyParser: false` を設定。\n\nこれ知らずに詰まってる人、絶対いると思う。"
+    hashtags: ["Stripe", "Next.js", "saasbuilder"]
+    scheduled_at: "2026-04-28T09:00:00+09:00"
+
+  - id: story-06
+    category: 開発裏話
+    title: "一人開発の限界と乗り越え方"
+    body_template: "💪 一人で SaaS を開発して気づいた限界と解決策。\n\n限界：デザイン・バックエンド・マーケ・営業を全部一人は無理。\n\n解決策：\n→ AI にデザインレビューを依頼\n→ テストは Playwright で自動化\n→ マーケは saas-builder 自身で自動化\n\n「AI が共同創業者」という感覚。"
+    hashtags: ["一人開発", "インディーハッカー", "saasbuilder"]
+    scheduled_at: "2026-04-28T18:00:00+09:00"
+
+  - id: story-07
+    category: 開発裏話
+    title: "β テスターへの感謝"
+    body_template: "🙏 β テスターの皆さんに感謝を。\n\n50社以上のオーナーさんがフィードバックをくれた。\n\n「予約確認メールの送信タイミングが遅い」\n「LINE の文字数制限エラーが出る」\n「料金プランが分かりにくい」\n\n全部改善した。皆さんが saas-builder を作ってくれた。"
+    hashtags: ["ベータテスト", "コミュニティ", "saasbuilder"]
+    scheduled_at: "2026-04-29T09:00:00+09:00"
+
+  - id: story-08
+    category: 開発裏話
+    title: "ローンチまでの道のり"
+    body_template: "🏁 今日、正式ローンチです。\n\n構想から1年、コード10万行、ユーザーインタビュー50回。\n\n「中小企業のデジタル化を、もっと身近に」\n\nこの思いでずっと作り続けてきた。\n\nまずは無料トライアルで、一度触ってみてください。"
+    hashtags: ["ローンチ", "saasbuilder", "スタートアップ"]
+    scheduled_at: "2026-04-29T18:00:00+09:00"
+
+  # ===============================
+  # CTA (4本)
+  # ===============================
+  - id: cta-01
+    category: CTA
+    title: "無料トライアル誘導"
+    body_template: "🎯 今すぐ saas-builder を無料で試す。\n\n14日間、クレジットカード不要、全機能使い放題。\n\n設定10分、効果を実感するのに1週間もかからない。\n\n「後でやろう」が一番のリスク。今日スタートしよう。"
+    hashtags: ["無料トライアル", "saasbuilder", "今すぐ"]
+    scheduled_at: "2026-04-30T09:00:00+09:00"
+
+  - id: cta-02
+    category: CTA
+    title: "デモ申込み"
+    body_template: "📅 saas-builder のデモを見たい方へ。\n\n「自分のビジネスにどう使えるか」\n「導入後のサポートはどうなる？」\n\n30分の無料デモで全部お答えします。\n\nDM または下のリンクから予約できます👇"
+    hashtags: ["デモ", "saasbuilder", "導入相談"]
+    scheduled_at: "2026-04-30T18:00:00+09:00"
+
+  - id: cta-03
+    category: CTA
+    title: "パートナー募集"
+    body_template: "🤝 saas-builder パートナー募集中。\n\nWeb 制作・コンサルタント・士業の方へ。\n\nクライアントに saas-builder を紹介していただくと：\n→ 紹介料 20%（永続）\n→ 優先サポート\n→ 共同マーケティング支援\n\n一緒に地域のデジタル化を進めましょう。"
+    hashtags: ["パートナー", "アフィリエイト", "saasbuilder"]
+    scheduled_at: "2026-05-01T09:00:00+09:00"
+
+  - id: cta-04
+    category: CTA
+    title: "最終 CTA"
+    body_template: "🚀 saas-builder、本日より正式提供開始。\n\n✅ AI コンテンツ生成\n✅ CRM 顧客管理\n✅ LINE マーケティング\n✅ Stripe 決済連携\n✅ 自動化ワークフロー\n\n全部入りで月額 ¥9,800〜\n14日間は無料。まずは触ってみてください。"
+    hashtags: ["saasbuilder", "ローンチ", "SaaS"]
+    scheduled_at: "2026-05-01T18:00:00+09:00"

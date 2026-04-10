@@ -1,7 +1,9 @@
 // ============================================================
-// community_membership_saas v1 — Database Types
+// community_membership_saas v2 — Database Types
 // ============================================================
 // Migration SQL と 1:1 対応。Supabase codegen の代替。
+// v1: 00001 + 00002 (schema + RLS)
+// v2: 00003 (forum) + 00004 (classroom) + 00005 (gamification) + 00006 (member_mgmt)
 // ============================================================
 
 // ─── Enums ───
@@ -23,6 +25,17 @@ export type SubscriptionStatus =
   | "paused";
 export type PurchaseStatus = "pending" | "completed" | "refunded" | "failed";
 
+// v2 enums
+export type ReactionTargetType = "post" | "comment";
+export type PointEventType =
+  | "like_received"
+  | "post_created"
+  | "comment_created"
+  | "lesson_completed"
+  | "admin_adjustment";
+export type JoinMode = "open" | "invite_only" | "application";
+export type ApplicationStatus = "pending" | "approved" | "rejected";
+
 // ─── Role Priority ───
 
 export const ROLE_PRIORITY: Record<AppRole, number> = {
@@ -39,7 +52,7 @@ export function hasRequiredRole(
   return ROLE_PRIORITY[userRole] >= ROLE_PRIORITY[requiredRole];
 }
 
-// ─── Row Types ───
+// ─── v1 Row Types ───
 
 export type Tenant = {
   id: string;
@@ -48,6 +61,7 @@ export type Tenant = {
   plan_type: string;
   status: string;
   stripe_account_id: string | null;
+  join_mode: JoinMode;
   created_at: string;
   updated_at: string;
 };
@@ -57,6 +71,9 @@ export type User = {
   email: string;
   display_name: string | null;
   avatar_url: string | null;
+  bio: string | null;
+  headline: string | null;
+  social_links: Record<string, string> | null;
   created_at: string;
   updated_at: string;
 };
@@ -179,3 +196,205 @@ export type AuditLog = {
   user_agent: string | null;
   created_at: string;
 };
+
+// ─── v2 Row Types: Forum (00003) ───
+
+export type Category = {
+  id: string;
+  tenant_id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  sort_order: number;
+  emoji: string | null;
+  created_at: string;
+};
+
+/** ProseMirror JSON document format */
+export type RichTextBody = Record<string, unknown>;
+
+export type Post = {
+  id: string;
+  tenant_id: string;
+  category_id: string;
+  author_id: string;
+  title: string;
+  body: RichTextBody;
+  is_pinned: boolean;
+  is_locked: boolean;
+  like_count: number;
+  comment_count: number;
+  published_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type Comment = {
+  id: string;
+  tenant_id: string;
+  post_id: string;
+  parent_id: string | null;
+  author_id: string;
+  body: RichTextBody;
+  like_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type Reaction = {
+  id: string;
+  tenant_id: string;
+  user_id: string;
+  target_type: ReactionTargetType;
+  target_id: string;
+  reaction_type: string;
+  created_at: string;
+};
+
+// ─── v2 Row Types: Classroom (00004) ───
+
+export type Course = {
+  id: string;
+  tenant_id: string;
+  title: string;
+  slug: string;
+  description: string | null;
+  cover_image_url: string | null;
+  status: ContentStatus;
+  visibility_mode: VisibilityMode;
+  sort_order: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CourseModule = {
+  id: string;
+  course_id: string;
+  tenant_id: string;
+  title: string;
+  description: string | null;
+  sort_order: number;
+  created_at: string;
+};
+
+export type CourseLesson = {
+  id: string;
+  module_id: string;
+  tenant_id: string;
+  title: string;
+  slug: string;
+  body: RichTextBody | null;
+  video_url: string | null;
+  video_duration_seconds: number | null;
+  transcript: string | null;
+  sort_order: number;
+  is_preview: boolean;
+  drip_days: number | null;
+  unlock_level: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CourseAccessRule = {
+  id: string;
+  tenant_id: string;
+  course_id: string;
+  rule_type: AccessRuleType;
+  plan_id: string | null;
+  tag_id: string | null;
+  created_at: string;
+};
+
+export type UserLessonProgress = {
+  id: string;
+  tenant_id: string;
+  user_id: string;
+  lesson_id: string;
+  completed: boolean;
+  completed_at: string | null;
+  last_position_seconds: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
+// ─── v2 Row Types: Gamification (00005) ───
+
+export type MemberPoints = {
+  id: string;
+  tenant_id: string;
+  user_id: string;
+  total_points: number;
+  level: number;
+  updated_at: string;
+};
+
+export type PointEvent = {
+  id: string;
+  tenant_id: string;
+  user_id: string;
+  event_type: PointEventType;
+  points: number;
+  source_type: string | null;
+  source_id: string | null;
+  created_at: string;
+};
+
+export type LevelConfig = {
+  tenant_id: string;
+  level: number;
+  name: string;
+  min_points: number;
+  rewards: { unlock_course_ids?: string[] } | null;
+};
+
+// ─── v2 Row Types: Member Management (00006) ───
+
+export type Invite = {
+  id: string;
+  tenant_id: string;
+  token: string;
+  invited_email: string | null;
+  invited_role: AppRole;
+  created_by: string;
+  expires_at: string;
+  accepted_at: string | null;
+  accepted_by: string | null;
+  max_uses: number | null;
+  use_count: number;
+  created_at: string;
+};
+
+export type MembershipQuestion = {
+  id: string;
+  tenant_id: string;
+  question_text: string;
+  is_required: boolean;
+  sort_order: number;
+  created_at: string;
+};
+
+export type MembershipApplication = {
+  id: string;
+  tenant_id: string;
+  user_id: string;
+  status: ApplicationStatus;
+  answers: { question_id: string; answer: string }[];
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+};
+
+// ─── Skool-compatible Level Thresholds ───
+
+export const DEFAULT_LEVEL_THRESHOLDS: { level: number; name: string; min_points: number }[] = [
+  { level: 1, name: "Newcomer", min_points: 0 },
+  { level: 2, name: "Active", min_points: 5 },
+  { level: 3, name: "Contributor", min_points: 20 },
+  { level: 4, name: "Regular", min_points: 65 },
+  { level: 5, name: "Enthusiast", min_points: 155 },
+  { level: 6, name: "Expert", min_points: 515 },
+  { level: 7, name: "Leader", min_points: 2015 },
+  { level: 8, name: "Legend", min_points: 8015 },
+  { level: 9, name: "Champion", min_points: 33015 },
+];

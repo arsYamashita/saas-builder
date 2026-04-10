@@ -1,0 +1,11 @@
+{
+  "name": "@saas/notify",
+  "version": "0.1.0",
+  "description": "共通インボックス通知パッケージ — aria-app / energy-scheduler などから利用",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "private": true,
+  "peerDependencies": {
+    "@supabase/supabase-js": ">=2.0.0"
+  }
+}

@@ -2,8 +2,10 @@ node_modules/
 .next/
 out/
 .env
+.env.*
 .env.local
 .env.*.local
+!.env.example
 *.tsbuildinfo
 next-env.d.ts
 test-results/
@@ -14,3 +16,17 @@ tests/playwright/.auth/
 .DS_Store
 .claude/
 .vercel
+.playwright-mcp/
+
+# X launch content generated output
+scripts/x-launch-content/output/
+!scripts/x-launch-content/output/.gitkeep
+
+# Firebase / Google credentials (DO NOT COMMIT)
+**/google-services.json
+**/GoogleService-Info.plist
+**/firebase_options.dart
+ios/Runner/GoogleService-Info.plist
+android/app/google-services.json
+android/key.properties
+serviceAccountKey*.json

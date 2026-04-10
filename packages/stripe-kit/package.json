@@ -1,0 +1,14 @@
+{
+  "name": "@clan/stripe-kit",
+  "version": "0.1.0",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "stripe": "^14.0.0",
+    "zod": "^3.22.4"
+  }
+}
