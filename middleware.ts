@@ -45,11 +45,15 @@ export function middleware(req: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // CSRF: verify Origin for state-changing API requests
+  // CSRF: verify Origin for state-changing API requests.
+  // A missing Origin (or missing appUrl config) must fail closed, not be
+  // treated as trusted — otherwise requests without an Origin header (e.g.
+  // some cross-site form POSTs) bypass the check entirely.
+  // See [[nextjs_middleware_csrf_origin_bypass]].
   if (pathname.startsWith("/api/") && req.method !== "GET") {
     const origin = req.headers.get("origin");
     const appUrl = process.env.NEXT_PUBLIC_APP_URL;
-    if (origin && appUrl && !origin.startsWith(appUrl)) {
+    if (!origin || !appUrl || !origin.startsWith(appUrl)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
   }
