@@ -8,6 +8,7 @@ import {
 import { createAdminClient } from "@/lib/db/supabase/admin";
 import type { GenerationStepMeta } from "@/types/generation-run";
 import { requireCurrentUser } from "@/lib/auth/current-user";
+import { rateLimit } from "@/lib/rate-limit";
 
 type Props = {
   params: Promise<{ projectId: string }>;
@@ -42,10 +43,24 @@ async function postInternal(path: string): Promise<{
 }
 
 export async function POST(_req: NextRequest, { params }: Props) {
+  let currentUserId: string;
   try {
-    await requireCurrentUser();
+    const user = await requireCurrentUser();
+    currentUserId = user.id;
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // generate-template drives the full blueprint -> implementation -> schema
+  // -> api-design chain (multiple paid LLM calls per invocation), so it needs
+  // its own rate limit in addition to the per-step limits on the endpoints
+  // it calls internally. See [[saas_builder_ai_endpoint_no_rate_limit]].
+  const allowed = await rateLimit(`generate:${currentUserId}`, 5, 60_000);
+  if (!allowed) {
+    return NextResponse.json(
+      { error: "生成リクエストが多すぎます。しばらく待ってから再試行してください。" },
+      { status: 429 }
+    );
   }
 
   const { projectId } = await params;

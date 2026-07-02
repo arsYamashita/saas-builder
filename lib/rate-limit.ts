@@ -44,9 +44,25 @@ const signupLimiter = redis
     })
   : null;
 
+// AI generation endpoints (generate-blueprint / generate-implementation /
+// generate-schema / generate-api-design / generate-template / rewrite-brief)
+// call paid LLM providers (Gemini / Claude / OpenAI) and had no rate limit at
+// all, so a single user could drive unbounded API cost.
+// See [[saas_builder_ai_endpoint_no_rate_limit]].
+// Backed by Upstash Redis (persistent, works across serverless instances) —
+// see [[serverless_inmemory_ratelimit]] for why an in-memory Map is unsafe here.
+const generateLimiter = redis
+  ? new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(5, "60 s"),
+      prefix: "rl:generate",
+    })
+  : null;
+
 const limiterMap: Record<string, Ratelimit | null> = {
   login: loginLimiter,
   signup: signupLimiter,
+  generate: generateLimiter,
 };
 
 /**
