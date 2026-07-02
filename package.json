@@ -23,7 +23,8 @@
     "regression:nightly": "bash scripts/run-nightly-regression.sh",
     "autopilot": "tsx scripts/run-template-autopilot.ts",
     "autopilot:live": "tsx scripts/run-template-autopilot.ts --live",
-    "autopilot:dry": "tsx scripts/run-template-autopilot.ts --dry-run"
+    "autopilot:dry": "tsx scripts/run-template-autopilot.ts --dry-run",
+    "kb:checklist": "tsx scripts/generate-error-checklist.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.30.0",

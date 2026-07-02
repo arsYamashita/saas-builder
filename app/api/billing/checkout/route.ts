@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getStripeClient } from "@/lib/billing/stripe";
+import { getStripeClient, buildIdempotencyKey } from "@/lib/payments";
 import { createAdminClient } from "@/lib/db/supabase/admin";
 import { requireCurrentUser } from "@/lib/auth/current-user";
 import { getCurrentTenantForUser } from "@/lib/tenant/current-tenant";
@@ -68,26 +68,37 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const session = await stripe.checkout.sessions.create({
-      mode: "subscription",
-      line_items: [
-        {
-          price: plan.price_id,
-          quantity: 1,
+    // Idempotency key: without it, a client-side retry or network timeout
+    // on this endpoint creates a second Checkout Session (and, once paid, a
+    // second subscription) for the same purchase attempt. Scoped to
+    // user + plan so a retry within the same time bucket reuses the
+    // original session instead of creating a duplicate one.
+    // See [[stripe_checkout_idempotency_key_missing]].
+    const idempotencyKey = buildIdempotencyKey([user.id, membershipPlanId]);
+
+    const session = await stripe.checkout.sessions.create(
+      {
+        mode: "subscription",
+        line_items: [
+          {
+            price: plan.price_id,
+            quantity: 1,
+          },
+        ],
+        success_url: `${process.env.NEXT_PUBLIC_APP_URL}/billing?checkout=success`,
+        cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/billing?checkout=cancel`,
+        client_reference_id: user.id,
+        customer_email: user.email,
+        metadata: {
+          tenant_id: tenantId,
+          app_user_id: user.id,
+          membership_plan_id: membershipPlanId,
+          referral_id: referralId ?? "",
+          affiliate_id: affiliateId ?? "",
         },
-      ],
-      success_url: `${process.env.NEXT_PUBLIC_APP_URL}/billing?checkout=success`,
-      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/billing?checkout=cancel`,
-      client_reference_id: user.id,
-      customer_email: user.email,
-      metadata: {
-        tenant_id: tenantId,
-        app_user_id: user.id,
-        membership_plan_id: membershipPlanId,
-        referral_id: referralId ?? "",
-        affiliate_id: affiliateId ?? "",
       },
-    });
+      { idempotencyKey }
+    );
 
     return NextResponse.json({ url: session.url }, { status: 200 });
   } catch (error) {
