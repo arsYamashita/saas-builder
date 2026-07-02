@@ -35,11 +35,18 @@ export async function requireTenantUser() {
   const user = await requireCurrentUser();
   const supabase = createAdminClient();
 
+  // Deterministic ordering: without ORDER BY, Postgres does not guarantee
+  // row order, so a user in multiple active tenants could non-deterministically
+  // land in a different tenant on each call. Order by created_at + id so the
+  // same (earliest-joined) tenant is always selected.
+  // See [[multitenant_tenant_selection_nondeterministic]].
   const { data: tenantUser } = await supabase
     .from("tenant_users")
     .select("tenant_id")
     .eq("user_id", user.id)
     .eq("status", "active")
+    .order("created_at", { ascending: true })
+    .order("id", { ascending: true })
     .limit(1)
     .single();
 
