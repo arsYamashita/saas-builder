@@ -3,6 +3,7 @@ import { readPrompt } from "@/lib/utils/read-prompt";
 import { executeTask } from "@/lib/providers/task-router";
 import { extractJsonFromText } from "@/lib/providers/result-normalizer";
 import { requireCurrentUser } from "@/lib/auth/current-user";
+import { rateLimit } from "@/lib/rate-limit";
 
 interface RewriteInput {
   summary: string;
@@ -18,7 +19,16 @@ interface RewriteOutput {
 
 export async function POST(req: NextRequest) {
   try {
-    await requireCurrentUser();
+    const user = await requireCurrentUser();
+
+    const allowed = await rateLimit(`generate:${user.id}`, 5, 60_000);
+    if (!allowed) {
+      return NextResponse.json(
+        { error: "生成リクエストが多すぎます。しばらく待ってから再試行してください。" },
+        { status: 429 }
+      );
+    }
+
     const body = (await req.json()) as Partial<RewriteInput>;
 
     const summary = body.summary?.trim() ?? "";

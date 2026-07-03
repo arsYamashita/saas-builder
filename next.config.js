@@ -2,6 +2,10 @@
 const nextConfig = {
   experimental: {
     optimizePackageImports: ['lucide-react'],
+    // Enables instrumentation.ts's register() hook, used to validate
+    // required env vars (Stripe keys etc.) at server startup.
+    // See [[missing_env_validation_startup]] / [[stripe_env_optional_in_zod]].
+    instrumentationHook: true,
   },
   async headers() {
     return [

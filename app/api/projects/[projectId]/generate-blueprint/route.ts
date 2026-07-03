@@ -7,6 +7,8 @@ import { executeTask } from "@/lib/providers/task-router";
 import { extractJsonFromText } from "@/lib/providers/result-normalizer";
 import { buildStepMeta, mergeStepMetas } from "@/lib/providers/step-meta";
 import { requireProjectAccess } from "@/lib/auth/current-user";
+import { rateLimit } from "@/lib/rate-limit";
+import { isInternalPipelineRequest } from "@/lib/pipeline-internal";
 
 type Props = {
   params: Promise<{ projectId: string }>;
@@ -43,10 +45,26 @@ MVP範囲: ${JSON.stringify(meta.mvpScope ?? [])}
 `.trim();
 }
 
-export async function POST(_req: NextRequest, { params }: Props) {
+export async function POST(req: NextRequest, { params }: Props) {
   try {
     const { projectId } = await params;
-    const { project } = await requireProjectAccess(projectId);
+    const { user, project } = await requireProjectAccess(projectId);
+
+    // AI generation endpoints call paid LLM providers; rate limit per user
+    // to prevent unbounded cost. See [[saas_builder_ai_endpoint_no_rate_limit]].
+    // Internal generate-template pipeline steps skip this check — the
+    // pipeline is rate-limited once at its own entry point and must run
+    // atomically without a mid-run 429. See lib/pipeline-internal.ts.
+    if (!isInternalPipelineRequest(req)) {
+      const allowed = await rateLimit(`generate:${user.id}`, 5, 60_000);
+      if (!allowed) {
+        return NextResponse.json(
+          { error: "生成リクエストが多すぎます。しばらく待ってから再試行してください。" },
+          { status: 429 }
+        );
+      }
+    }
+
     const supabase = createAdminClient();
 
     const intakePromptTemplate = await readPrompt("01-gemini-intake.md");

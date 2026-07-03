@@ -8,6 +8,11 @@ import {
 import { createAdminClient } from "@/lib/db/supabase/admin";
 import type { GenerationStepMeta } from "@/types/generation-run";
 import { requireCurrentUser } from "@/lib/auth/current-user";
+import { rateLimit } from "@/lib/rate-limit";
+import {
+  INTERNAL_PIPELINE_HEADER,
+  getInternalPipelineToken,
+} from "@/lib/pipeline-internal";
 
 type Props = {
   params: Promise<{ projectId: string }>;
@@ -20,11 +25,21 @@ async function postInternal(path: string): Promise<{
   const baseUrl =
     process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
+  // Mark this request as an internal pipeline step so the step endpoint
+  // skips its per-user rate limit — one pipeline run must be atomic and
+  // must not 429 halfway through. Auth is NOT bypassed by this header.
+  // See lib/pipeline-internal.ts.
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  const internalToken = getInternalPipelineToken();
+  if (internalToken) {
+    headers[INTERNAL_PIPELINE_HEADER] = internalToken;
+  }
+
   const res = await fetch(`${baseUrl}${path}`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers,
     cache: "no-store",
   });
 
@@ -42,10 +57,31 @@ async function postInternal(path: string): Promise<{
 }
 
 export async function POST(_req: NextRequest, { params }: Props) {
+  let currentUserId: string;
   try {
-    await requireCurrentUser();
+    const user = await requireCurrentUser();
+    currentUserId = user.id;
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // generate-template drives the full blueprint -> implementation -> schema
+  // -> api-design chain (multiple paid LLM calls per invocation). It uses a
+  // DEDICATED bucket (not the per-step `generate` bucket) so that a user who
+  // consumed part of their per-step budget moments earlier can still start a
+  // pipeline — and so a pipeline, once admitted here, runs to completion
+  // without its internal steps hitting 429 (they bypass the per-step limit
+  // via lib/pipeline-internal.ts). See [[saas_builder_ai_endpoint_no_rate_limit]].
+  const allowed = await rateLimit(
+    `generate-template:${currentUserId}`,
+    2,
+    60_000
+  );
+  if (!allowed) {
+    return NextResponse.json(
+      { error: "生成リクエストが多すぎます。しばらく待ってから再試行してください。" },
+      { status: 429 }
+    );
   }
 
   const { projectId } = await params;

@@ -44,9 +44,41 @@ const signupLimiter = redis
     })
   : null;
 
+// AI generation endpoints (generate-blueprint / generate-implementation /
+// generate-schema / generate-api-design / generate-template / rewrite-brief)
+// call paid LLM providers (Gemini / Claude / OpenAI) and had no rate limit at
+// all, so a single user could drive unbounded API cost.
+// See [[saas_builder_ai_endpoint_no_rate_limit]].
+// Backed by Upstash Redis (persistent, works across serverless instances) —
+// see [[serverless_inmemory_ratelimit]] for why an in-memory Map is unsafe here.
+const generateLimiter = redis
+  ? new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(5, "60 s"),
+      prefix: "rl:generate",
+    })
+  : null;
+
+// generate-template (the full pipeline) gets its own bucket, separate from
+// the per-step `generate` bucket: one pipeline run drives 4+ LLM steps via
+// internal calls, so if it shared the per-step bucket, a user who had used
+// e.g. generate-blueprint moments earlier could start a pipeline that dies
+// with 429 halfway through — after paid LLM work has already run. Internal
+// step calls made by the pipeline bypass the per-step limit via
+// lib/pipeline-internal.ts, making this bucket the pipeline's sole gate.
+const generateTemplateLimiter = redis
+  ? new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(2, "60 s"),
+      prefix: "rl:generate-template",
+    })
+  : null;
+
 const limiterMap: Record<string, Ratelimit | null> = {
   login: loginLimiter,
   signup: signupLimiter,
+  generate: generateLimiter,
+  "generate-template": generateTemplateLimiter,
 };
 
 /**
