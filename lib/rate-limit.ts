@@ -59,10 +59,26 @@ const generateLimiter = redis
     })
   : null;
 
+// generate-template (the full pipeline) gets its own bucket, separate from
+// the per-step `generate` bucket: one pipeline run drives 4+ LLM steps via
+// internal calls, so if it shared the per-step bucket, a user who had used
+// e.g. generate-blueprint moments earlier could start a pipeline that dies
+// with 429 halfway through — after paid LLM work has already run. Internal
+// step calls made by the pipeline bypass the per-step limit via
+// lib/pipeline-internal.ts, making this bucket the pipeline's sole gate.
+const generateTemplateLimiter = redis
+  ? new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(2, "60 s"),
+      prefix: "rl:generate-template",
+    })
+  : null;
+
 const limiterMap: Record<string, Ratelimit | null> = {
   login: loginLimiter,
   signup: signupLimiter,
   generate: generateLimiter,
+  "generate-template": generateTemplateLimiter,
 };
 
 /**

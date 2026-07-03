@@ -7,6 +7,7 @@ import { buildStepMeta } from "@/lib/providers/step-meta";
 import { resolveFinalPromptPath } from "@/lib/ai/template-prompt-resolver";
 import { requireProjectAccess } from "@/lib/auth/current-user";
 import { rateLimit } from "@/lib/rate-limit";
+import { isInternalPipelineRequest } from "@/lib/pipeline-internal";
 
 type Props = {
   params: Promise<{ projectId: string }>;
@@ -28,17 +29,22 @@ function buildBlueprintJsonForClaude(blueprint: Record<string, unknown>) {
   );
 }
 
-export async function POST(_req: NextRequest, { params }: Props) {
+export async function POST(req: NextRequest, { params }: Props) {
   try {
     const { projectId } = await params;
     const { user, project } = await requireProjectAccess(projectId);
 
-    const allowed = await rateLimit(`generate:${user.id}`, 5, 60_000);
-    if (!allowed) {
-      return NextResponse.json(
-        { error: "生成リクエストが多すぎます。しばらく待ってから再試行してください。" },
-        { status: 429 }
-      );
+    // Internal generate-template pipeline steps skip the per-step limit —
+    // the pipeline is rate-limited once at its own entry point and must run
+    // atomically without a mid-run 429. See lib/pipeline-internal.ts.
+    if (!isInternalPipelineRequest(req)) {
+      const allowed = await rateLimit(`generate:${user.id}`, 5, 60_000);
+      if (!allowed) {
+        return NextResponse.json(
+          { error: "生成リクエストが多すぎます。しばらく待ってから再試行してください。" },
+          { status: 429 }
+        );
+      }
     }
 
     const templateKey = project?.template_key ?? "membership_content_affiliate";
