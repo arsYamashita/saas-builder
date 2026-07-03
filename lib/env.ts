@@ -57,15 +57,38 @@ const baseEnvSchema = z.object({
 const STRIPE_SECRET_KEY_PREFIXES = ["sk_live_", "sk_test_"] as const;
 const STRIPE_WEBHOOK_SECRET_PREFIX = "whsec_";
 
+/**
+ * Stripe is treated as "configured" when any Stripe-related variable is set.
+ * A production deployment with Stripe fully absent boots with a loud warning
+ * instead of failing: pre-launch environments legitimately run without Stripe
+ * (billing routes already reject at point-of-use), and hard-requiring the
+ * keys took the whole site down on 2026-07-03 when production had none set.
+ * Once ANY Stripe variable is present, both server-side keys are enforced in
+ * production so a half-configured Stripe never reaches users.
+ */
+function stripeConfigured(env: {
+  STRIPE_SECRET_KEY?: string;
+  STRIPE_WEBHOOK_SECRET?: string;
+  NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY?: string;
+}): boolean {
+  return Boolean(
+    env.STRIPE_SECRET_KEY ||
+      env.STRIPE_WEBHOOK_SECRET ||
+      env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+  );
+}
+
 const serverEnvSchema = baseEnvSchema.superRefine((env, ctx) => {
   const isProduction = env.NODE_ENV === "production";
+  const enforceStripe = isProduction && stripeConfigured(env);
 
   if (!env.STRIPE_SECRET_KEY) {
-    if (isProduction) {
+    if (enforceStripe) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["STRIPE_SECRET_KEY"],
-        message: "STRIPE_SECRET_KEY is required in production",
+        message:
+          "STRIPE_SECRET_KEY is required in production when Stripe is configured",
       });
     }
   } else if (
@@ -81,11 +104,12 @@ const serverEnvSchema = baseEnvSchema.superRefine((env, ctx) => {
   }
 
   if (!env.STRIPE_WEBHOOK_SECRET) {
-    if (isProduction) {
+    if (enforceStripe) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["STRIPE_WEBHOOK_SECRET"],
-        message: "STRIPE_WEBHOOK_SECRET is required in production",
+        message:
+          "STRIPE_WEBHOOK_SECRET is required in production when Stripe is configured",
       });
     }
   } else if (!env.STRIPE_WEBHOOK_SECRET.startsWith(STRIPE_WEBHOOK_SECRET_PREFIX)) {
@@ -119,6 +143,17 @@ export function validateEnv(env: NodeJS.ProcessEnv = process.env): ServerEnv {
       .join("\n");
     throw new Error(
       `Invalid environment configuration. Fix the following and restart:\n${issues}`
+    );
+  }
+
+  if (
+    result.data.NODE_ENV === "production" &&
+    !stripeConfigured(result.data)
+  ) {
+    console.error(
+      "[env] CRITICAL: Stripe is not configured in production " +
+        "(STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET missing). " +
+        "Billing and webhooks are disabled until the keys are set."
     );
   }
 

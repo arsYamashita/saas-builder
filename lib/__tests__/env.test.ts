@@ -1,5 +1,9 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { validateEnv } from "../env";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 // See [[stripe_env_optional_in_zod]] / [[missing_env_validation_startup]]:
 // Stripe keys used to be unvalidated (or `.optional()`), so the server
@@ -43,17 +47,39 @@ describe("validateEnv", () => {
     ).not.toThrow();
   });
 
-  it("throws in production when STRIPE_SECRET_KEY is missing", () => {
+  it("throws in production when Stripe is partially configured (secret key missing)", () => {
     const { STRIPE_SECRET_KEY, ...rest } = validProdEnv;
     expect(() => validateEnv(rest as NodeJS.ProcessEnv)).toThrow(
       /STRIPE_SECRET_KEY is required in production/
     );
   });
 
-  it("throws in production when STRIPE_WEBHOOK_SECRET is missing", () => {
+  it("throws in production when Stripe is partially configured (webhook secret missing)", () => {
     const { STRIPE_WEBHOOK_SECRET, ...rest } = validProdEnv;
     expect(() => validateEnv(rest as NodeJS.ProcessEnv)).toThrow(
       /STRIPE_WEBHOOK_SECRET is required in production/
+    );
+  });
+
+  it("throws in production when only the publishable key is set", () => {
+    expect(() =>
+      validateEnv({
+        ...coreEnv,
+        NODE_ENV: "production",
+        NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: "pk_test_abc",
+      } as NodeJS.ProcessEnv)
+    ).toThrow(/STRIPE_SECRET_KEY is required in production/);
+  });
+
+  // 2026-07-03 の本番全断の再発防止: Stripe が「完全に未構成」の本番は
+  // 起動を止めず、CRITICAL 警告のみにする（billing は point-of-use で拒否される）。
+  it("boots (with a critical warning) in production when Stripe is entirely absent", () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(() =>
+      validateEnv({ ...coreEnv, NODE_ENV: "production" } as NodeJS.ProcessEnv)
+    ).not.toThrow();
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Stripe is not configured in production")
     );
   });
 
@@ -103,11 +129,12 @@ describe("validateEnv", () => {
     }
   });
 
-  it("reports both missing Stripe keys together when in production", () => {
+  it("reports both missing Stripe keys together when Stripe is partially configured in production", () => {
     try {
       validateEnv({
         ...coreEnv,
         NODE_ENV: "production",
+        NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: "pk_test_abc",
       } as unknown as NodeJS.ProcessEnv);
       throw new Error("expected validateEnv to throw");
     } catch (err) {
