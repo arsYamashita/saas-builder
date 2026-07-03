@@ -14,54 +14,48 @@ describe("buildIdempotencyKey", () => {
     vi.useRealTimers();
   });
 
-  it("produces the same key for the same parts within the same time bucket", () => {
-    vi.setSystemTime(new Date("2026-07-03T00:00:00.000Z"));
-    const a = buildIdempotencyKey(["user-1", "plan-a"]);
+  it("is a pure function of its parts — stable across time", () => {
+    // Regression test for the Codex review finding: an earlier revision
+    // included a minute time bucket, so a retry that crossed a minute
+    // boundary (timeout at 12:00:59, retry at 12:01:01) got a DIFFERENT
+    // key and created a duplicate Checkout Session. The key must be
+    // identical no matter when it is computed.
+    vi.setSystemTime(new Date("2026-07-03T12:00:59.000Z"));
+    const a = buildIdempotencyKey(["checkout", "user-1", "plan-a", "attempt-1"]);
 
-    vi.setSystemTime(new Date("2026-07-03T00:00:30.000Z")); // +30s, same 60s bucket
-    const b = buildIdempotencyKey(["user-1", "plan-a"]);
+    vi.setSystemTime(new Date("2026-07-03T12:01:01.000Z")); // crosses minute boundary
+    const b = buildIdempotencyKey(["checkout", "user-1", "plan-a", "attempt-1"]);
+
+    vi.setSystemTime(new Date("2026-07-04T09:30:00.000Z")); // much later
+    const c = buildIdempotencyKey(["checkout", "user-1", "plan-a", "attempt-1"]);
 
     expect(a).toBe(b);
-  });
-
-  it("produces a different key once the time bucket rolls over", () => {
-    vi.setSystemTime(new Date("2026-07-03T00:00:00.000Z"));
-    const a = buildIdempotencyKey(["user-1", "plan-a"]);
-
-    vi.setSystemTime(new Date("2026-07-03T00:01:01.000Z")); // +61s, next 60s bucket
-    const b = buildIdempotencyKey(["user-1", "plan-a"]);
-
-    expect(a).not.toBe(b);
+    expect(a).toBe(c);
   });
 
   it("produces different keys for different scoping parts", () => {
-    vi.setSystemTime(new Date("2026-07-03T00:00:00.000Z"));
+    const a = buildIdempotencyKey(["checkout", "user-1", "plan-a", "attempt-1"]);
+    const b = buildIdempotencyKey(["checkout", "user-2", "plan-a", "attempt-1"]);
+    const c = buildIdempotencyKey(["checkout", "user-1", "plan-b", "attempt-1"]);
+    const d = buildIdempotencyKey(["checkout", "user-1", "plan-a", "attempt-2"]);
 
-    const a = buildIdempotencyKey(["user-1", "plan-a"]);
-    const b = buildIdempotencyKey(["user-2", "plan-a"]);
-    const c = buildIdempotencyKey(["user-1", "plan-b"]);
-
-    expect(a).not.toBe(b);
-    expect(a).not.toBe(c);
+    expect(new Set([a, b, c, d]).size).toBe(4);
   });
 
-  it("respects a custom bucket size", () => {
-    vi.setSystemTime(new Date("2026-07-03T00:00:00.000Z"));
-    const a = buildIdempotencyKey(["user-1"], 1000);
+  it("drops empty parts (e.g. an omitted attempt id) without failing", () => {
+    expect(buildIdempotencyKey(["checkout", "user-1", "plan-a", ""])).toBe(
+      "checkout:user-1:plan-a"
+    );
+  });
 
-    vi.setSystemTime(new Date("2026-07-03T00:00:01.500Z")); // +1.5s, next 1s bucket
-    const b = buildIdempotencyKey(["user-1"], 1000);
-
-    expect(a).not.toBe(b);
+  it("joins parts deterministically in order", () => {
+    expect(buildIdempotencyKey(["checkout", "u1", "p1", "a1"])).toBe(
+      "checkout:u1:p1:a1"
+    );
   });
 
   it("throws when given no non-empty parts", () => {
     expect(() => buildIdempotencyKey([])).toThrow();
     expect(() => buildIdempotencyKey(["", "  "])).toThrow();
-  });
-
-  it("throws on a non-positive bucketMs", () => {
-    expect(() => buildIdempotencyKey(["user-1"], 0)).toThrow();
-    expect(() => buildIdempotencyKey(["user-1"], -5)).toThrow();
   });
 });

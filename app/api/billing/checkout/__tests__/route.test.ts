@@ -5,12 +5,18 @@ import { NextRequest } from "next/server";
 
 const mockSessionsCreate = vi.fn();
 
-vi.mock("@/lib/payments", () => ({
-  getStripeClient: () => ({
-    checkout: { sessions: { create: mockSessionsCreate } },
-  }),
-  buildIdempotencyKey: (parts: Array<string | number>) => parts.join(":"),
-}));
+// Keep the REAL buildIdempotencyKey so these tests exercise the actual key
+// derivation (the Codex review finding was precisely about its semantics);
+// only the Stripe client is stubbed.
+vi.mock("@/lib/payments", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/payments")>();
+  return {
+    ...actual,
+    getStripeClient: () => ({
+      checkout: { sessions: { create: mockSessionsCreate } },
+    }),
+  };
+});
 
 vi.mock("@/lib/db/supabase/admin", () => ({
   createAdminClient: vi.fn(),
@@ -89,8 +95,10 @@ describe("POST /api/billing/checkout", () => {
     mockSessionsCreate.mockResolvedValue({ url: "https://stripe.test/session" });
   });
 
-  it("passes an idempotencyKey scoped to user + plan as a request option", async () => {
-    const res = await POST(makeRequest({ membership_plan_id: "plan-1" }));
+  it("passes an idempotencyKey scoped to user + plan + attempt_id", async () => {
+    const res = await POST(
+      makeRequest({ membership_plan_id: "plan-1", attempt_id: "attempt-abc" })
+    );
 
     expect(res.status).toBe(200);
     expect(mockSessionsCreate).toHaveBeenCalledTimes(1);
@@ -98,7 +106,57 @@ describe("POST /api/billing/checkout", () => {
     const [, requestOptions] = mockSessionsCreate.mock.calls[0];
     // See [[stripe_checkout_idempotency_key_missing]] — a retried/duplicated
     // client request must not create a second Checkout Session.
-    expect(requestOptions).toEqual({ idempotencyKey: "user-1:plan-1" });
+    expect(requestOptions).toEqual({
+      idempotencyKey: "checkout:user-1:plan-1:attempt-abc",
+    });
+  });
+
+  it("derives an identical key for a retry of the same attempt (time-independent)", async () => {
+    // Regression test for the Codex review finding: the key previously
+    // contained a minute bucket, so a retry after a timeout that crossed a
+    // minute boundary produced a different key and a duplicate session.
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-07-03T12:00:59.000Z"));
+      await POST(
+        makeRequest({ membership_plan_id: "plan-1", attempt_id: "attempt-abc" })
+      );
+
+      vi.setSystemTime(new Date("2026-07-03T12:01:01.000Z")); // crosses the old bucket boundary
+      await POST(
+        makeRequest({ membership_plan_id: "plan-1", attempt_id: "attempt-abc" })
+      );
+
+      const keys = mockSessionsCreate.mock.calls.map(
+        ([, options]) => options.idempotencyKey
+      );
+      expect(keys).toHaveLength(2);
+      expect(keys[0]).toBe(keys[1]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("falls back to a stable user+plan key when attempt_id is omitted", async () => {
+    const res = await POST(makeRequest({ membership_plan_id: "plan-1" }));
+
+    expect(res.status).toBe(200);
+    const [, requestOptions] = mockSessionsCreate.mock.calls[0];
+    expect(requestOptions).toEqual({
+      idempotencyKey: "checkout:user-1:plan-1",
+    });
+  });
+
+  it("returns 400 without calling Stripe when attempt_id has an invalid format", async () => {
+    const res = await POST(
+      makeRequest({
+        membership_plan_id: "plan-1",
+        attempt_id: "bad key with spaces!",
+      })
+    );
+
+    expect(res.status).toBe(400);
+    expect(mockSessionsCreate).not.toHaveBeenCalled();
   });
 
   it("returns 400 without calling Stripe when membership_plan_id is missing", async () => {

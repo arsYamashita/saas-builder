@@ -10,23 +10,27 @@
  */
 
 /**
- * Builds a deterministic idempotency key for a Stripe mutation.
+ * Builds a deterministic idempotency key for a Stripe mutation from a set
+ * of STABLE scoping parts (e.g. ["checkout", userId, planId, attemptId]).
  *
- * The key is scoped to the caller-supplied parts (e.g. userId + planId)
- * plus a coarse time bucket, so:
- *  - a double-click / client retry / network timeout within the same
- *    bucket reuses the key and Stripe returns the original object instead
- *    of creating a duplicate one
- *  - a genuinely new request in a later bucket gets a fresh key, so the
- *    key does not permanently block a legitimate repeat purchase
+ * The key is a pure function of its parts — it deliberately contains NO
+ * time component. An earlier revision bucketed the key by minute, which
+ * meant a request timing out at 12:00:59 and retried at 12:01:01 fell into
+ * a different bucket, got a different key, and created a duplicate Checkout
+ * Session — exactly the failure the key exists to prevent. Stripe keeps
+ * idempotency keys valid for 24 hours, so no time component is needed:
+ * retries of the same attempt reuse the same key for the whole window.
  *
- * @param parts - ordered list of scoping values, e.g. [userId, planId]
- * @param bucketMs - time bucket size in ms (default 60_000 = 1 minute)
+ * To distinguish two GENUINELY separate purchase attempts by the same user
+ * for the same plan, the caller must include a stable per-attempt
+ * identifier in `parts` (e.g. a client-generated UUID minted when the
+ * purchase UI is rendered and reused across retries of that attempt) —
+ * never a timestamp.
+ *
+ * @param parts - ordered list of stable scoping values,
+ *   e.g. ["checkout", userId, planId, attemptId]
  */
-export function buildIdempotencyKey(
-  parts: Array<string | number>,
-  bucketMs = 60_000
-): string {
+export function buildIdempotencyKey(parts: Array<string | number>): string {
   const cleanParts = parts.map((p) => String(p).trim()).filter(Boolean);
 
   if (cleanParts.length === 0) {
@@ -35,10 +39,5 @@ export function buildIdempotencyKey(
     );
   }
 
-  if (!Number.isFinite(bucketMs) || bucketMs <= 0) {
-    throw new Error("buildIdempotencyKey requires a positive bucketMs");
-  }
-
-  const bucket = Math.floor(Date.now() / bucketMs);
-  return [...cleanParts, bucket].join(":");
+  return cleanParts.join(":");
 }

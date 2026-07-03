@@ -184,6 +184,18 @@ describe("buildChecklist", () => {
     expect(result.markdown).toContain("stripe_webhook_signature_missing");
   });
 
+  it("does not embed the machine-local vault path in the generated markdown", () => {
+    // The generated checklist is committed; embedding each developer's
+    // absolute VAULT_PATH would produce machine-dependent diffs and leak
+    // local filesystem paths (Codex review P3 on PR #26).
+    writeFixture(errorsDir(), "stripe_webhook_signature_missing.md", STRIPE_PATTERN);
+
+    const result = buildChecklist(dir, vi.fn());
+
+    expect(result.markdown).not.toContain(dir);
+    expect(result.markdown).toContain("`30_Knowledge/errors/`");
+  });
+
   it("skips unreadable files (e.g. EDEADLK) with a warning instead of throwing", () => {
     writeFixture(errorsDir(), "stripe_webhook_signature_missing.md", STRIPE_PATTERN);
     writeFixture(errorsDir(), "locked_file.md", RLS_PATTERN);

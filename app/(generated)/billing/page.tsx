@@ -27,6 +27,13 @@ export default function BillingPage() {
   const [loading, setLoading] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
+  // Purchase-attempt id: minted once per page mount and reused for every
+  // retry of the checkout call, so the server can build a STABLE Stripe
+  // idempotency key (retry after a timeout → same key → same Checkout
+  // Session, no duplicate charge). A fresh page visit mints a new id,
+  // which is what makes a genuinely new purchase attempt distinct.
+  // See [[stripe_checkout_idempotency_key_missing]].
+  const [attemptId] = useState(() => crypto.randomUUID());
 
   useEffect(() => {
     const run = async () => {
@@ -52,7 +59,7 @@ export default function BillingPage() {
       const res = await fetch("/api/billing/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ membership_plan_id: planId }),
+        body: JSON.stringify({ membership_plan_id: planId, attempt_id: attemptId }),
       });
 
       const json = await res.json();

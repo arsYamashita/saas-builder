@@ -230,13 +230,12 @@ export function buildChecklist(
     byCategory.get(item.category)!.push(item);
   }
 
-  const markdown = renderMarkdown(vaultPath, items, skipped, byCategory);
+  const markdown = renderMarkdown(items, skipped, byCategory);
 
   return { markdown, items, skipped, ignoredNonPattern };
 }
 
 function renderMarkdown(
-  vaultPath: string,
   items: ChecklistItem[],
   skipped: SkippedFile[],
   byCategory: Map<string, ChecklistItem[]>
@@ -250,9 +249,12 @@ function renderMarkdown(
       "(scripts/generate-error-checklist.ts). Do not edit by hand. -->"
   );
   lines.push("");
+  // Deliberately no absolute vault path here: the generated file is
+  // committed, so embedding each developer's local VAULT_PATH would cause
+  // machine-dependent diffs and leak local filesystem paths.
   lines.push(
     `Generated from ${items.length} error-pattern file(s) under ` +
-      `\`30_Knowledge/errors/\` in \`${vaultPath}\`.`
+      "the vault's `30_Knowledge/errors/` directory."
   );
   lines.push("");
 

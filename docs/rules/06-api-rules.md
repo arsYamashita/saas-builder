@@ -93,8 +93,15 @@ webhook error types, and idempotency-key helper from `@/lib/payments`.
   request (`checkout.sessions.create`, `paymentIntents.create`, etc.)
   MUST pass an `idempotencyKey` (use `buildIdempotencyKey()` from
   `@/lib/payments`) so a client retry or network timeout does not create a
-  duplicate Stripe object / duplicate charge. See
-  [[stripe_checkout_idempotency_key_missing]].
+  duplicate Stripe object / duplicate charge. The key MUST be built only
+  from STABLE parts — never a timestamp or time bucket (a retry that
+  crosses the bucket boundary gets a new key and defeats the protection;
+  Stripe keys stay valid for 24h, so no time component is needed). To
+  separate genuinely distinct purchase attempts, have the client mint a
+  per-attempt id (e.g. `crypto.randomUUID()` once per page mount, reused
+  across retries) and include it in the key — see
+  `app/api/billing/checkout/route.ts` for the reference implementation.
+  See [[stripe_checkout_idempotency_key_missing]].
 
 ## Rate Limiting (mandatory for auth + paid-API endpoints)
 Any endpoint that is (a) unauthenticated auth (login/signup) or (b) calls
