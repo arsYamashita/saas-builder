@@ -176,12 +176,19 @@ describe("buildChecklist", () => {
     expect(result.skipped).toHaveLength(0);
     expect(warn).not.toHaveBeenCalled();
 
+    // supabase_rls_missing.md is `resolved: true` — omitted from the
+    // rendered checklist entirely (its category has zero open items).
     expect(result.markdown).toContain("## Stripe / Payments (1)");
-    expect(result.markdown).toContain("## Supabase / RLS (1)");
+    expect(result.markdown).not.toContain("## Supabase / RLS");
     expect(result.markdown).toContain("## Idempotency / Race Conditions (1)");
     expect(result.markdown).toContain("## Rate Limit / Env Validation (1)");
     expect(result.markdown).toContain("## Other (1)");
     expect(result.markdown).toContain("stripe_webhook_signature_missing");
+    expect(result.markdown).not.toContain("supabase_rls_missing");
+
+    // header reports open/resolved counts across all 5 parsed items,
+    // even though only 4 are rendered below it.
+    expect(result.markdown).toContain("4 open / 1 resolved");
   });
 
   it("does not embed the machine-local vault path in the generated markdown", () => {
