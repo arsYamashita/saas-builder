@@ -1,5 +1,7 @@
 import { getAuthSession } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/db/supabase/admin";
+import { resetStuckSteps } from "@/lib/db/step-review";
+import type { GenerationStep } from "@/types/generation-run";
 
 export async function requireCurrentUser() {
   const session = await getAuthSession();
@@ -100,6 +102,22 @@ export async function requireRunAccess(runId: string) {
 
   if (!run) {
     throw new Error("Not found");
+  }
+
+  // Lazy stuck-step reset: a step left "running" past
+  // STUCK_STEP_THRESHOLD_MS (crashed rerun that never reached its
+  // compensating catch/finally) is auto-reset to "failed" the next time
+  // anyone reads this run, rather than staying frozen forever.
+  // See [[ai_generation_step_stuck_running]].
+  const { steps, changed } = resetStuckSteps(run.steps_json as GenerationStep[]);
+  if (changed) {
+    await supabase
+      .from("generation_runs")
+      .update({ steps_json: steps, current_step: null })
+      .eq("id", runId);
+    // Reflect the reset in the returned object too (current_step is not in
+    // this query's select list, so only steps_json needs syncing here).
+    run.steps_json = steps;
   }
 
   return { user, run, tenantId };

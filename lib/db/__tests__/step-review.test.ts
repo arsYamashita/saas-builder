@@ -9,6 +9,8 @@ import {
   areAllStepsApproved,
   computeRunReviewStatus,
   checkPromotionEligibility,
+  resetStuckSteps,
+  STUCK_STEP_THRESHOLD_MS,
 } from "../step-review";
 import type { GenerationStep } from "@/types/generation-run";
 
@@ -575,5 +577,104 @@ describe("checkPromotionEligibility", () => {
     expect(result.eligible).toBe(false);
     if (result.eligible) return;
     expect(result.reasons).toHaveLength(3);
+  });
+});
+
+// ── resetStuckSteps ──────────────────────────────────────────
+// See [[ai_generation_step_stuck_running]]: a step that entered "running"
+// and never reached a terminal state (e.g. the process was killed before
+// its compensating catch/finally ran) must not stay frozen forever.
+
+describe("resetStuckSteps", () => {
+  it("resets a running step past the threshold to failed", () => {
+    const now = Date.parse("2026-07-06T12:20:00.000Z");
+    const startedAt = "2026-07-06T12:00:00.000Z"; // 20 minutes before `now`
+
+    const steps = makeSteps();
+    steps[1] = {
+      ...steps[1],
+      status: "running",
+      meta: { ...steps[1].meta, startedAt },
+    };
+
+    const result = resetStuckSteps(steps, now);
+
+    expect(result.changed).toBe(true);
+    const impl = result.steps.find((s) => s.key === "implementation")!;
+    expect(impl.status).toBe("failed");
+    expect(impl.meta?.rerunError).toContain("Stuck detection");
+    expect(impl.meta?.startedAt).toBeUndefined();
+  });
+
+  it("does not reset a running step still within the threshold", () => {
+    const now = Date.parse("2026-07-06T12:05:00.000Z");
+    const startedAt = "2026-07-06T12:00:00.000Z"; // 5 minutes before `now`
+
+    const steps = makeSteps();
+    steps[1] = {
+      ...steps[1],
+      status: "running",
+      meta: { ...steps[1].meta, startedAt },
+    };
+
+    const result = resetStuckSteps(steps, now);
+
+    expect(result.changed).toBe(false);
+    const impl = result.steps.find((s) => s.key === "implementation")!;
+    expect(impl.status).toBe("running");
+  });
+
+  it("does not touch non-running steps", () => {
+    const steps = makeSteps();
+    const result = resetStuckSteps(steps, Date.now());
+
+    expect(result.changed).toBe(false);
+    expect(result.steps).toEqual(steps);
+  });
+
+  it("leaves a running step with no heartbeat alone (nothing to compare against)", () => {
+    const steps = makeSteps();
+    steps[1] = { ...steps[1], status: "running", meta: { ...steps[1].meta } };
+
+    const result = resetStuckSteps(steps, Date.now());
+
+    expect(result.changed).toBe(false);
+    expect(result.steps.find((s) => s.key === "implementation")!.status).toBe(
+      "running"
+    );
+  });
+
+  it("resets multiple stuck steps independently", () => {
+    const now = Date.parse("2026-07-06T12:20:00.000Z");
+    const stale = "2026-07-06T12:00:00.000Z";
+
+    const steps = makeSteps();
+    steps[1] = { ...steps[1], status: "running", meta: { ...steps[1].meta, startedAt: stale } };
+    steps[2] = { ...steps[2], status: "running", meta: { ...steps[2].meta, startedAt: stale } };
+
+    const result = resetStuckSteps(steps, now);
+
+    expect(result.changed).toBe(true);
+    expect(result.steps.find((s) => s.key === "implementation")!.status).toBe("failed");
+    expect(result.steps.find((s) => s.key === "schema")!.status).toBe("failed");
+    // Untouched steps remain completed.
+    expect(result.steps.find((s) => s.key === "blueprint")!.status).toBe("completed");
+  });
+
+  it("respects a custom threshold", () => {
+    const now = Date.parse("2026-07-06T12:00:30.000Z");
+    const startedAt = "2026-07-06T12:00:00.000Z"; // 30s before `now`
+
+    const steps = makeSteps();
+    steps[1] = { ...steps[1], status: "running", meta: { ...steps[1].meta, startedAt } };
+
+    const result = resetStuckSteps(steps, now, 10_000); // 10s threshold
+
+    expect(result.changed).toBe(true);
+    expect(result.steps.find((s) => s.key === "implementation")!.status).toBe("failed");
+  });
+
+  it("STUCK_STEP_THRESHOLD_MS is a sane, non-trivial duration", () => {
+    expect(STUCK_STEP_THRESHOLD_MS).toBeGreaterThanOrEqual(5 * 60 * 1000);
   });
 });
