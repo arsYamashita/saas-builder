@@ -24,6 +24,7 @@
     "autopilot": "tsx scripts/run-template-autopilot.ts",
     "autopilot:live": "tsx scripts/run-template-autopilot.ts --live",
     "autopilot:dry": "tsx scripts/run-template-autopilot.ts --dry-run",
+    "create-app": "tsx scripts/create-app.ts",
     "kb:checklist": "tsx scripts/generate-error-checklist.ts",
     "kb:resolve": "tsx scripts/kb-resolve.ts",
     "kb:reconcile": "tsx scripts/kb-reconcile.ts"

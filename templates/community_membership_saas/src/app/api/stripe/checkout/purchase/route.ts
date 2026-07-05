@@ -2,7 +2,11 @@
 // Guard: requireAuth + requireTenantMember
 // Audit: なし (purchase.completed は webhook 側で記録)
 //
-// body: { tenantId, contentId, successUrl, cancelUrl }
+// body: { tenantId, contentId, successUrl, cancelUrl, attemptId? }
+//
+// Uses the hardened @/lib/payments module (not a local Stripe client) for
+// idempotency-key support per docs/rules/06-api-rules.md, "Payments
+// (Stripe) — Security Baseline". See [[stripe_checkout_idempotency_key_missing]].
 
 import { createAdminClient } from "@/lib/db/supabase/admin";
 import {
@@ -11,16 +15,22 @@ import {
   handleGuardError,
   GuardError,
 } from "@/lib/guards";
-import { getStripe } from "@/lib/stripe";
+import { getStripeClient, buildIdempotencyKey } from "@/lib/payments";
+
+const ATTEMPT_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 
 export async function POST(req: Request) {
   try {
     const authUser = await requireAuth();
     const body = await req.json();
-    const { tenantId, contentId, successUrl, cancelUrl } = body;
+    const { tenantId, contentId, successUrl, cancelUrl, attemptId } = body;
 
     if (!tenantId || !contentId) {
       throw new GuardError(400, "tenantId and contentId are required");
+    }
+
+    if (attemptId !== undefined && !ATTEMPT_ID_PATTERN.test(attemptId)) {
+      throw new GuardError(400, "attemptId must match [A-Za-z0-9_-]{1,64}");
     }
 
     await requireTenantMember(authUser.id, tenantId);
@@ -58,7 +68,7 @@ export async function POST(req: Request) {
       throw new GuardError(409, "Already purchased");
     }
 
-    const stripe = getStripe();
+    const stripe = getStripeClient();
 
     // stripe_price_id がある場合はそれを使い、なければ price_data で動的作成
     const lineItem = content.stripe_price_id
@@ -72,18 +82,31 @@ export async function POST(req: Request) {
           quantity: 1,
         };
 
-    const session = await stripe.checkout.sessions.create({
-      mode: "payment",
-      line_items: [lineItem],
-      success_url: successUrl || `${process.env.NEXT_PUBLIC_APP_URL}/checkout/success`,
-      cancel_url: cancelUrl || `${process.env.NEXT_PUBLIC_APP_URL}/checkout/cancel`,
-      metadata: {
-        tenant_id: tenantId,
-        app_user_id: authUser.id,
-        content_id: contentId,
-        type: "purchase",
+    // Stable parts only — no time component (Stripe keys stay valid 24h).
+    const idempotencyKey = buildIdempotencyKey([
+      "checkout",
+      "purchase",
+      authUser.id,
+      tenantId,
+      contentId,
+      attemptId ?? "",
+    ]);
+
+    const session = await stripe.checkout.sessions.create(
+      {
+        mode: "payment",
+        line_items: [lineItem],
+        success_url: successUrl || `${process.env.NEXT_PUBLIC_APP_URL}/checkout/success`,
+        cancel_url: cancelUrl || `${process.env.NEXT_PUBLIC_APP_URL}/checkout/cancel`,
+        metadata: {
+          tenant_id: tenantId,
+          app_user_id: authUser.id,
+          content_id: contentId,
+          type: "purchase",
+        },
       },
-    });
+      { idempotencyKey }
+    );
 
     return Response.json({ url: session.url });
   } catch (error) {

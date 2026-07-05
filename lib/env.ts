@@ -126,6 +126,33 @@ export type ServerEnv = z.infer<typeof baseEnvSchema>;
 let cachedEnv: ServerEnv | null = null;
 
 /**
+ * Treats present-but-empty env values as absent.
+ *
+ * The documented setup flow is `cp .env.example .env.local`; any `KEY=`
+ * line with no value lands in process.env as an EMPTY STRING, not
+ * undefined. Zod's `.optional()` only tolerates undefined — an empty
+ * string still hits `.min(1)` / `.url()` / prefix refinements, so every
+ * optional key (GEMINI_API_KEY, UPSTASH_REDIS_REST_URL, Stripe keys, …)
+ * would throw at startup for anyone who copied the example file without
+ * filling in the optional section. Same KB class as
+ * [[missing_env_validation_startup]] / [[stripe_env_optional_in_zod]].
+ *
+ * Required keys are unaffected in outcome: an empty required value now
+ * fails with the clearer "X is required" instead of a format error.
+ * Whitespace-only values are treated as empty too — they are always a
+ * copy/paste artifact, never a real credential.
+ */
+function normalizeEnv(env: NodeJS.ProcessEnv): Record<string, string> {
+  const normalized: Record<string, string> = {};
+  for (const [key, value] of Object.entries(env)) {
+    if (value !== undefined && value.trim() !== "") {
+      normalized[key] = value;
+    }
+  }
+  return normalized;
+}
+
+/**
  * Parses and validates process.env against the schema above. Throws with a
  * readable, aggregated message (all missing/invalid vars at once) rather
  * than the caller having to hunt down one env var at a time.
@@ -135,7 +162,7 @@ let cachedEnv: ServerEnv | null = null;
  * doesn't require a fully-populated environment.
  */
 export function validateEnv(env: NodeJS.ProcessEnv = process.env): ServerEnv {
-  const result = serverEnvSchema.safeParse(env);
+  const result = serverEnvSchema.safeParse(normalizeEnv(env));
 
   if (!result.success) {
     const issues = result.error.issues

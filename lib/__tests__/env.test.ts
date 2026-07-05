@@ -154,4 +154,68 @@ describe("validateEnv", () => {
     expect(validProdEnv).not.toHaveProperty("GEMINI_API_KEY");
     expect(validProdEnv).not.toHaveProperty("UPSTASH_REDIS_REST_URL");
   });
+
+  // Regression: `cp .env.example .env.local` leaves optional keys as
+  // present-but-EMPTY strings (`GEMINI_API_KEY=`), which Zod `.optional()`
+  // does not tolerate — before normalizeEnv() this threw at startup even
+  // though every "required" var was correctly set. Same KB class as
+  // [[missing_env_validation_startup]] / [[stripe_env_optional_in_zod]].
+  describe("empty-string normalization (cp .env.example artifact)", () => {
+    it("treats empty-string optional keys as absent (no startup throw)", () => {
+      expect(() =>
+        validateEnv({
+          ...coreEnv,
+          NODE_ENV: "development",
+          GEMINI_API_KEY: "",
+          CLAUDE_API_KEY: "",
+          OPENAI_API_KEY: "",
+          UPSTASH_REDIS_REST_URL: "",
+          UPSTASH_REDIS_REST_TOKEN: "",
+          STRIPE_SECRET_KEY: "",
+          STRIPE_WEBHOOK_SECRET: "",
+          NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: "",
+        } as NodeJS.ProcessEnv)
+      ).not.toThrow();
+    });
+
+    it("treats whitespace-only optional keys as absent", () => {
+      expect(() =>
+        validateEnv({
+          ...coreEnv,
+          NODE_ENV: "development",
+          GEMINI_API_KEY: "   ",
+          UPSTASH_REDIS_REST_URL: "\t",
+        } as NodeJS.ProcessEnv)
+      ).not.toThrow();
+    });
+
+    it("an empty Stripe key does not count as 'Stripe configured' in production", () => {
+      // Empty strings must not flip the stripeConfigured() switch — that
+      // would demand the OTHER Stripe key and fail startup even though
+      // the operator never configured Stripe at all.
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      expect(() =>
+        validateEnv({
+          ...coreEnv,
+          NODE_ENV: "production",
+          STRIPE_SECRET_KEY: "",
+          STRIPE_WEBHOOK_SECRET: "",
+          NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: "",
+        } as NodeJS.ProcessEnv)
+      ).not.toThrow();
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Stripe is not configured in production")
+      );
+    });
+
+    it("still throws for an empty REQUIRED key, with the 'required' message", () => {
+      expect(() =>
+        validateEnv({
+          ...coreEnv,
+          SUPABASE_SERVICE_ROLE_KEY: "",
+          NODE_ENV: "development",
+        } as NodeJS.ProcessEnv)
+      ).toThrow(/SUPABASE_SERVICE_ROLE_KEY is required/);
+    });
+  });
 });

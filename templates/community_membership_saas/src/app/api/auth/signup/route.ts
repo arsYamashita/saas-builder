@@ -15,9 +15,18 @@
 
 import { createAdminClient } from "@/lib/db/supabase/admin";
 import { handleGuardError, GuardError } from "@/lib/guards";
+import { rateLimit } from "@/lib/rate-limit";
 
 export async function POST(req: Request) {
   try {
+    // Unauthenticated endpoint — MUST be rate limited per
+    // docs/rules/06-api-rules.md, "Rate Limiting (mandatory for auth +
+    // paid-API endpoints)". See [[saas_builder_security_debt_inheritance]].
+    const ip = req.headers.get("x-forwarded-for")?.split(",")[0] ?? "unknown";
+    if (!(await rateLimit(`signup:${ip}`, 3, 60_000))) {
+      throw new GuardError(429, "Too many requests. Please try again later.");
+    }
+
     const body = await req.json();
     const { email, password, displayName, tenantName, tenantSlug } = body;
 
@@ -98,7 +107,15 @@ export async function POST(req: Request) {
         console.error(`[signup] Failed to cleanup auth user ${userId}: ${e}`);
       });
       // app DB の孤児も削除 (tenant/users は CASCADE or まだ未作成)
-      await supabase.from("users").delete().eq("id", userId).catch(() => {});
+      // Note: PostgrestFilterBuilder is PromiseLike, not a real Promise —
+      // it has no .catch()/.finally() in this @supabase/supabase-js
+      // version's types (compiles under looser type defs but fails
+      // `tsc`/`next build` type checking). Use try/catch instead.
+      try {
+        await supabase.from("users").delete().eq("id", userId);
+      } catch {
+        // best-effort cleanup — signup already failed, don't mask that error
+      }
 
       throw new GuardError(
         500,
