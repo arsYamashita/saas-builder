@@ -9,9 +9,26 @@
  *
  * Split from generate-error-checklist.ts (the CLI entry point) so this
  * module has no top-level side effects and can be unit tested directly.
+ *
+ * 2026-07-06: the checklist mechanism was extracted to
+ * `~/Documents/my-vault/_scripts/kb_checklist/` (plain, dependency-free
+ * Node ESM) so any repo -- not just saas-builder -- can generate its own
+ * checklist (50_M5_Instructions/2026-07-03_016_kb_checklist_rollout_daycare_navigator.md).
+ * That vault copy (`error-checklist-core.mjs`) is the canonical source of
+ * truth; `scripts/generate-error-checklist.ts` in this repo is now a thin
+ * wrapper that dynamically imports and delegates to it at runtime. This
+ * file (`error-checklist-core.ts`) stays behaviorally identical to the
+ * vault copy but remains in the repo, unchanged in shape, because it is
+ * imported directly by `scripts/__tests__/error-checklist-core.test.ts`,
+ * which runs in CI (a GitHub Actions runner that never has the vault
+ * mounted) -- a dynamic import of the vault path would fail there.
+ * `scripts/__tests__/kb-checklist-vault-parity.test.ts` cross-checks this
+ * file against the vault copy, but only when the vault is present
+ * locally, as a drift tripwire that can never break CI.
  */
 import fs from "node:fs";
 import path from "node:path";
+import { matchesStack } from "./stack-filter";
 
 export interface ChecklistItem {
   file: string;
@@ -35,6 +52,13 @@ export interface BuildResult {
   skipped: SkippedFile[];
   /** .md files under errors/ that don't have `type: error_pattern` frontmatter (e.g. auto_scan_*.md logs) — excluded, not an error. */
   ignoredNonPattern: number;
+  /** Error-pattern items excluded by the `stacks` filter (see stack-filter.ts). 0 when no filter was requested. */
+  filteredByStack: number;
+}
+
+export interface BuildChecklistOptions {
+  /** Already-normalized (lowercase) stack names, e.g. `["nextjs", "supabase"]`. Omitted/empty = no filtering. */
+  stacks?: string[];
 }
 
 /**
@@ -154,8 +178,10 @@ function severityRank(severity: string): number {
  */
 export function buildChecklist(
   vaultPath: string,
-  warn: (message: string) => void = console.warn
+  warn: (message: string) => void = console.warn,
+  options: BuildChecklistOptions = {}
 ): BuildResult {
+  const stacks = options.stacks ?? [];
   const errorsDir = path.join(vaultPath, "30_Knowledge", "errors");
 
   let fileNames: string[];
@@ -172,6 +198,7 @@ export function buildChecklist(
   const items: ChecklistItem[] = [];
   const skipped: SkippedFile[] = [];
   let ignoredNonPattern = 0;
+  let filteredByStack = 0;
 
   for (const file of fileNames) {
     const fullPath = path.join(errorsDir, file);
@@ -204,6 +231,11 @@ export function buildChecklist(
         : "unknown";
     const resolved = frontmatter.resolved === true;
 
+    if (!matchesStack(tags, stacks)) {
+      filteredByStack++;
+      continue;
+    }
+
     items.push({
       file,
       slug: file.replace(/\.md$/, ""),
@@ -230,15 +262,16 @@ export function buildChecklist(
     byCategory.get(item.category)!.push(item);
   }
 
-  const markdown = renderMarkdown(items, skipped, byCategory);
+  const markdown = renderMarkdown(items, skipped, byCategory, stacks);
 
-  return { markdown, items, skipped, ignoredNonPattern };
+  return { markdown, items, skipped, ignoredNonPattern, filteredByStack };
 }
 
 function renderMarkdown(
   items: ChecklistItem[],
   skipped: SkippedFile[],
-  byCategory: Map<string, ChecklistItem[]>
+  byCategory: Map<string, ChecklistItem[]>,
+  stacks: string[]
 ): string {
   const lines: string[] = [];
 
@@ -258,7 +291,9 @@ function renderMarkdown(
   lines.push(
     `**${openCount} open / ${resolvedCount} resolved** — from ${items.length} ` +
       "error-pattern file(s) under the vault's `30_Knowledge/errors/` " +
-      "directory. Resolved items are omitted below; fix one and run " +
+      "directory" +
+      (stacks.length > 0 ? ` filtered to stack: \`${stacks.join(", ")}\`` : "") +
+      ". Resolved items are omitted below; fix one and run " +
       "`npm run kb:resolve -- <file>.md --pr <n> --project <name>` so it " +
       "stops resurfacing here."
   );

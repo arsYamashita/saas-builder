@@ -14,6 +14,17 @@
  * merge commit subject (`Merge pull request #123 from ...`), so the CLI
  * (scripts/kb-reconcile.ts) doesn't need `gh` to at least discover
  * *which* KB files a given commit claims to resolve.
+ *
+ * 2026-07-06: this logic was extracted to
+ * `~/Documents/my-vault/_scripts/kb_checklist/kb-reconcile-core.mjs`
+ * (plain, dependency-free Node ESM) so every active repo can reconcile KB
+ * entries, not just saas-builder. This TS file stays in the repo,
+ * behaviorally identical to that copy, because it is imported directly
+ * by scripts/__tests__/kb-reconcile-core.test.ts, which runs in CI (a
+ * GitHub Actions runner that never has the vault mounted) -- see
+ * scripts/error-checklist-core.ts's header comment for the full
+ * rationale. scripts/kb-reconcile.ts (the CLI entry point) is a thin
+ * wrapper that delegates to the vault copy at runtime instead.
  */
 
 const TRAILER_RE = /^\s*Resolves-KB:\s*(.+)$/gim;
