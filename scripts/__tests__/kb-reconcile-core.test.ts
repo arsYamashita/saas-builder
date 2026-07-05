@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
 import {
   parseResolvesKbTrailers,
   extractPrNumber,
@@ -35,6 +37,66 @@ describe("parseResolvesKbTrailers", () => {
 
   it("returns an empty array when there is no trailer", () => {
     expect(parseResolvesKbTrailers("## Summary\n\nNothing here.\n")).toEqual([]);
+  });
+
+  it("ignores trailers inside multi-line HTML comments (PR template default body)", () => {
+    // Regression: Codex review P2 on PR #29. A PR opened from the
+    // untouched default .github/PULL_REQUEST_TEMPLATE.md must not
+    // "resolve" anything just because the template's explanatory
+    // comment mentions the trailer format.
+    const body = `## Resolves-KB
+
+<!--
+If this PR fixes a KB pattern, add trailer lines below. Example:
+
+Resolves-KB: stripe_checkout_idempotency_key_missing.md
+-->
+
+## Test Plan
+`;
+    expect(parseResolvesKbTrailers(body)).toEqual([]);
+  });
+
+  it("ignores single-line HTML-commented trailers too", () => {
+    const body = `<!-- Resolves-KB: a.md -->\n`;
+    expect(parseResolvesKbTrailers(body)).toEqual([]);
+  });
+
+  it("still picks up real trailers outside HTML comments in the same body", () => {
+    const body = `## Resolves-KB
+
+<!--
+Explanatory comment mentioning the format:
+Resolves-KB: fake_example_from_template.md
+-->
+Resolves-KB: real_pattern.md
+
+<!-- another comment -->
+Resolves-KB: second_real_pattern.md
+`;
+    expect(parseResolvesKbTrailers(body)).toEqual([
+      "real_pattern.md",
+      "second_real_pattern.md",
+    ]);
+  });
+
+  it("treats an unterminated HTML comment as commented-out to the end (matches GitHub rendering)", () => {
+    const body = `Resolves-KB: before_comment.md\n<!-- oops, never closed\nResolves-KB: swallowed.md\n`;
+    expect(parseResolvesKbTrailers(body)).toEqual(["before_comment.md"]);
+  });
+
+  it("the repo's actual PR template yields zero trailers (defense layer 2)", () => {
+    // Both defenses must hold independently: even if the comment-stripping
+    // above were removed, the template text itself must not contain a
+    // line the trailer regex would match.
+    const template = fs.readFileSync(
+      path.join(__dirname, "..", "..", ".github", "PULL_REQUEST_TEMPLATE.md"),
+      "utf8"
+    );
+    expect(parseResolvesKbTrailers(template)).toEqual([]);
+    // layer 2 on its own: strip nothing, the raw text still has no
+    // parseable `Resolves-KB:` trailer line.
+    expect(template).not.toMatch(/^\s*Resolves-KB:/im);
   });
 });
 

@@ -19,6 +19,11 @@
 const TRAILER_RE = /^\s*Resolves-KB:\s*(.+)$/gim;
 const SQUASH_PR_RE = /\(#(\d+)\)\s*$/;
 const MERGE_PR_RE = /^Merge pull request #(\d+)\b/;
+// Multi-line HTML comments. Non-greedy, so `<!-- a --> real <!-- b -->`
+// drops only the comments, not the text between them. An unterminated
+// `<!--` swallows the rest of the text — same as how GitHub renders it,
+// so what the PR author sees is what gets parsed.
+const HTML_COMMENT_RE = /<!--[\s\S]*?(?:-->|$)/g;
 
 /**
  * Extracts every `.md` file named in `Resolves-KB:` trailer lines within
@@ -27,12 +32,20 @@ const MERGE_PR_RE = /^Merge pull request #(\d+)\b/;
  * suffixes are normalized on. Case-insensitive on the `Resolves-KB:` key
  * (GitHub trailer conventions vary); returns files in first-seen order,
  * de-duplicated.
+ *
+ * Text inside HTML comments (`<!-- ... -->`, including multi-line ones)
+ * is ignored: PR bodies opened from .github/PULL_REQUEST_TEMPLATE.md
+ * carry the template's explanatory comment verbatim, and a parseable
+ * example trailer in that comment would make every untouched-template PR
+ * falsely "resolve" whatever KB file the example mentioned
+ * (Codex review P2 on PR #29).
  */
 export function parseResolvesKbTrailers(text: string): string[] {
   const files: string[] = [];
   const seen = new Set<string>();
+  const visibleText = text.replace(HTML_COMMENT_RE, "");
 
-  for (const match of Array.from(text.matchAll(TRAILER_RE))) {
+  for (const match of Array.from(visibleText.matchAll(TRAILER_RE))) {
     const rest = match[1];
     for (const rawEntry of rest.split(/[,\s]+/)) {
       const entry = rawEntry.trim();
