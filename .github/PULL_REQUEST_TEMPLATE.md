@@ -24,6 +24,25 @@ change, then open the generated file for the specific items.
       `docs/error-kb-checklist.md#rate-limit--env-validation`
 - [ ] None of the above apply to this change
 
+## Resolves-KB
+
+<!--
+If this PR actually fixes an error pattern tracked in the vault's
+30_Knowledge/errors/, add one trailer line per file below this comment
+(do not just tick the checklist above — this is what
+`npm run kb:reconcile` scans for after merge to flip `resolved: true`
+in the vault automatically, so the pattern stops resurfacing in future
+KB checklists / M2 instructions). Leave this section empty if not
+applicable.
+
+Format: write "Resolves-KB", then a colon, then the error file name —
+e.g. the key, a colon, and some-error-pattern.md — one file per line
+(the .md suffix is optional). The parser also skips anything inside
+HTML comments like this one, so a deliberately parseable example is
+avoided here as defense-in-depth: an unedited default template must
+never register as a real trailer.
+-->
+
 ## Test Plan
 
 - [ ] `npm run test:unit` passes

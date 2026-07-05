@@ -242,6 +242,9 @@ function renderMarkdown(
 ): string {
   const lines: string[] = [];
 
+  const openCount = items.filter((item) => !item.resolved).length;
+  const resolvedCount = items.length - openCount;
+
   lines.push("# Error KB Pre-flight Checklist");
   lines.push("");
   lines.push(
@@ -253,8 +256,11 @@ function renderMarkdown(
   // committed, so embedding each developer's local VAULT_PATH would cause
   // machine-dependent diffs and leak local filesystem paths.
   lines.push(
-    `Generated from ${items.length} error-pattern file(s) under ` +
-      "the vault's `30_Knowledge/errors/` directory."
+    `**${openCount} open / ${resolvedCount} resolved** — from ${items.length} ` +
+      "error-pattern file(s) under the vault's `30_Knowledge/errors/` " +
+      "directory. Resolved items are omitted below; fix one and run " +
+      "`npm run kb:resolve -- <file>.md --pr <n> --project <name>` so it " +
+      "stops resurfacing here."
   );
   lines.push("");
 
@@ -272,16 +278,19 @@ function renderMarkdown(
   lines.push("");
 
   for (const [category, categoryItems] of Array.from(byCategory.entries())) {
-    if (categoryItems.length === 0) continue;
+    // resolved: true entries are deliberately excluded from the
+    // checklist body — this file is a pre-flight list of what's still
+    // open, not a full KB index. Once a fix lands, `npm run kb:resolve`
+    // should flip `resolved: true` in the vault and the item drops out
+    // here on the next `npm run kb:checklist` run.
+    const openItems = categoryItems.filter((item) => !item.resolved);
+    if (openItems.length === 0) continue;
 
-    lines.push(`## ${category} (${categoryItems.length})`);
+    lines.push(`## ${category} (${openItems.length})`);
     lines.push("");
 
-    for (const item of categoryItems) {
-      const status = item.resolved ? "resolved" : "OPEN";
-      lines.push(
-        `- [ ] **${item.slug}** _(${item.severity}, ${status})_ — ${item.title}`
-      );
+    for (const item of openItems) {
+      lines.push(`- [ ] **${item.slug}** _(${item.severity})_ — ${item.title}`);
       if (item.projects.length > 0) {
         lines.push(`      - projects: ${item.projects.join(", ")}`);
       }
