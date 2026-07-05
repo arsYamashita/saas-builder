@@ -22,6 +22,17 @@
  * existing `resolved:` key already uses, rather than parsing/re-emitting
  * YAML (which would risk reformatting content this task must leave
  * untouched).
+ *
+ * 2026-07-06: this logic was extracted to
+ * `~/Documents/my-vault/_scripts/kb_checklist/kb-resolve-core.mjs` (plain,
+ * dependency-free Node ESM) so every active repo can resolve KB entries,
+ * not just saas-builder. This TS file stays in the repo, behaviorally
+ * identical to that copy, because it is imported directly by
+ * scripts/__tests__/kb-resolve-core.test.ts, which runs in CI (a GitHub
+ * Actions runner that never has the vault mounted) -- see
+ * scripts/error-checklist-core.ts's header comment for the full
+ * rationale. scripts/kb-resolve.ts (the CLI entry point) is a thin
+ * wrapper that delegates to the vault copy at runtime instead.
  */
 
 export interface ResolveOptions {
