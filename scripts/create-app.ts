@@ -19,14 +19,15 @@
  *
  * What gets written:
  *   - Fixed common core (always): package.json, tsconfig.json, next.config.js,
- *     playwright.config.ts, vitest.config.ts, eslint.config.mjs, middleware.ts,
- *     app/layout.tsx, app/page.tsx, .gitignore, README.md, next-env.d.ts,
+ *     playwright.config.ts, vitest.config.ts, .env.example (optional keys
+ *     commented out), eslint.config.mjs, middleware.ts, app/layout.tsx,
+ *     app/page.tsx, .gitignore, README.md, next-env.d.ts,
  *     tests/playwright/{auth,smoke}.spec.ts, lib/supabase/{server,client}.ts
  *     (compat), components/built-with-badge.tsx (viral badge) — via the same
  *     writeExportScaffold() helper the DB-driven export route uses.
- *   - Additionally (always): lib/env.ts (startup env validation),
- *     lib/db/supabase/{admin,server,client}.ts, lib/payments/*,
- *     lib/billing/{stripe,webhook-errors}.ts, .env.example,
+ *   - Additionally (always): lib/env.ts + instrumentation.ts (startup env
+ *     validation), lib/db/supabase/{admin,server,client}.ts, lib/payments/*,
+ *     lib/billing/{stripe,webhook-errors}.ts, lib/rate-limit.ts,
  *     docs/rules/*.md (the shared generation contract — 06/08 are the
  *     mandatory ones for API + DB boundaries).
  *   - With --template <key>: templates/<key>/src/** flattened onto the
@@ -111,20 +112,14 @@ async function main() {
   const track = (label: string) => written.push(label);
 
   // ── 1. Fixed scaffold boilerplate (package.json, tsconfig, next config,
-  //       app/layout+page, middleware, badge, playwright tests, compat
-  //       supabase client/server) — reuse the same writer the DB-driven
-  //       export-files API route uses, so both paths stay consistent. ──
+  //       vitest config, .env.example, app/layout+page, middleware, badge,
+  //       playwright tests, compat supabase client/server) — reuse the same
+  //       writer the DB-driven export-files API route uses, so both paths
+  //       produce identical baselines (incl. vitest.config.ts with the
+  //       Playwright-spec exclusion, and the scaffold .env.example with
+  //       optional keys commented out). ──
   await writeExportScaffold(outDir, `local-${name}`);
-  track("scaffold boilerplate (package.json, tsconfig, next.config, app/, middleware.ts, components/built-with-badge.tsx, lib/supabase/*, tests/playwright/*)");
-
-  // vitest.config.ts isn't part of writeExportScaffold (that only wires
-  // Playwright) but the scaffold package.json's "test"/"test:unit" scripts
-  // run vitest, so a config is required for `npm test` to work standalone.
-  fs.writeFileSync(
-    path.join(outDir, "vitest.config.ts"),
-    `import { defineConfig } from "vitest/config";\nimport path from "path";\n\nexport default defineConfig({\n  test: {\n    exclude: ["**/node_modules/**", "**/tests/playwright/**"],\n  },\n  resolve: {\n    alias: {\n      "@": path.resolve(__dirname, "."),\n    },\n  },\n});\n`
-  );
-  track("vitest.config.ts");
+  track("scaffold boilerplate (package.json, tsconfig, next.config, vitest.config.ts, .env.example, app/, middleware.ts, components/built-with-badge.tsx, lib/supabase/*, tests/playwright/*)");
 
   // ── 2. Fixed common core: env validation + Supabase clients + hardened
   //       payments module (idempotency key + signature-verified webhook
@@ -150,17 +145,21 @@ async function main() {
   copyFile(path.join(REPO_ROOT, "lib/rate-limit.ts"), path.join(outDir, "lib/rate-limit.ts"));
   track("lib/env.ts + instrumentation.ts (startup validation wiring), lib/db/supabase/*, lib/payments/* (idempotency), lib/billing/{stripe,webhook-errors}.ts, lib/rate-limit.ts");
 
-  // ── 3. Env template + shared generation-contract docs (06/08 are the
-  //       mandatory API/DB boundary rules; the rest are included as
-  //       reference since new code in this project should stay consistent
-  //       with the same contract templates are generated against). ──
-  copyFile(path.join(REPO_ROOT, ".env.example"), path.join(outDir, ".env.example"));
+  // ── 3. Shared generation-contract docs (06/08 are the mandatory API/DB
+  //       boundary rules; the rest are included as reference since new code
+  //       in this project should stay consistent with the same contract
+  //       templates are generated against). NOTE: .env.example is NOT
+  //       copied from the builder repo — writeExportScaffold writes a
+  //       scaffold-specific one (optional keys commented out; see
+  //       lib/quality/scaffold/env-example.ts) so the `cp .env.example
+  //       .env.local` flow can't turn optional vars into present-but-empty
+  //       strings that used to trip startup validation. ──
   copyDir(path.join(REPO_ROOT, "docs/rules"), path.join(outDir, "docs/rules"));
   // docs/rules/ also contains per-template subdirectories (e.g.
   // community_membership_saas/) that aren't rule files — only *.md at the
   // top level are the shared contract; leave any subdirs as-is (harmless
   // reference material) rather than filtering, to keep this step simple.
-  track(".env.example, docs/rules/*.md (shared generation contract; 06 + 08 are mandatory)");
+  track("docs/rules/*.md (shared generation contract; 06 + 08 are mandatory)");
 
   // ── 4. Optional business template overlay ──
   if (templateKey) {
