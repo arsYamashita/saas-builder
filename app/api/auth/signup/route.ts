@@ -3,6 +3,7 @@ import { signupSchema } from "@/lib/validation/auth";
 import { createClient } from "@/lib/db/supabase/server";
 import { runSignupFlow } from "@/lib/auth/signup-flow";
 import { rateLimit } from "@/lib/rate-limit";
+import { parseJsonBody } from "@/lib/api/errors";
 
 export async function POST(req: NextRequest) {
   try {
@@ -14,8 +15,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const body = await req.json();
-    const parsed = signupSchema.safeParse(body);
+    const parsedBody = await parseJsonBody(req);
+    if (!parsedBody.ok) return parsedBody.response;
+    const parsed = signupSchema.safeParse(parsedBody.data);
 
     if (!parsed.success) {
       return NextResponse.json(

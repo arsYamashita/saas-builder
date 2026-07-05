@@ -6,6 +6,7 @@ import { executeTask } from "@/lib/providers/task-router";
 import { buildStepMeta } from "@/lib/providers/step-meta";
 import { resolveFinalPromptPath } from "@/lib/ai/template-prompt-resolver";
 import { requireProjectAccess } from "@/lib/auth/current-user";
+import { serverErrorResponse } from "@/lib/api/errors";
 import { rateLimit } from "@/lib/rate-limit";
 import { isInternalPipelineRequest } from "@/lib/pipeline-internal";
 
@@ -86,9 +87,8 @@ export async function POST(req: NextRequest, { params }: Props) {
     if (message === "Not found") {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
-    return NextResponse.json(
-      { error: "Failed to generate schema", details: message },
-      { status: 500 }
-    );
+    return serverErrorResponse("projects/generate-schema", error, {
+      message: "Failed to generate schema",
+    });
   }
 }

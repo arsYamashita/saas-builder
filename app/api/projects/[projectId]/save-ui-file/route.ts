@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getLatestBlueprintByProjectId } from "@/lib/db/blueprints";
 import { saveGeneratedFile } from "@/lib/db/generated-files";
 import { requireProjectAccess } from "@/lib/auth/current-user";
+import { parseJsonBody } from "@/lib/api/errors";
 
 type Props = {
   params: Promise<{ projectId: string }>;
@@ -11,7 +12,16 @@ export async function POST(req: NextRequest, { params }: Props) {
   try {
     const { projectId } = await params;
     await requireProjectAccess(projectId);
-    const body = await req.json();
+    const parsedBody = await parseJsonBody<{
+      filePath?: string;
+      contentText?: string;
+      fileCategory?: Parameters<typeof saveGeneratedFile>[0]["fileCategory"];
+      language?: string;
+      title?: string;
+      description?: string;
+    }>(req);
+    if (!parsedBody.ok) return parsedBody.response;
+    const body = parsedBody.data;
 
     const latestBlueprint = await getLatestBlueprintByProjectId(projectId);
 

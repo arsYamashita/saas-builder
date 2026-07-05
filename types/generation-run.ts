@@ -18,6 +18,11 @@ export type GenerationStepMeta = {
   invalidatedByStep?: string;
   rerunError?: string;
   rejectReason?: string;
+  /** Heartbeat: set when the step transitions to "running" (rerun-step).
+   *  Used by resetStuckSteps() (lib/db/step-review.ts) to lazily detect a
+   *  step stuck in "running" past STUCK_STEP_THRESHOLD_MS.
+   *  See [[ai_generation_step_stuck_running]]. */
+  startedAt?: string;
   /** Token usage from provider API */
   inputTokens?: number;
   outputTokens?: number;

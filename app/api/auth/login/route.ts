@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { loginSchema } from "@/lib/validation/auth";
 import { createClient } from "@/lib/db/supabase/server";
 import { rateLimit } from "@/lib/rate-limit";
+import { parseJsonBody } from "@/lib/api/errors";
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,8 +14,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const body = await req.json();
-    const parsed = loginSchema.safeParse(body);
+    const parsedBody = await parseJsonBody(req);
+    if (!parsedBody.ok) return parsedBody.response;
+    const parsed = loginSchema.safeParse(parsedBody.data);
 
     if (!parsed.success) {
       return NextResponse.json(

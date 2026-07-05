@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/db/supabase/admin";
 import type { GenerationStep, StepReviewStatus } from "@/types/generation-run";
 import { requireRunAccess } from "@/lib/auth/current-user";
 import { applyStepReview, computeRunReviewStatus } from "@/lib/db/step-review";
+import { parseJsonBody, serverErrorResponse } from "@/lib/api/errors";
 import type { GenerationRunReviewStatus } from "@/types/generation-run";
 
 type Props = {
@@ -14,12 +15,13 @@ const VALID_ACTIONS: StepReviewStatus[] = ["approved", "rejected"];
 export async function POST(req: NextRequest, { params }: Props) {
   try {
     const { runId } = await params;
-    const body = await req.json();
-    const { stepKey, action, reason } = body as {
+    const parsedBody = await parseJsonBody<{
       stepKey?: string;
       action?: string;
       reason?: string;
-    };
+    }>(req);
+    if (!parsedBody.ok) return parsedBody.response;
+    const { stepKey, action, reason } = parsedBody.data;
 
     if (!stepKey || !action || !VALID_ACTIONS.includes(action as StepReviewStatus)) {
       return NextResponse.json(
@@ -66,10 +68,9 @@ export async function POST(req: NextRequest, { params }: Props) {
       .eq("id", runId);
 
     if (updateErr) {
-      return NextResponse.json(
-        { error: "Failed to update step review" },
-        { status: 500 }
-      );
+      return serverErrorResponse("generation-runs/review-step", updateErr, {
+        message: "Failed to update step review",
+      });
     }
 
     return NextResponse.json({
@@ -92,9 +93,8 @@ export async function POST(req: NextRequest, { params }: Props) {
         { status: 404 }
       );
     }
-    return NextResponse.json(
-      { error: "Failed to review step" },
-      { status: 500 }
-    );
+    return serverErrorResponse("generation-runs/review-step", error, {
+      message: "Failed to review step",
+    });
   }
 }

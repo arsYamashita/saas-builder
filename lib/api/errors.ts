@@ -1,0 +1,95 @@
+import { NextResponse } from "next/server";
+
+/**
+ * Parses a Request/NextRequest JSON body without throwing.
+ *
+ * Route handlers previously either let `req.json()` throw straight into a
+ * generic catch-all (surfacing as an unrelated 500), or swallowed the
+ * failure with `.catch(() => ({}))`, which silently turns an invalid body
+ * into `{}` and lets validation downstream see `undefined` fields instead
+ * of a clear error — see [[request_json_parse_silent_fallback]]. This
+ * helper unifies both call sites on one behavior: invalid/empty JSON is
+ * always a 400 "Invalid JSON body", never a silent `{}` or an unrelated 500.
+ *
+ * Usage:
+ *   const parsed = await parseJsonBody(req);
+ *   if (!parsed.ok) return parsed.response;
+ *   const body = parsed.data; // typed as T
+ *
+ * `allowEmpty: true` treats a completely EMPTY body as `{}` (for endpoints
+ * whose body is optional, e.g. promote's optional versionLabel) while still
+ * rejecting a present-but-malformed body with 400 — exactly the distinction
+ * `.catch(() => ({}))` erased.
+ */
+export async function parseJsonBody<T = unknown>(
+  req: Request,
+  opts?: { allowEmpty?: boolean }
+): Promise<{ ok: true; data: T } | { ok: false; response: NextResponse }> {
+  const invalid = () => ({
+    ok: false as const,
+    response: NextResponse.json(
+      { error: "Invalid JSON body" },
+      { status: 400 }
+    ),
+  });
+
+  if (opts?.allowEmpty) {
+    let text: string;
+    try {
+      text = await req.text();
+    } catch {
+      return invalid();
+    }
+    if (text.trim() === "") {
+      return { ok: true, data: {} as T };
+    }
+    try {
+      return { ok: true, data: JSON.parse(text) as T };
+    } catch {
+      return invalid();
+    }
+  }
+
+  try {
+    const data = (await req.json()) as T;
+    return { ok: true, data };
+  } catch {
+    return invalid();
+  }
+}
+
+/**
+ * Builds a generic, safe-for-client error NextResponse while logging the
+ * real cause (DB/provider error message, stack, etc.) server-side only,
+ * tagged with a shared `errorId` the client can quote back in a support
+ * request.
+ *
+ * Never forward a raw `error.message` from Supabase/Stripe/an internal
+ * exception to the client `details`/`error` field — that leaks schema,
+ * table, and constraint names. See [[api_error_message_internal_leak]].
+ *
+ * Usage (inside a route's catch block):
+ *   return serverErrorResponse("billing/checkout", error);
+ *   return serverErrorResponse("billing/checkout", error, { status: 400, message: "Plan not found" });
+ */
+export function serverErrorResponse(
+  context: string,
+  cause: unknown,
+  opts?: { status?: number; message?: string }
+): NextResponse {
+  const errorId = crypto.randomUUID();
+  const causeMessage =
+    cause instanceof Error
+      ? cause.message
+      : cause !== undefined && cause !== null
+        ? String(cause)
+        : "unknown error";
+
+  // eslint-disable-next-line no-console -- intentional server-side-only log
+  console.error(`[${context}] errorId=${errorId}:`, causeMessage);
+
+  return NextResponse.json(
+    { error: opts?.message ?? "Internal server error", errorId },
+    { status: opts?.status ?? 500 }
+  );
+}

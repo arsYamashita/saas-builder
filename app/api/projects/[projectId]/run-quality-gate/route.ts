@@ -11,6 +11,7 @@ import { runLint } from "@/lib/quality/run-lint";
 import { runTypecheck } from "@/lib/quality/run-typecheck";
 import { runPlaywright } from "@/lib/quality/run-playwright";
 import { requireProjectAccess } from "@/lib/auth/current-user";
+import { serverErrorResponse } from "@/lib/api/errors";
 
 type Props = {
   params: Promise<{ projectId: string }>;
@@ -115,12 +116,8 @@ export async function POST(_req: NextRequest, { params }: Props) {
       await finishQualityRun(qualityRunId, "failed").catch(() => {});
     }
 
-    return NextResponse.json(
-      {
-        error: "Failed to run quality gate",
-        details: message,
-      },
-      { status: 500 }
-    );
+    return serverErrorResponse("projects/run-quality-gate", error, {
+      message: "Failed to run quality gate",
+    });
   }
 }

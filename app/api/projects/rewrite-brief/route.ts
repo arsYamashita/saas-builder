@@ -4,6 +4,7 @@ import { executeTask } from "@/lib/providers/task-router";
 import { extractJsonFromText } from "@/lib/providers/result-normalizer";
 import { requireCurrentUser } from "@/lib/auth/current-user";
 import { rateLimit } from "@/lib/rate-limit";
+import { parseJsonBody } from "@/lib/api/errors";
 
 interface RewriteInput {
   summary: string;
@@ -29,7 +30,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const body = (await req.json()) as Partial<RewriteInput>;
+    const parsedBody = await parseJsonBody<Partial<RewriteInput>>(req);
+    if (!parsedBody.ok) return parsedBody.response;
+    const body = parsedBody.data;
 
     const summary = body.summary?.trim() ?? "";
     const problemToSolve = body.problemToSolve?.trim() ?? "";

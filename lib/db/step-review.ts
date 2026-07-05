@@ -331,6 +331,9 @@ export function applyStepRerunResult(
         rerunAt: new Date().toISOString(),
         invalidatedAt: undefined,
         invalidatedByStep: undefined,
+        // Clear the running-heartbeat now that the step has a terminal
+        // (completed) status — see [[ai_generation_step_stuck_running]].
+        startedAt: undefined,
       },
     };
   });
@@ -339,4 +342,75 @@ export function applyStepRerunResult(
   updatedSteps = invalidateDownstreamSteps(updatedSteps, stepKey);
 
   return { ok: true, steps: updatedSteps };
+}
+
+// ── Stuck Step Detection (lazy reset) ───────────────────────
+
+/**
+ * How long a step may remain "running" before it is considered stuck and
+ * eligible for lazy auto-reset.
+ *
+ * rerun-step (app/api/generation-runs/[runId]/rerun-step/route.ts) calls an
+ * internal AI-generation route via `fetch()` and awaits its response
+ * synchronously. None of those routes declare an explicit
+ * `export const maxDuration`, so nothing in this repo bounds how long a
+ * single healthy call may legitimately run. 10 minutes is a large,
+ * deliberately generous margin above any observed AI generation step
+ * (typically well under 60s) — it is sized to almost never fire on a
+ * merely slow call, and only fire when the request genuinely died without
+ * reaching the compensating catch/finally in the route (e.g. the
+ * serverless function was killed mid-flight). See
+ * [[ai_generation_step_stuck_running]] and [[redis_nx_lock_ttl_too_short]]
+ * (same lesson: size a timeout off the real worst case + margin, not an
+ * arbitrary guess). Also used as the TTL for the rerun-step distributed
+ * lock (`lib/step-lock.ts`) so both recovery mechanisms line up.
+ */
+export const STUCK_STEP_THRESHOLD_MS = 10 * 60 * 1000;
+
+export type ResetStuckStepsResult = {
+  steps: GenerationStep[];
+  changed: boolean;
+};
+
+/**
+ * Lazily resets any step that has been stuck in "running" past
+ * STUCK_STEP_THRESHOLD_MS back to "failed", so a crashed/killed rerun that
+ * never reached its compensating catch/finally doesn't leave the UI frozen
+ * on that step forever. Pure function — the caller (requireRunAccess in
+ * lib/auth/current-user.ts) is responsible for persisting the result when
+ * `changed` is true. Called on every read rather than via a background
+ * cron: no new infra required, and the fix becomes visible the next time
+ * anyone loads the run.
+ */
+export function resetStuckSteps(
+  steps: GenerationStep[],
+  now: number = Date.now(),
+  thresholdMs: number = STUCK_STEP_THRESHOLD_MS
+): ResetStuckStepsResult {
+  let changed = false;
+
+  const nextSteps = steps.map((s) => {
+    if (s.status !== "running") return s;
+
+    const startedAt = s.meta?.startedAt ? Date.parse(s.meta.startedAt) : NaN;
+    // No heartbeat recorded (e.g. a run created before this feature
+    // shipped) — nothing to compare against, leave it alone rather than
+    // guess.
+    if (Number.isNaN(startedAt)) return s;
+    if (now - startedAt < thresholdMs) return s;
+
+    changed = true;
+    const minutes = Math.round(thresholdMs / 60_000);
+    return {
+      ...s,
+      status: "failed" as const,
+      meta: {
+        ...(s.meta ?? {}),
+        startedAt: undefined,
+        rerunError: `Stuck detection: step remained "running" for over ${minutes} minute(s) without completing — auto-reset to failed.`,
+      },
+    };
+  });
+
+  return { steps: nextSteps, changed };
 }
