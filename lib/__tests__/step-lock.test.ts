@@ -57,4 +57,47 @@ describe("step lock", () => {
     const tokenB = await acquireStepLock(keyB);
     expect(tokenB).not.toBeNull();
   });
+
+  // Codex P2 regression: release must be compare-and-delete, never a blind
+  // delete — a stale token must not free a lock it no longer owns.
+
+  it("does not release the lock when the token does not match", async () => {
+    const key = `steplock-test:${Math.random()}`;
+    const token = await acquireStepLock(key);
+    expect(token).not.toBeNull();
+
+    await releaseStepLock(key, "not-the-owner-token");
+
+    // Lock must still be held by the original owner.
+    const second = await acquireStepLock(key);
+    expect(second).toBeNull();
+
+    // The real owner can still release it afterwards.
+    await releaseStepLock(key, token!);
+    const third = await acquireStepLock(key);
+    expect(third).not.toBeNull();
+  });
+
+  it("a stale token from an expired lock cannot release the new owner's lock", async () => {
+    const key = `steplock-test:${Math.random()}`;
+
+    // First owner acquires with a short TTL and never releases.
+    const staleToken = await acquireStepLock(key, 10);
+    expect(staleToken).not.toBeNull();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    // Second owner acquires after expiry.
+    const newToken = await acquireStepLock(key, 60_000);
+    expect(newToken).not.toBeNull();
+
+    // The first owner's delayed release (exactly the GET-expire-DEL race)
+    // must be a no-op against the new owner's lock.
+    await releaseStepLock(key, staleToken!);
+
+    const intruder = await acquireStepLock(key);
+    expect(intruder).toBeNull();
+
+    // Cleanup: the actual owner releases normally.
+    await releaseStepLock(key, newToken!);
+  });
 });

@@ -37,9 +37,11 @@ const redis = hasRedis
     })
   : null;
 
-// Local dev fallback: key -> expiresAtMs. Not safe across multiple
-// instances — only used when Redis isn't configured at all (local dev).
-const localLocks = new Map<string, number>();
+// Local dev fallback: key -> { token, expiresAtMs }. Not safe across
+// multiple instances — only used when Redis isn't configured at all
+// (local dev). The token is stored so release can compare-and-delete,
+// mirroring the Redis path.
+const localLocks = new Map<string, { token: string; expiresAt: number }>();
 
 /**
  * Attempts to acquire the lock for `key`. Returns an opaque token to pass
@@ -57,30 +59,46 @@ export async function acquireStepLock(
   }
 
   const now = Date.now();
-  const expiresAt = localLocks.get(key);
-  if (expiresAt !== undefined && expiresAt > now) {
+  const entry = localLocks.get(key);
+  if (entry !== undefined && entry.expiresAt > now) {
     return null;
   }
-  localLocks.set(key, now + ttlMs);
+  localLocks.set(key, { token, expiresAt: now + ttlMs });
   return token;
 }
 
 /**
+ * Atomic compare-and-delete: DEL only if the key still holds `token`, in a
+ * single Lua script (the standard Redis unlock pattern). A non-atomic
+ * GET-then-DEL has a real race (Codex P2): GET returns our token, the key
+ * then expires, ANOTHER request acquires a fresh lock under the same key,
+ * and our delayed DEL wipes the new owner's lock — silently disabling the
+ * concurrency guard for that request. Executing compare+delete server-side
+ * in one script closes that window.
+ */
+const RELEASE_SCRIPT = `
+if redis.call("get", KEYS[1]) == ARGV[1] then
+  return redis.call("del", KEYS[1])
+else
+  return 0
+end`;
+
+/**
  * Releases the lock for `key`, but only if it is still held by `token`.
- * This is a best-effort GET-then-DEL against Redis (not a single atomic
- * compare-and-delete) — the only failure mode of that gap is releasing a
- * lock a hair early right as it was about to expire anyway, since the TTL
- * (not this release call) is what actually bounds lock lifetime. It can
- * never make a lock outlive its TTL.
+ * Atomic on both paths: the Redis path runs a compare-and-delete Lua
+ * script; the in-memory fallback compares the stored token before
+ * deleting (single-threaded event loop makes that check atomic locally).
+ * A stale token (lock expired and re-acquired by someone else) is a
+ * no-op — it must never release the new owner's lock.
  */
 export async function releaseStepLock(key: string, token: string): Promise<void> {
   if (redis) {
-    const current = await redis.get<string>(key);
-    if (current === token) {
-      await redis.del(key);
-    }
+    await redis.eval(RELEASE_SCRIPT, [key], [token]);
     return;
   }
 
-  localLocks.delete(key);
+  const entry = localLocks.get(key);
+  if (entry !== undefined && entry.token === token) {
+    localLocks.delete(key);
+  }
 }
