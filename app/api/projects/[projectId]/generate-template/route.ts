@@ -9,6 +9,7 @@ import { createAdminClient } from "@/lib/db/supabase/admin";
 import type { GenerationStepMeta } from "@/types/generation-run";
 import { requireCurrentUser } from "@/lib/auth/current-user";
 import { rateLimit } from "@/lib/rate-limit";
+import { serverErrorResponse } from "@/lib/api/errors";
 import {
   INTERNAL_PIPELINE_HEADER,
   getInternalPipelineToken,
@@ -99,10 +100,15 @@ export async function POST(_req: NextRequest, { params }: Props) {
       .single();
 
     if (projectError || !project) {
-      return NextResponse.json(
-        { error: "Project not found", details: projectError?.message },
-        { status: 404 }
-      );
+      // Never return the raw DB error message to the client — see
+      // [[api_error_message_internal_leak]].
+      if (projectError) {
+        return serverErrorResponse("projects/generate-template", projectError, {
+          status: 404,
+          message: "Project not found",
+        });
+      }
+      return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
     const generationRun = await createGenerationRun(
@@ -186,9 +192,8 @@ export async function POST(_req: NextRequest, { params }: Props) {
       await failGenerationRun(generationRunId, message);
     }
 
-    return NextResponse.json(
-      { error: "Failed to generate full template", details: message },
-      { status: 500 }
-    );
+    return serverErrorResponse("projects/generate-template", error, {
+      message: "Failed to generate full template",
+    });
   }
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/db/supabase/admin";
 import { requireRunAccess } from "@/lib/auth/current-user";
+import { serverErrorResponse } from "@/lib/api/errors";
 
 type Props = {
   params: Promise<{ runId: string }>;
@@ -21,10 +22,9 @@ export async function POST(_req: NextRequest, { params }: Props) {
       .eq("id", runId);
 
     if (updateErr) {
-      return NextResponse.json(
-        { error: "Failed to reject run" },
-        { status: 500 }
-      );
+      return serverErrorResponse("generation-runs/reject", updateErr, {
+        message: "Failed to reject run",
+      });
     }
 
     return NextResponse.json({ ok: true, runId, review_status: "rejected" });
@@ -39,9 +39,8 @@ export async function POST(_req: NextRequest, { params }: Props) {
         { status: 404 }
       );
     }
-    return NextResponse.json(
-      { error: "Failed to reject run" },
-      { status: 500 }
-    );
+    return serverErrorResponse("generation-runs/reject", error, {
+      message: "Failed to reject run",
+    });
   }
 }

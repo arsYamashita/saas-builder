@@ -5,6 +5,7 @@ import { writeTextFile } from "@/lib/utils/write-file";
 import { getProjectExportPath } from "@/lib/utils/project-export-path";
 import { writeExportScaffold } from "@/lib/quality/write-export-scaffold";
 import { requireProjectAccess } from "@/lib/auth/current-user";
+import { serverErrorResponse } from "@/lib/api/errors";
 
 type Props = {
   params: Promise<{ projectId: string }>;
@@ -68,12 +69,8 @@ export async function POST(_req: NextRequest, { params }: Props) {
     if (message === "Not found") {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
-    return NextResponse.json(
-      {
-        error: "Failed to export files",
-        details: message,
-      },
-      { status: 500 }
-    );
+    return serverErrorResponse("projects/export-files", error, {
+      message: "Failed to export files",
+    });
   }
 }

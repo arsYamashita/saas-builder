@@ -6,6 +6,7 @@ import { getCurrentTenantForUser } from "@/lib/tenant/current-tenant";
 import { getAffiliateTracking } from "@/lib/affiliate/tracking";
 import { findAffiliateByCode } from "@/lib/affiliate/find-affiliate-by-code";
 import { findOrCreateReferral } from "@/lib/affiliate/find-or-create-referral";
+import { parseJsonBody, serverErrorResponse } from "@/lib/api/errors";
 
 // Client-generated purchase-attempt identifier (UUID or similar).
 // Charset/length-restricted so it embeds safely in a Stripe idempotency
@@ -14,7 +15,9 @@ const ATTEMPT_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const parsedBody = await parseJsonBody<Record<string, unknown>>(req);
+    if (!parsedBody.ok) return parsedBody.response;
+    const body = parsedBody.data;
     const membershipPlanId = body.membership_plan_id as string | undefined;
     const attemptId = body.attempt_id as string | undefined;
 
@@ -46,10 +49,13 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (planError || !plan) {
-      return NextResponse.json(
-        { error: "Plan not found", details: planError?.message },
-        { status: 404 }
-      );
+      if (planError) {
+        return serverErrorResponse("billing/checkout", planError, {
+          status: 404,
+          message: "Plan not found",
+        });
+      }
+      return NextResponse.json({ error: "Plan not found" }, { status: 404 });
     }
 
     if (!plan.price_id) {
@@ -129,11 +135,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ url: session.url }, { status: 200 });
   } catch (error) {
-    console.error("Create checkout session error:", error);
-
-    return NextResponse.json(
-      { error: "Failed to create checkout session" },
-      { status: 500 }
-    );
+    return serverErrorResponse("billing/checkout", error, {
+      message: "Failed to create checkout session",
+    });
   }
 }

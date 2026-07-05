@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { parsePdf, parsePdfFromBase64 } from "@/lib/document-analysis/pdf-parser";
 import { parseRequestSchema } from "@/lib/validation/document-analysis";
 import { requireCurrentUser } from "@/lib/auth/current-user";
+import { parseJsonBody, serverErrorResponse } from "@/lib/api/errors";
 
 export async function POST(request: NextRequest) {
   try {
@@ -42,8 +43,9 @@ export async function POST(request: NextRequest) {
       filename = file.name;
     } else {
       // JSON body with base64
-      const body = await request.json();
-      const parsed = parseRequestSchema.safeParse(body);
+      const parsedBody = await parseJsonBody(request);
+      if (!parsedBody.ok) return parsedBody.response;
+      const parsed = parseRequestSchema.safeParse(parsedBody.data);
 
       if (!parsed.success) {
         return NextResponse.json(
@@ -71,10 +73,11 @@ export async function POST(request: NextRequest) {
       filename: filename ?? null,
     });
   } catch (err) {
-    console.error("[documents/parse] Error:", err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Internal server error" },
-      { status: 500 }
-    );
+    if (err instanceof Error && err.message === "Unauthorized") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    // Generic message only — the raw error may contain internal details.
+    // See [[api_error_message_internal_leak]].
+    return serverErrorResponse("documents/parse", err);
   }
 }

@@ -4,6 +4,7 @@ import { requireTenantRole } from "@/lib/rbac/guards";
 import { contentFormSchema } from "@/lib/validation/content";
 import { requireCurrentUser } from "@/lib/auth/current-user";
 import { writeAuditLog } from "@/lib/audit/write-audit-log";
+import { parseJsonBody } from "@/lib/api/errors";
 
 export async function GET() {
   try {
@@ -43,8 +44,9 @@ export async function POST(req: NextRequest) {
     const user = await requireCurrentUser();
     const supabase = createAdminClient();
 
-    const body = await req.json();
-    const parsed = contentFormSchema.safeParse(body);
+    const parsedBody = await parseJsonBody(req);
+    if (!parsedBody.ok) return parsedBody.response;
+    const parsed = contentFormSchema.safeParse(parsedBody.data);
 
     if (!parsed.success) {
       return NextResponse.json(

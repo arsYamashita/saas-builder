@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/db/supabase/admin";
 import { blueprintSchema } from "@/lib/validation/blueprint";
 import { requireProjectAccess } from "@/lib/auth/current-user";
+import { parseJsonBody, serverErrorResponse } from "@/lib/api/errors";
 
 type Props = {
   params: Promise<{ projectId: string }>;
@@ -11,7 +12,13 @@ export async function POST(req: NextRequest, { params }: Props) {
   try {
     const { projectId } = await params;
     await requireProjectAccess(projectId);
-    const body = await req.json();
+    const parsedBody = await parseJsonBody<{
+      blueprint?: unknown;
+      rawPrompt?: string;
+      source?: string;
+    }>(req);
+    if (!parsedBody.ok) return parsedBody.response;
+    const body = parsedBody.data;
 
     const parsed = blueprintSchema.safeParse(body.blueprint);
 
@@ -36,13 +43,9 @@ export async function POST(req: NextRequest, { params }: Props) {
       .limit(1);
 
     if (existingError) {
-      return NextResponse.json(
-        {
-          error: "Failed to check existing blueprints",
-          details: existingError.message,
-        },
-        { status: 500 }
-      );
+      return serverErrorResponse("projects/blueprint", existingError, {
+        message: "Failed to check existing blueprints",
+      });
     }
 
     const nextVersion = existing && existing.length > 0 ? existing[0].version + 1 : 1;
@@ -71,10 +74,9 @@ export async function POST(req: NextRequest, { params }: Props) {
       .single();
 
     if (insertError) {
-      return NextResponse.json(
-        { error: "Failed to save blueprint", details: insertError.message },
-        { status: 500 }
-      );
+      return serverErrorResponse("projects/blueprint", insertError, {
+        message: "Failed to save blueprint",
+      });
     }
 
     return NextResponse.json({ blueprint: inserted }, { status: 201 });
@@ -87,9 +89,8 @@ export async function POST(req: NextRequest, { params }: Props) {
     if (message === "Not found") {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
-    return NextResponse.json(
-      { error: "Failed to save blueprint", details: message },
-      { status: 500 }
-    );
+    return serverErrorResponse("projects/blueprint", error, {
+      message: "Failed to save blueprint",
+    });
   }
 }

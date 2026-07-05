@@ -3,6 +3,7 @@ import { projectFormSchema } from "@/lib/validation/project-form";
 import { createAdminClient } from "@/lib/db/supabase/admin";
 import { slugify } from "@/lib/utils/slugify";
 import { requireCurrentUser } from "@/lib/auth/current-user";
+import { parseJsonBody } from "@/lib/api/errors";
 
 export async function GET() {
   try {
@@ -53,8 +54,9 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const user = await requireCurrentUser();
-    const body = await req.json();
-    const parsed = projectFormSchema.safeParse(body);
+    const parsedBody = await parseJsonBody(req);
+    if (!parsedBody.ok) return parsedBody.response;
+    const parsed = projectFormSchema.safeParse(parsedBody.data);
 
     if (!parsed.success) {
       return NextResponse.json(

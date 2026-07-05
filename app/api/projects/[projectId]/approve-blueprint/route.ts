@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/db/supabase/admin";
 import { requireProjectAccess } from "@/lib/auth/current-user";
+import { parseJsonBody, serverErrorResponse } from "@/lib/api/errors";
 
 type Props = {
   params: Promise<{ projectId: string }>;
@@ -10,7 +11,14 @@ export async function POST(req: NextRequest, { params }: Props) {
   try {
     const { projectId } = await params;
     await requireProjectAccess(projectId);
-    const body = await req.json().catch(() => ({}));
+    // allowEmpty: blueprintId is optional (defaults to the latest blueprint),
+    // so an absent body is fine — but a malformed one must 400 instead of
+    // being silently coerced to {}. See [[request_json_parse_silent_fallback]].
+    const parsedBody = await parseJsonBody<{ blueprintId?: string }>(req, {
+      allowEmpty: true,
+    });
+    if (!parsedBody.ok) return parsedBody.response;
+    const body = parsedBody.data;
     const supabase = createAdminClient();
 
     // If blueprintId is provided, approve that specific blueprint.
@@ -45,10 +53,11 @@ export async function POST(req: NextRequest, { params }: Props) {
       .eq("project_id", projectId);
 
     if (updateErr) {
-      return NextResponse.json(
-        { error: "Failed to approve blueprint", details: updateErr.message },
-        { status: 500 }
-      );
+      // Never return updateErr.message to the client — see
+      // [[api_error_message_internal_leak]].
+      return serverErrorResponse("projects/approve-blueprint", updateErr, {
+        message: "Failed to approve blueprint",
+      });
     }
 
     return NextResponse.json({ ok: true, blueprintId });
@@ -61,9 +70,8 @@ export async function POST(req: NextRequest, { params }: Props) {
     if (message === "Not found") {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
-    return NextResponse.json(
-      { error: "Failed to approve blueprint", details: message },
-      { status: 500 }
-    );
+    return serverErrorResponse("projects/approve-blueprint", error, {
+      message: "Failed to approve blueprint",
+    });
   }
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/db/supabase/admin";
 import { getTemplateShortName } from "@/lib/templates/template-registry";
 import { requireRunAccess } from "@/lib/auth/current-user";
+import { parseJsonBody, serverErrorResponse } from "@/lib/api/errors";
 
 type Props = {
   params: Promise<{ runId: string }>;
@@ -11,7 +12,14 @@ export async function POST(req: NextRequest, { params }: Props) {
   try {
     const { runId } = await params;
     const { run } = await requireRunAccess(runId);
-    const body = await req.json().catch(() => ({}));
+    // allowEmpty: the body (versionLabel) is optional, so an absent body is
+    // fine — but a present-yet-malformed body must 400 instead of being
+    // silently coerced to {}. See [[request_json_parse_silent_fallback]].
+    const parsedBody = await parseJsonBody<{ versionLabel?: string }>(req, {
+      allowEmpty: true,
+    });
+    if (!parsedBody.ok) return parsedBody.response;
+    const body = parsedBody.data;
     const supabase = createAdminClient();
 
     if (run.status !== "completed") {
@@ -109,10 +117,9 @@ export async function POST(req: NextRequest, { params }: Props) {
       .single();
 
     if (insertErr) {
-      return NextResponse.json(
-        { error: "Failed to create promotion" },
-        { status: 500 }
-      );
+      return serverErrorResponse("generation-runs/promote", insertErr, {
+        message: "Failed to create promotion",
+      });
     }
 
     // Update generation run with promotion info
@@ -141,10 +148,9 @@ export async function POST(req: NextRequest, { params }: Props) {
         { status: 404 }
       );
     }
-    return NextResponse.json(
-      { error: "Failed to promote run" },
-      { status: 500 }
-    );
+    return serverErrorResponse("generation-runs/promote", error, {
+      message: "Failed to promote run",
+    });
   }
 }
 

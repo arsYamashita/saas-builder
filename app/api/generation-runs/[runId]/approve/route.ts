@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/db/supabase/admin";
 import { requireRunAccess } from "@/lib/auth/current-user";
+import { serverErrorResponse } from "@/lib/api/errors";
 
 type Props = {
   params: Promise<{ runId: string }>;
@@ -28,10 +29,9 @@ export async function POST(_req: NextRequest, { params }: Props) {
       .eq("id", runId);
 
     if (updateErr) {
-      return NextResponse.json(
-        { error: "Failed to approve run" },
-        { status: 500 }
-      );
+      return serverErrorResponse("generation-runs/approve", updateErr, {
+        message: "Failed to approve run",
+      });
     }
 
     return NextResponse.json({ ok: true, runId, review_status: "approved" });
@@ -46,9 +46,8 @@ export async function POST(_req: NextRequest, { params }: Props) {
         { status: 404 }
       );
     }
-    return NextResponse.json(
-      { error: "Failed to approve run" },
-      { status: 500 }
-    );
+    return serverErrorResponse("generation-runs/approve", error, {
+      message: "Failed to approve run",
+    });
   }
 }

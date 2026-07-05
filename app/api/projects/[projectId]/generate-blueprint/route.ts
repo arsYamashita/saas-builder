@@ -9,6 +9,7 @@ import { buildStepMeta, mergeStepMetas } from "@/lib/providers/step-meta";
 import { requireProjectAccess } from "@/lib/auth/current-user";
 import { rateLimit } from "@/lib/rate-limit";
 import { isInternalPipelineRequest } from "@/lib/pipeline-internal";
+import { serverErrorResponse } from "@/lib/api/errors";
 
 type Props = {
   params: Promise<{ projectId: string }>;
@@ -110,13 +111,11 @@ export async function POST(req: NextRequest, { params }: Props) {
       .limit(1);
 
     if (existingError) {
-      return NextResponse.json(
-        {
-          error: "Failed to check existing blueprints",
-          details: existingError.message,
-        },
-        { status: 500 }
-      );
+      // Never return the raw DB error message to the client — see
+      // [[api_error_message_internal_leak]].
+      return serverErrorResponse("projects/generate-blueprint", existingError, {
+        message: "Failed to check existing blueprints",
+      });
     }
 
     const nextVersion = existing && existing.length > 0 ? existing[0].version + 1 : 1;
@@ -145,10 +144,9 @@ export async function POST(req: NextRequest, { params }: Props) {
       .single();
 
     if (insertError) {
-      return NextResponse.json(
-        { error: "Failed to save generated blueprint", details: insertError.message },
-        { status: 500 }
-      );
+      return serverErrorResponse("projects/generate-blueprint", insertError, {
+        message: "Failed to save generated blueprint",
+      });
     }
 
     const _meta = mergeStepMetas([
@@ -171,9 +169,8 @@ export async function POST(req: NextRequest, { params }: Props) {
     if (message === "Not found") {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
-    return NextResponse.json(
-      { error: "Failed to generate blueprint", details: message },
-      { status: 500 }
-    );
+    return serverErrorResponse("projects/generate-blueprint", error, {
+      message: "Failed to generate blueprint",
+    });
   }
 }
