@@ -4,7 +4,7 @@
 
 import Stripe from "stripe";
 import { createAdminClient } from "@/lib/db/supabase/admin";
-import { getStripe } from "@/lib/stripe";
+import { getStripeClient } from "@/lib/payments";
 import { writeAuditLog } from "@/lib/audit";
 
 function getWebhookSecret(): string {
@@ -129,7 +129,7 @@ async function upsertPurchase(session: Stripe.Checkout.Session) {
 
 export async function POST(req: Request) {
   try {
-    const stripe = getStripe();
+    const stripe = getStripeClient();
     const webhookSecret = getWebhookSecret();
 
     const body = await req.text();

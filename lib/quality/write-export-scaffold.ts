@@ -28,7 +28,7 @@ export async function writeExportScaffold(projectDir: string, projectId: string)
   );
 
   await writeTextFile(
-    path.join(projectDir, "next.config.ts"),
+    path.join(projectDir, "next.config.js"),
     getScaffoldNextConfig()
   );
 
@@ -82,14 +82,17 @@ export async function writeExportScaffold(projectDir: string, projectId: string)
     getScaffoldSmokeSpec()
   );
 
-  // Compatibility files — AI-generated code often imports from these paths
+  // Compatibility files — AI-generated code often imports from these paths.
+  // Written at lib/supabase/* (not src/lib/supabase/*) to match the
+  // "@/*" -> "./*" tsconfig path alias (see getScaffoldTsconfig) — a
+  // "src/" prefix here would silently 404 any "@/lib/supabase/server" import.
   await writeTextFile(
-    path.join(projectDir, "src/lib/supabase/server.ts"),
+    path.join(projectDir, "lib/supabase/server.ts"),
     getScaffoldSupabaseServer()
   );
 
   await writeTextFile(
-    path.join(projectDir, "src/lib/supabase/client.ts"),
+    path.join(projectDir, "lib/supabase/client.ts"),
     getScaffoldSupabaseClient()
   );
 

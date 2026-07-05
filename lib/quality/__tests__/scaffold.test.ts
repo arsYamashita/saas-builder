@@ -30,7 +30,12 @@ describe("scaffold generators", () => {
       expect(ts.compilerOptions.target).toBe("ES2022");
       expect(ts.compilerOptions.jsx).toBe("preserve");
       expect(ts.compilerOptions.noEmit).toBe(true);
-      expect(ts.compilerOptions.paths["@/*"]).toEqual(["./src/*"]);
+      // Must match docs/rules/02-file-path-rules.md's root-level generated
+      // paths (e.g. "app/(generated)/...", "components/domain/...") and the
+      // root project's own tsconfig.json — not a "./src/*" alias, which
+      // broke module resolution for "@/components/built-with-badge" etc.
+      // See [[saas_builder_scaffold_tsconfig_src_alias_mismatch]].
+      expect(ts.compilerOptions.paths["@/*"]).toEqual(["./*"]);
       expect(ts.include).toContain("**/*.ts");
     });
   });

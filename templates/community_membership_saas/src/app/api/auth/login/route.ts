@@ -4,9 +4,18 @@
 
 import { createAdminClient } from "@/lib/db/supabase/admin";
 import { handleGuardError, GuardError } from "@/lib/guards";
+import { rateLimit } from "@/lib/rate-limit";
 
 export async function POST(req: Request) {
   try {
+    // Unauthenticated endpoint — MUST be rate limited per
+    // docs/rules/06-api-rules.md, "Rate Limiting (mandatory for auth +
+    // paid-API endpoints)". See [[saas_builder_security_debt_inheritance]].
+    const ip = req.headers.get("x-forwarded-for")?.split(",")[0] ?? "unknown";
+    if (!(await rateLimit(`login:${ip}`, 5, 60_000))) {
+      throw new GuardError(429, "Too many requests. Please try again later.");
+    }
+
     const body = await req.json();
     const { email, password } = body;
 
