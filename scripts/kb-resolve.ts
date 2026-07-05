@@ -1,147 +1,45 @@
 /**
- * Marks a single vault KB error-pattern file as resolved.
+ * Thin wrapper around the vault-hosted canonical `kb:resolve` script.
  *
- * Usage:
+ * 2026-07-06: extracted to
+ * `~/Documents/my-vault/_scripts/kb_checklist/kb-resolve.mjs` (plain,
+ * dependency-free Node ESM) alongside the checklist generator -- see
+ * scripts/generate-error-checklist.ts for the rationale.
+ *
+ * Usage (unchanged):
  *   npm run kb:resolve -- <error-file>.md --pr <number> --project <name>
  *   npm run kb:resolve -- <error-file>.md --resolved-by "<free text>"
  *   VAULT_PATH=/custom/path npm run kb:resolve -- <error-file>.md --pr 27 --project saas-builder
  *
- * Writes `resolved: true`, `resolved_by: "<project>#<pr>"` (or the
- * `--resolved-by` string verbatim), and `resolved_at: <date>` into the
- * file's frontmatter. The Markdown body is never touched. See
- * scripts/kb-resolve-core.ts for the frontmatter-rewrite logic.
- *
- * Exits 1 (without writing) if the file can't be read, or has no
- * frontmatter block to update — an unreadable/malformed KB file should
- * fail loudly, not be silently skipped, since the whole point of this
- * tool is to make "did we actually record the fix" trustworthy.
+ * `scripts/kb-resolve-core.ts` (the pure frontmatter-rewrite logic,
+ * unit-tested by scripts/__tests__/kb-resolve-core.test.ts) stays in this
+ * repo, behaviorally identical to the vault copy, for the same
+ * CI-never-has-the-vault reason documented in error-checklist-core.ts.
  */
-import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { updateFrontmatterResolved } from "./kb-resolve-core";
-
-interface CliArgs {
-  file: string;
-  pr?: string;
-  project?: string;
-  resolvedBy?: string;
-  date?: string;
-}
-
-export function parseArgs(argv: string[]): CliArgs {
-  const positional: string[] = [];
-  const flags: Record<string, string> = {};
-
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    if (arg.startsWith("--")) {
-      const key = arg.slice(2);
-      const value = argv[++i];
-      if (value === undefined) {
-        throw new Error(`missing value for --${key}`);
-      }
-      flags[key] = value;
-    } else {
-      positional.push(arg);
-    }
-  }
-
-  if (positional.length !== 1) {
-    throw new Error(
-      "usage: kb:resolve -- <error-file>.md --pr <number> --project <name> " +
-        "(or --resolved-by \"<free text>\")"
-    );
-  }
-
-  return {
-    file: positional[0],
-    pr: flags.pr,
-    project: flags.project,
-    resolvedBy: flags["resolved-by"],
-    date: flags.date,
-  };
-}
+import { pathToFileURL } from "node:url";
 
 function resolveVaultPath(): string {
   const raw = process.env.VAULT_PATH || "~/Documents/my-vault";
   return raw.startsWith("~") ? path.join(os.homedir(), raw.slice(1)) : path.resolve(raw);
 }
 
-/** Local (not UTC) calendar date as YYYY-MM-DD — matches the vault's convention
- * of dating entries by the author's local day, and avoids `resolved_at`
- * silently landing on "yesterday" for anyone west of UTC in the evening. */
-function todayISO(): string {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
-function main(): void {
-  let args: CliArgs;
-  try {
-    args = parseArgs(process.argv.slice(2));
-  } catch (err) {
-    console.error(`[kb:resolve] ${(err as Error).message}`);
-    process.exit(1);
-    return;
-  }
-
-  const resolvedBy =
-    args.resolvedBy ?? (args.project && args.pr ? `${args.project}#${args.pr}` : undefined);
-
-  if (!resolvedBy) {
-    console.error(
-      "[kb:resolve] must supply either --resolved-by \"<text>\" or both --project <name> and --pr <number>"
-    );
-    process.exit(1);
-    return;
-  }
-
+async function main(): Promise<void> {
   const vaultPath = resolveVaultPath();
-  const fileName = args.file.endsWith(".md") ? args.file : `${args.file}.md`;
-  const fullPath = path.join(vaultPath, "30_Knowledge", "errors", fileName);
+  const scriptPath = path.join(vaultPath, "_scripts", "kb_checklist", "kb-resolve.mjs");
 
-  let content: string;
   try {
-    content = fs.readFileSync(fullPath, "utf8");
+    await import(pathToFileURL(scriptPath).href);
   } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code ?? String(err);
-    console.error(`[kb:resolve] cannot read "${fullPath}": ${code}`);
-    process.exit(1);
-    return;
-  }
-
-  const resolvedAt = args.date ?? todayISO();
-
-  let result;
-  try {
-    result = updateFrontmatterResolved(content, { resolvedBy, resolvedAt });
-  } catch (err) {
-    console.error(`[kb:resolve] ${fileName}: ${(err as Error).message}`);
-    process.exit(1);
-    return;
-  }
-
-  if (!result.changed) {
-    console.log(
-      `[kb:resolve] ${fileName}: already resolved_by=${resolvedBy} resolved_at=${resolvedAt} — no changes.`
+    console.error(
+      `[kb:resolve] could not load the vault script at "${scriptPath}": ` +
+        `${(err as Error).message}\n` +
+        "This command requires the M2 Obsidian vault to be present locally " +
+        "(set VAULT_PATH to override the default ~/Documents/my-vault)."
     );
-    return;
+    process.exit(1);
   }
-
-  fs.writeFileSync(fullPath, result.content, "utf8");
-
-  if (result.previousResolvedBy && result.previousResolvedBy !== resolvedBy) {
-    console.log(
-      `[kb:resolve] ${fileName}: was previously resolved_by="${result.previousResolvedBy}", now "${resolvedBy}"`
-    );
-  }
-  console.log(
-    `[kb:resolve] ${fileName}: resolved=true resolved_by="${resolvedBy}" resolved_at=${resolvedAt}`
-  );
 }
 
 main();
