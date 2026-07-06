@@ -59,6 +59,39 @@ export async function parseJsonBody<T = unknown>(
 }
 
 /**
+ * Extracts a loggable message from an arbitrary caught `cause`, for the
+ * server-side-only log line in `serverErrorResponse`.
+ *
+ * Supabase/PostgREST errors (`{ message, code, details, hint }`) are plain
+ * objects, never `instanceof Error` — found via the error-leak wiring
+ * tests (docs/testing/error-leak-surfaces.md) feeding a realistic
+ * PostgrestError-shaped object through `serverErrorResponse` and noticing
+ * the server log collapsed to the useless "[object Object]" (via the naive
+ * `String(cause)` fallback). That's every real Supabase failure in
+ * production — the one case this log line exists for. This extracts
+ * `.message` (plus `.code` when present) for object causes before falling
+ * back to `String()`.
+ */
+function extractCauseMessage(cause: unknown): string {
+  if (cause instanceof Error) return cause.message;
+  if (cause !== undefined && cause !== null && typeof cause === "object") {
+    const obj = cause as Record<string, unknown>;
+    if (typeof obj.message === "string" && obj.message.length > 0) {
+      const codeSuffix =
+        typeof obj.code === "string" && obj.code ? ` (code=${obj.code})` : "";
+      return `${obj.message}${codeSuffix}`;
+    }
+    try {
+      return JSON.stringify(cause);
+    } catch {
+      return String(cause);
+    }
+  }
+  if (cause !== undefined && cause !== null) return String(cause);
+  return "unknown error";
+}
+
+/**
  * Builds a generic, safe-for-client error NextResponse while logging the
  * real cause (DB/provider error message, stack, etc.) server-side only,
  * tagged with a shared `errorId` the client can quote back in a support
@@ -78,12 +111,7 @@ export function serverErrorResponse(
   opts?: { status?: number; message?: string }
 ): NextResponse {
   const errorId = crypto.randomUUID();
-  const causeMessage =
-    cause instanceof Error
-      ? cause.message
-      : cause !== undefined && cause !== null
-        ? String(cause)
-        : "unknown error";
+  const causeMessage = extractCauseMessage(cause);
 
   // eslint-disable-next-line no-console -- intentional server-side-only log
   console.error(`[${context}] errorId=${errorId}:`, causeMessage);

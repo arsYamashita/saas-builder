@@ -120,4 +120,34 @@ describe("serverErrorResponse", () => {
     const json = await res.json();
     expect(json.error).toBe("Internal server error");
   });
+
+  it("logs the real message (not '[object Object]') for a plain PostgrestError-shaped cause", async () => {
+    // Regression test: Supabase/PostgREST errors are plain objects
+    // (`{ message, code, details, hint }`), never `instanceof Error`. This
+    // is the actual shape passed to serverErrorResponse() by every
+    // `const { error } = await supabase...` call site (~22 routes) — if the
+    // server-side log line degrades to the useless "[object Object]" for
+    // this shape, every real DB failure in production is unloggable
+    // despite errorId-based tracing being this function's whole point.
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const postgrestError = {
+      message: 'duplicate key value violates unique constraint "commissions_subscription_id_key"',
+      code: "23505",
+      details: "",
+      hint: "",
+    };
+    const res = serverErrorResponse("billing/checkout", postgrestError);
+    const json = await res.json();
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    const [, loggedCause] = spy.mock.calls[0];
+    expect(loggedCause).not.toBe("[object Object]");
+    expect(loggedCause).toContain("commissions_subscription_id_key");
+    expect(loggedCause).toContain("23505");
+
+    // Still never forwarded to the client.
+    expect(json.error).toBe("Internal server error");
+    expect(JSON.stringify(json)).not.toContain("commissions_subscription_id_key");
+  });
 });
