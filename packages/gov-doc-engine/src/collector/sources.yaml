@@ -1,0 +1,30 @@
+# gov-doc-engine MVP スコープ: 助成金・補助金検知
+# 監視対象2〜3件（ミラサポplus / J-Net21 / 厚労省）。
+#
+# selector は各サイトの本文領域を絞り込むための CSS セレクタ（推定・要検証）。
+# 実運用投入前に実サイトの DOM 構造を確認し、必要なら調整すること。
+version: 1
+sources:
+  - id: mirasapo-plus-subsidy-search
+    name: "ミラサポplus 補助金・支援施策検索"
+    agency: "中小企業庁"
+    url: "https://mirasapo-plus.go.jp/subsidy/"
+    selector: "main#main-content"
+    category: subsidy
+    checkIntervalMinutes: 180
+
+  - id: jnet21-subsidy-info
+    name: "J-Net21 支援情報ヘッドライン"
+    agency: "独立行政法人中小企業基盤整備機構"
+    url: "https://j-net21.smrj.go.jp/snavi/support"
+    selector: "div.contents"
+    category: subsidy
+    checkIntervalMinutes: 180
+
+  - id: mhlw-subsidy-notice
+    name: "厚生労働省 事業主向け助成金のご案内"
+    agency: "厚生労働省"
+    url: "https://www.mhlw.go.jp/stf/seisakunitsuite/bunya/koyou_roudou/koyou/kyufukin/index.html"
+    selector: "div#contentsWrap"
+    category: subsidy
+    checkIntervalMinutes: 360

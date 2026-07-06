@@ -1,0 +1,19 @@
+{
+  "name": "@saas/gov-doc-engine",
+  "version": "0.1.0",
+  "private": true,
+  "description": "官公庁ドキュメント解析の共通パッケージ。収集層(差分検知)・解析層(Claude構造化抽出)・適用層(プロダクト連携インターフェイス)の3層構成。第一ユースケース: 助成金・補助金の新着/変更検知。",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.110.0",
+    "diff": "^7.0.0",
+    "js-yaml": "^4.1.1",
+    "node-html-parser": "^6.1.13",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/diff": "^7.0.2",
+    "@types/js-yaml": "^4.0.9"
+  }
+}
