@@ -1,0 +1,22 @@
+name: secret_guard
+description: >
+  Secret-shape masking with enforced output-route coverage (registerSink() +
+  a wiring test that fails if a whole output-route kind has nothing
+  registered). Dart/Flutter port of packages/secret-guard's TypeScript API
+  in the saas-builder monorepo — see ../README.md for the full design.
+version: 0.1.0
+publish_to: 'none'
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: '>=3.19.0'
+
+# Deliberately no `flutter` main dependency: the mask/sinks API is pure
+# Dart (dart:convert only), so it works unmodified in a plain `dart test`
+# CLI package too. `flutter_test` is a dev dependency only, so this package
+# is runnable with `flutter test` (as required for Flutter app consumers)
+# without forcing every consumer to pull in the Flutter SDK at runtime.
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.1

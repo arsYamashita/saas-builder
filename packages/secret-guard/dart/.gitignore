@@ -1,0 +1,7 @@
+.dart_tool/
+build/
+.packages
+# This is a library, not a deployable app — per pub.dev's guidance, a
+# package's pubspec.lock is not committed (consumers/CI resolve their own
+# compatible versions via pubspec.yaml's constraints).
+pubspec.lock

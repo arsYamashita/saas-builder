@@ -1,4 +1,19 @@
 import { NextResponse } from "next/server";
+import { registerSink } from "@saas/secret-guard";
+
+// Wired once, at module load, per packages/secret-guard's "enumerate every
+// output route, then pin it with a wiring test" design. `serverErrorResponse`
+// is the `log`-kind sink for this whole route surface (17 API routes under
+// app/api/ funnel their error logging through it) — a downstream
+// Stripe/Supabase/Gemini call can throw an error message with a secret
+// embedded in it (see the gemini_api_key_url_query_masker_bypass regression
+// this package's tests guard against), and that message used to reach
+// `console.error` unmasked. See lib/api/__tests__/errors.test.ts and
+// packages/secret-guard/README.md "Real integration".
+const maskForLog = registerSink({
+  kind: "log",
+  name: "lib/api/errors.ts serverErrorResponse console.error",
+});
 
 /**
  * Parses a Request/NextRequest JSON body without throwing.
@@ -86,7 +101,7 @@ export function serverErrorResponse(
         : "unknown error";
 
   // eslint-disable-next-line no-console -- intentional server-side-only log
-  console.error(`[${context}] errorId=${errorId}:`, causeMessage);
+  console.error(`[${context}] errorId=${errorId}:`, maskForLog(causeMessage));
 
   return NextResponse.json(
     { error: opts?.message ?? "Internal server error", errorId },

@@ -1,0 +1,38 @@
+#!/bin/bash
+#
+# secret-guard local pre-commit hook.
+#
+# One-time setup (per clone):
+#   git config core.hooksPath packages/secret-guard/ci
+#
+# (git only supports one hooksPath per repo — if this repo later adds
+# other shared hooks, move this script's body into that shared hook
+# instead of fighting over hooksPath. Not needed yet.)
+#
+# Requires the `gitleaks` binary (brew install gitleaks / see
+# https://github.com/gitleaks/gitleaks#installing). Fails OPEN (warns, does
+# not block the commit) if gitleaks isn't installed, so a missing local
+# tool can't block development — the GitHub Actions PR gate
+# (github-actions-secret-guard.yml) is the real, non-bypassable
+# enforcement point; this hook is just fast local feedback.
+
+set -euo pipefail
+
+HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG="$HOOK_DIR/gitleaks.toml"
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "WARNING: gitleaks not installed — skipping local secret scan for this commit." >&2
+  echo "  Install: brew install gitleaks (or see https://github.com/gitleaks/gitleaks)" >&2
+  echo "  The CI PR gate will still catch this before merge." >&2
+  exit 0
+fi
+
+if ! gitleaks protect --staged --config "$CONFIG" --redact; then
+  echo "" >&2
+  echo "ERROR: gitleaks detected a possible secret in staged changes (see above)." >&2
+  echo "If this is a false positive, add a narrow allowlist entry to" >&2
+  echo "packages/secret-guard/ci/gitleaks.toml (documented at the top of that file)" >&2
+  echo "— don't reach for --no-verify as the default fix." >&2
+  exit 1
+fi
