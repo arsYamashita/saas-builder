@@ -32,10 +32,14 @@ Caveat: this sandbox has no real Supabase project or `TEST_USER_EMAIL`/
 `TEST_USER_PASSWORD`, so `logged-in` / `logged-in-webkit` have never actually
 exercised authenticated pages here, in either engine — only the redirect and
 public-page specs (46-47 of them) got real assertions. CI *does* have those
-secrets (see `.github/workflows/ci.yml`), so once a `playwright-webkit` CI job
-is wired up (not added in this branch — see "Not done" below) it will be the
-first real signal on authenticated WebKit behavior (dashboard/content/plans
-CRUD flows).
+secrets (see `.github/workflows/ci.yml`): its existing `playwright` job runs
+plain `npx playwright test`, which now includes the webkit projects, so that
+job is the first real signal on authenticated WebKit behavior
+(dashboard/content/plans CRUD flows). The job's browser-install step was
+updated to `npx playwright install --with-deps chromium webkit` to match
+(Codex review P1 on this branch: with the webkit projects selected, a
+chromium-only install would fail every fresh-runner run with
+"Executable doesn't exist" before a single test executed).
 
 ## Cookie / SameSite / ITP / redirect / localStorage — investigated differences
 
@@ -116,12 +120,13 @@ additional moving part).
 
 ## Not done in this branch (explicitly out of scope / deferred)
 
-- No new CI job added to `.github/workflows/ci.yml` for the webkit lane.
-  Two other branches are concurrently touching shared files
-  (`packages/*` additions per the instruction's constraint), so this branch
-  intentionally limits shared-file changes to `playwright.config.ts` plus
-  this new doc. Wiring `--project=webkit` (and `logged-in-webkit`) into CI as
-  a `playwright-webkit` job (same shape as the existing `playwright` job) is
-  a small, low-risk follow-up once the parallel branches land.
+- No **separate** `playwright-webkit` CI job. The webkit lane runs inside the
+  existing `playwright` job (its `npx playwright test` picks up all
+  projects, and its install step now provisions both browsers — the one-line
+  `ci.yml` change from the Codex P1). If the combined job's runtime becomes
+  a bottleneck, splitting webkit into a parallel job is the follow-up; kept
+  to the minimal change here because two other branches are concurrently
+  touching shared files (`packages/*` additions per the instruction's
+  constraint).
 - Real authenticated-WebKit verification against a live Supabase project
   (see caveat above).
