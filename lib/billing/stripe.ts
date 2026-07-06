@@ -1,18 +1,6 @@
-import Stripe from "stripe";
-
-let stripeClient: Stripe | null = null;
-
-export function getStripeClient() {
-  if (!stripeClient) {
-    const secretKey = process.env.STRIPE_SECRET_KEY;
-    if (!secretKey) {
-      throw new Error("STRIPE_SECRET_KEY is missing");
-    }
-
-    stripeClient = new Stripe(secretKey, {
-      apiVersion: "2025-02-24.acacia" as Stripe.LatestApiVersion,
-    });
-  }
-
-  return stripeClient;
-}
+/**
+ * Re-exports the hardened Stripe client from @saas/payments. Kept as a
+ * local path so existing call sites / test mocks (`vi.mock("@/lib/billing/stripe", ...)`)
+ * keep working unchanged after the extraction — see packages/payments/.
+ */
+export { getStripeClient } from "@saas/payments";

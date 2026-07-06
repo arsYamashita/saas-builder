@@ -1,17 +1,12 @@
-import { createClient } from "@supabase/supabase-js";
-
-export function createAdminClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!url || !serviceRoleKey) {
-    throw new Error("Supabase admin environment variables are missing");
-  }
-
-  return createClient(url, serviceRoleKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  });
-}
+/**
+ * Re-exports the service-role Supabase client from @saas/auth/server (the
+ * server-only entrypoint, guarded by `import "server-only"`). Kept as a
+ * local path (and the original `createAdminClient` name) so existing call
+ * sites / test mocks (`vi.mock("@/lib/db/supabase/admin", ...)`) keep
+ * working unchanged after the extraction — see packages/auth/.
+ *
+ * IMPORTANT: this client bypasses Row Level Security entirely — see
+ * packages/auth/README.md for the tenant-boundary rules that apply to
+ * every query made with it.
+ */
+export { createAdminSupabaseClient as createAdminClient } from "@saas/auth/server";
