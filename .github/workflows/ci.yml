@@ -31,6 +31,29 @@ jobs:
       - run: npm ci
       - run: npm run test:unit
 
+  security-gate:
+    name: Security Regression Gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # security-gate-check.ts diffs new supabase/migrations files
+          # against the PR base branch (`git diff <base>...HEAD`), which
+          # needs real history, not the default single-commit shallow
+          # clone.
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      # Pull requests: GITHUB_BASE_REF is set by GitHub Actions, so
+      # security-gate-check.ts diffs against origin/<base-branch>. Push
+      # events to main have no base ref — fetch origin/main explicitly so
+      # the fallback in security-gate-check.ts always resolves.
+      - run: git fetch origin main --quiet
+      - run: npm run security:gate
+
   playwright:
     name: Playwright Smoke Tests
     runs-on: ubuntu-latest
