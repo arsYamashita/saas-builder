@@ -56,8 +56,18 @@ describe("POST /api/projects/[projectId]/generate-blueprint — error-leak wirin
   });
 
   afterEach(() => {
-    process.env.SUPABASE_SERVICE_ROLE_KEY = originalServiceRoleKey;
-    process.env.NEXT_PUBLIC_SUPABASE_URL = originalSupabaseUrl;
+    // 元が未設定だった env に undefined を代入すると文字列 "undefined" として
+    // 残り、後続テストの `if (!process.env.X)` 判定を汚染するため delete で復元
+    if (originalServiceRoleKey === undefined) {
+      delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    } else {
+      process.env.SUPABASE_SERVICE_ROLE_KEY = originalServiceRoleKey;
+    }
+    if (originalSupabaseUrl === undefined) {
+      delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+    } else {
+      process.env.NEXT_PUBLIC_SUPABASE_URL = originalSupabaseUrl;
+    }
   });
 
   it("does not leak an unexpected pipeline failure (e.g. missing prompt file path)", async () => {
