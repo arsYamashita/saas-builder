@@ -101,13 +101,18 @@ final List<MaskPattern> patterns = [
     ),
   ),
 
-  // Generic `api_key=`/`token:`/etc. assignments (ad hoc internal tokens
-  // that don't match a known provider prefix).
+  // Generic `api_key=`/`token=`/`token:`/etc. assignments (ad hoc internal
+  // tokens that don't match a known provider prefix — including opaque
+  // non-hex values). The bare `token` alternative (Codex review P2 on
+  // PR #37) also catches compound names ending in it (`auth_token=`,
+  // `refresh_token=`); it can't false-match `tokenizer=` because `=`/`:`
+  // must immediately follow `token` (modulo whitespace). Value min-length
+  // stays at {20,} — same false-positive guard as the other alternatives.
   MaskPattern(
     'generic-key-assignment',
     (t) => t.replaceAllMapped(
       RegExp(
-        r'''(api[_-]?key|apikey|api[_-]?token|access[_-]?token|secret[_-]?key)\s*[=:]\s*["']?([A-Za-z0-9\-_.]{20,})["']?''',
+        r'''(api[_-]?key|apikey|api[_-]?token|access[_-]?token|secret[_-]?key|token)\s*[=:]\s*["']?([A-Za-z0-9\-_.]{20,})["']?''',
         caseSensitive: false,
       ),
       (m) => '${m.group(1)}=[MASKED]',

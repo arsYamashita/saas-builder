@@ -106,12 +106,19 @@ export const PATTERNS: MaskPattern[] = [
       t.replace(/Bearer\s+[A-Za-z0-9\-_.]{20,}/gi, "Bearer [MASKED]"),
   },
   {
-    // Generic `api_key=`/`token:`/etc. assignments (covers ad hoc internal
-    // tokens that don't match a known provider prefix).
+    // Generic `api_key=`/`token=`/`token:`/etc. assignments (covers ad hoc
+    // internal tokens that don't match a known provider prefix — including
+    // opaque non-hex values). The bare `token` alternative (Codex review
+    // P2 on PR #37) also catches compound names ending in it (`auth_token=`,
+    // `refresh_token=`); it can't false-match `tokenizer=` and similar
+    // compounds because the regex requires `=`/`:` immediately after
+    // `token` (modulo whitespace). Value min-length stays at {20,} — the
+    // same false-positive guard as the other alternatives, so short
+    // ordinary values (`token=abc123`) pass through.
     name: "generic-key-assignment",
     test: (t) =>
       t.replace(
-        /(api[_-]?key|apikey|api[_-]?token|access[_-]?token|secret[_-]?key)\s*[=:]\s*["']?([A-Za-z0-9\-_.]{20,})["']?/gi,
+        /(api[_-]?key|apikey|api[_-]?token|access[_-]?token|secret[_-]?key|token)\s*[=:]\s*["']?([A-Za-z0-9\-_.]{20,})["']?/gi,
         "$1=[MASKED]"
       ),
   },

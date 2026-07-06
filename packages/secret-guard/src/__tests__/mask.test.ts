@@ -95,6 +95,33 @@ describe("mask()", () => {
     expect(out).not.toContain(SAMPLES.genericApiKey);
   });
 
+  // Codex review P2 (PR #37): a bare `token=` / `token:` with an opaque,
+  // non-hex value used to slip through — the alternation only listed
+  // api_token/access_token compounds.
+  it("masks a bare token= assignment with an opaque non-hex value", () => {
+    const opaqueValue = "OpaqueSessionValue.v2-XyZ1234567890abcXYZ";
+    const out = mask(`token=${opaqueValue}`);
+    expect(out).not.toContain(opaqueValue);
+    expect(out).toContain("token=[MASKED]");
+  });
+
+  it("masks a token: (colon) assignment with an opaque non-hex value", () => {
+    const opaqueValue = "OpaqueColonValue-v3_LmN9876543210zyxWVU";
+    const out = mask(`token: "${opaqueValue}"`);
+    expect(out).not.toContain(opaqueValue);
+    expect(out).toContain("token=[MASKED]");
+  });
+
+  it("does NOT false-match compound words like tokenizer=", () => {
+    const text = "tokenizer=streamingWordPieceLongValue01";
+    expect(mask(text)).toBe(text);
+  });
+
+  it("does NOT mask a short ordinary token= value (min-length guard)", () => {
+    const text = "token=abc123";
+    expect(mask(text)).toBe(text);
+  });
+
   it("masks generic 32+ char hex blobs", () => {
     const out = mask(`sha256=${SAMPLES.hexSecret}`);
     expect(out).not.toContain(SAMPLES.hexSecret);
