@@ -6,7 +6,7 @@ Added as part of M2 instruction `2026-07-04_021` (WebKit E2E verification lane).
 files run under both engines with no duplication.
 
 ```bash
-npx playwright install webkit   # one-time, ~73MB
+npx playwright install chromium webkit   # one-time (setup プロジェクトが Chromium を使うため webkit 単独実行でも両方必要)
 npx playwright test --project=webkit             # public/unauthenticated specs
 npx playwright test --project=logged-in-webkit   # *.auth.spec.ts (self-skips
                                                   # without TEST_USER_EMAIL/
