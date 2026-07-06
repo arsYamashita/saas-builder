@@ -1,0 +1,101 @@
+## secret-guard gitleaks config
+##
+## This is the *repo history* half of secret-guard's two-layer defense
+## (the other half is the TS/Dart `mask()` API in ../src and ../dart, which
+## sanitizes strings at runtime before they leave the process). gitleaks
+## scans what actually gets committed — the last line of defense before a
+## secret is permanently in git history.
+##
+## Usage:
+##   Pre-commit (local):
+##     gitleaks protect --staged --config packages/secret-guard/ci/gitleaks.toml
+##   PR gate (CI): see ../ci/github-actions-secret-guard.yml (copy to
+##     .github/workflows/secret-guard.yml — this repo already has it wired
+##     there for saas-builder itself).
+##
+## False-positive tuning lives entirely in the [allowlist] block below. Two
+## entries are ported from real production incidents in sibling repos —
+## don't remove them without checking the history note attached to each:
+##
+##   1. `firebase_options*.dart` (path allowlist): Firebase's generated
+##      client config file. It contains what LOOK like API keys (long
+##      alphanumeric strings under `apiKey:`) but Firebase's own docs
+##      confirm these are safe to ship client-side / commit — restriction
+##      is enforced server-side by Firebase Security Rules, not by keeping
+##      this file secret. Generic secret-shape scanners (gitleaks's
+##      generic-api-key rule in particular) false-positive on it in every
+##      Flutter repo we have. See flutter-firebase-secure-starter's
+##      firebase_options.dart for the canonical shape.
+##
+##   2. Date-prefixed slug regex (regex allowlist): ported from
+##      ai-business-navigator's scripts/git-hooks/check-entropy.py (commit
+##      d5f7940, 指示書016) — the first real production false-positive hit
+##      after that repo's entropy scanner went live. M2 vault instruction
+##      files and KB filenames are named like
+##      `2026-07-03_016_kb_checklist_rollout_...`: a long, underscore-joined,
+##      high-entropy-*looking* slug that is just natural-language words
+##      concatenated, not a secret. gitleaks doesn't have a generic entropy
+##      rule enabled by default (that's what our TS/Dart entropy-style
+##      hex32+ rule is for at the code layer), but this allowlist keeps the
+##      two tools' false-positive handling in sync so a future entropy rule
+##      added here doesn't regress the same way.
+
+[extend]
+# Layer on top of gitleaks's built-in provider-signature rules (Stripe,
+# Google, Slack, AWS, generic high-entropy, JWT shape, ...) rather than
+# replacing them.
+#
+# Note on JWTs specifically: gitleaks's default ruleset already flags the
+# generic `eyJ...` JWT shape (its rules match raw committed text; they
+# cannot base64-decode the payload to check the `role` claim the way
+# packages/secret-guard/src/patterns.ts does at runtime). That's fine here
+# — the two tools cover different moments: `mask()` sanitizes strings
+# in-flight (and *can* afford to decode + special-case the safe anon role
+# to keep output readable); gitleaks only has to answer "was a JWT-shaped
+# blob committed at all", where treating every JWT as worth a look is the
+# right, fail-closed default. The anon-key prefix is allowlisted below so
+# the one JWT we deliberately commit (`.env.example`, empty anyway) doesn't
+# need a per-commit override.
+useDefault = true
+
+[[rules]]
+id = "saas-builder-bare-url-query-key-param"
+description = "Bare key=<secret> in a URL query string — the exact shape of the gemini_api_key_url_query_masker_bypass regression (aeo-service commit b2acc6e): an API key riding a query param instead of a header, which then leaks via exception-message stringification of the full URL"
+regex = '''[?&]key=[A-Za-z0-9\-_.]{16,}'''
+tags = ["url", "api-key", "query-param"]
+
+[allowlist]
+description = "saas-builder / secret-guard shared false-positive allowlist"
+
+regexes = [
+  # Public/anon Supabase key prefix (JWT header + start of the anon-role
+  # payload) — safe to commit, matches the same allowlist entry used in
+  # ai-business-navigator's .gitleaks.toml.
+  '''eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6''',
+
+  # Date-prefixed vault instruction/KB slugs (see history note above).
+  # Matches a whole token that STARTS with YYYY-MM-DD followed by `_`/`-` —
+  # scoped narrowly so it can't accidentally swallow a real secret that
+  # merely contains a date substring somewhere in the middle.
+  '''\b\d{4}-\d{2}-\d{2}[_-][A-Za-z0-9_-]*\b''',
+]
+
+paths = [
+  '''\.env\.example$''',
+  # Firebase's generated client config — see history note (1) above.
+  '''(^|/)firebase_options.*\.dart$''',
+  # Standard lockfiles/build output — same exclusions as
+  # ai-business-navigator's check-entropy.py EXCLUDE_PATH_PATTERNS, kept in
+  # sync so both tools agree on what's "generated, don't bother".
+  '''package-lock\.json$''',
+  '''pnpm-lock\.yaml$''',
+  '''yarn\.lock$''',
+  '''(^|/)\.next/''',
+  '''(^|/)dist/''',
+  '''(^|/)node_modules/''',
+  # This package's own test fixtures use fake-but-secret-shaped strings on
+  # purpose (see src/__tests__/*.ts) — never real credentials, but their
+  # shape is deliberately designed to trip every rule above.
+  '''packages/secret-guard/src/__tests__/''',
+  '''packages/secret-guard/dart/test/''',
+]
