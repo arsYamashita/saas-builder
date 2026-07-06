@@ -30,7 +30,8 @@
     "create-app": "tsx scripts/create-app.ts",
     "kb:checklist": "tsx scripts/generate-error-checklist.ts",
     "kb:resolve": "tsx scripts/kb-resolve.ts",
-    "kb:reconcile": "tsx scripts/kb-reconcile.ts"
+    "kb:reconcile": "tsx scripts/kb-reconcile.ts",
+    "security:gate": "tsx scripts/security-gate-check.ts"
   },
   "dependencies": {
     "@saas/auth": "*",
@@ -64,6 +65,7 @@
     "autoprefixer": "^10.4.0",
     "postcss": "^8.4.0",
     "tailwindcss": "^3.4.0",
+    "tsx": "^4.19.0",
     "typescript": "^5.5.0",
     "vitest": "^3.2.4"
   }
