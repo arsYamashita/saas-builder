@@ -34,6 +34,30 @@ export default defineConfig({
       testMatch: /\.auth\.spec\.ts/,
       dependencies: ["setup"],
     },
+    // WebKit (Safari engine) lane — mirrors "chromium" 1:1 for parity.
+    // See docs/testing/webkit-e2e-notes.md for known Chromium/WebKit
+    // behavior differences (cookies/ITP/storage/redirects) surfaced while
+    // adding this lane.
+    {
+      name: "webkit",
+      use: { ...devices["Desktop Safari"] },
+      testIgnore: [/auth\.setup\.ts/, /\.auth\.spec\.ts/],
+      dependencies: ["setup"],
+    },
+    // Authenticated WebKit tests (use saved storageState). Like "logged-in",
+    // every *.auth.spec.ts self-skips via a `TEST_USER_EMAIL` beforeEach
+    // guard when no real Supabase test user is configured (local sandbox /
+    // forks without the CI secret) — so this project is safe to run
+    // everywhere and only exercises real assertions where creds exist.
+    {
+      name: "logged-in-webkit",
+      use: {
+        ...devices["Desktop Safari"],
+        storageState: "tests/playwright/.auth/user.json",
+      },
+      testMatch: /\.auth\.spec\.ts/,
+      dependencies: ["setup"],
+    },
   ],
   webServer: {
     command: "npm run dev",
