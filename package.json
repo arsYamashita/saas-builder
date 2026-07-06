@@ -35,6 +35,7 @@
   },
   "dependencies": {
     "@saas/auth": "*",
+    "@saas/llm-guard": "*",
     "@saas/payments": "*",
     "@saas/secret-guard": "*",
     "@anthropic-ai/sdk": "^0.110.0",

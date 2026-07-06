@@ -9,8 +9,12 @@ import type {
   GenerationRequest,
   ProviderRawResult,
 } from "./provider-interface";
+import { MODELS, assertValidModel } from "@/lib/ai/models";
 
-const CLAUDE_MODEL = "claude-sonnet-4-5";
+// 2026-07-06 (指示書2026-07-06_031): 直書きされていた "claude-sonnet-4-5"
+// (旧世代モデルID) を共通定数 MODELS.sonnet に置換。
+const CLAUDE_MODEL = MODELS.sonnet;
+assertValidModel(CLAUDE_MODEL); // モジュール読み込み時にサイレント劣化を検知
 
 export class ClaudeAdapter implements ProviderAdapter {
   readonly providerId = "claude" as const;
