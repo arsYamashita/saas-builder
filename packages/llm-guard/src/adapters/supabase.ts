@@ -13,6 +13,11 @@
  * - 戻り値を `boolean` から `jsonb` (`{accepted, scope, used, limit}`) に
  *   拡張し、上限超過時にどちらの軸で超過したか・実測値をアプリ側の
  *   AlertSink に渡せるようにした。
+ * - 期間キー (`p_day` / `p_month`) を **クライアント側で予約時に確定して
+ *   引数で渡す** (Codex review 2026-07-06 P2 on PR #39): DB 側で now() から
+ *   再計算すると、UTC日/月境界を跨いだ finalize/release の補正が新しい
+ *   バケットに当たってしまう（前日の予約が残置 + 新日がマイナス補正）。
+ *   Reservation が予約時のキーを保持し、補正 RPC に同じキーを渡す。
  *
  * SQL 本体（テーブル定義 + RPC 関数）は `packages/llm-guard/sql/supabase-usage-schema.sql`
  * にテンプレとして同梱。プロジェクト固有のテーブル名/RLSポリシーに合わせて
@@ -22,7 +27,13 @@
 
 import type { AlertSink } from "../core/alerts";
 import { DEFAULT_DAILY_TOKEN_LIMIT, DEFAULT_MONTHLY_TOKEN_LIMIT } from "../core/limits";
-import { reservationAdjustment, type TenantUsageGuard } from "../core/reservation";
+import {
+  reservationAdjustment,
+  yyyyMM,
+  yyyyMMdd,
+  type Reservation,
+  type TenantUsageGuard,
+} from "../core/reservation";
 
 /** `@supabase/supabase-js` の `SupabaseClient.rpc()` と構造的に互換な最小インターフェイス。 */
 export interface SupabaseRpcClient {
@@ -37,6 +48,11 @@ interface ReserveLlmUsageResult {
   scope: "daily" | "monthly" | null;
   used: number;
   limit: number;
+}
+
+/** `yyyy-MM` の月次キーを Postgres の date リテラル（当月1日）へ変換する。 */
+function monthKeyToDate(monthlyKey: string): string {
+  return `${monthlyKey}-01`;
 }
 
 export interface SupabaseUsageStoreOptions {
@@ -66,21 +82,42 @@ export function supabaseUsageStore(
   const reserveRpcName = options.reserveRpcName ?? "reserve_llm_usage";
   const adjustRpcName = options.adjustRpcName ?? "adjust_llm_usage";
 
+  /** 予約時の期間キーに対して delta を補正する（now() を再計算しない）。 */
+  async function adjust(reservation: Reservation, delta: number): Promise<void> {
+    if (delta === 0) return;
+    const { error } = await client.rpc(adjustRpcName, {
+      p_tenant_id: reservation.tenantId,
+      p_provider: options.provider,
+      p_delta: delta,
+      p_day: reservation.dailyKey,
+      p_month: monthKeyToDate(reservation.monthlyKey),
+    });
+    if (error) {
+      throw new Error(`[llm-guard] supabase ${adjustRpcName} RPC failed: ${error.message}`);
+    }
+  }
+
   return {
-    async reserve(tenantId: string, tokens: number): Promise<boolean> {
+    async reserve(tenantId: string, tokens: number): Promise<Reservation | null> {
+      const nowDate = now();
+      const dailyKey = yyyyMMdd(nowDate);
+      const monthlyKey = yyyyMM(nowDate);
+
       const { data, error } = await client.rpc<ReserveLlmUsageResult>(reserveRpcName, {
         p_tenant_id: tenantId,
         p_provider: options.provider,
         p_tokens: tokens,
         p_daily_limit: dailyTokenLimit,
         p_monthly_limit: monthlyTokenLimit,
+        p_day: dailyKey,
+        p_month: monthKeyToDate(monthlyKey),
       });
 
       if (error) {
         // インフラ障害（RPC自体が失敗）はコスト超過とは別物 — フェイルクローズ
         // (呼び出しを許可しない) にして例外を投げる。サイレントに許可すると
         // 上限ガードが無効化されたまま気づかれない事故になりうる。
-        throw new Error(`[llm-guard] supabase reserve_llm_usage RPC failed: ${error.message}`);
+        throw new Error(`[llm-guard] supabase ${reserveRpcName} RPC failed: ${error.message}`);
       }
 
       const result = data ?? { accepted: false, scope: "monthly" as const, used: 0, limit: monthlyTokenLimit };
@@ -92,36 +129,21 @@ export function supabaseUsageStore(
           used: result.used,
           limit: result.limit,
           estimatedTokens: tokens,
-          timestamp: now(),
+          timestamp: nowDate,
         });
+        return null;
       }
 
-      return result.accepted;
+      return { tenantId, estimatedTokens: tokens, dailyKey, monthlyKey };
     },
 
-    async finalize(tenantId: string, estimatedTokens: number, actualTokens: number): Promise<void> {
-      const delta = reservationAdjustment(estimatedTokens, actualTokens);
-      if (delta === 0) return;
-      const { error } = await client.rpc(adjustRpcName, {
-        p_tenant_id: tenantId,
-        p_provider: options.provider,
-        p_delta: delta,
-      });
-      if (error) {
-        throw new Error(`[llm-guard] supabase adjust_llm_usage RPC failed: ${error.message}`);
-      }
+    async finalize(reservation: Reservation, actualTokens: number): Promise<void> {
+      const delta = reservationAdjustment(reservation.estimatedTokens, actualTokens);
+      await adjust(reservation, delta);
     },
 
-    async release(tenantId: string, estimatedTokens: number): Promise<void> {
-      if (estimatedTokens <= 0) return;
-      const { error } = await client.rpc(adjustRpcName, {
-        p_tenant_id: tenantId,
-        p_provider: options.provider,
-        p_delta: -estimatedTokens,
-      });
-      if (error) {
-        throw new Error(`[llm-guard] supabase adjust_llm_usage RPC failed: ${error.message}`);
-      }
+    async release(reservation: Reservation): Promise<void> {
+      await adjust(reservation, -reservation.estimatedTokens);
     },
   };
 }

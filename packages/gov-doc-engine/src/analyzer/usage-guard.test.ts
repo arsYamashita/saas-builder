@@ -20,10 +20,15 @@ describe("usage-guard re-export wiring (@saas/llm-guard への移設, 指示書2
     expect(reservationAdjustment(100, 80)).toBe(-20);
     expect(DEFAULT_MONTHLY_TOKEN_LIMIT).toBeGreaterThan(DEFAULT_ESTIMATED_TOKENS_PER_REQUEST);
 
-    const guard = new InMemoryTenantUsageGuard(
-      Number.POSITIVE_INFINITY,
-      DEFAULT_MONTHLY_TOKEN_LIMIT,
-    );
-    expect(await guard.reserve("tenant-a", DEFAULT_ESTIMATED_TOKENS_PER_REQUEST)).toBe(true);
+    // 後方互換シグネチャの回帰: 旧 gov-doc-engine 由来の1引数呼び出しは
+    // 「月次上限」の指定として解釈される (Codex review 2026-07-06 P2 on PR #39)。
+    const guard = new InMemoryTenantUsageGuard(DEFAULT_MONTHLY_TOKEN_LIMIT);
+    const reservation = await guard.reserve("tenant-a", DEFAULT_ESTIMATED_TOKENS_PER_REQUEST);
+    expect(reservation).not.toBeNull();
+    expect(guard.getMonthlyUsed("tenant-a")).toBe(DEFAULT_ESTIMATED_TOKENS_PER_REQUEST);
+    // 月次として解釈されている証拠: 上限ちょうどまで予約できる
+    // (もし日次と解釈されていたら DEFAULT_MONTHLY_TOKEN_LIMIT 相当は日次無制限
+    //  扱いにならず動作が変わる)。
+    expect(await guard.reserve("tenant-a", DEFAULT_MONTHLY_TOKEN_LIMIT)).toBeNull();
   });
 });

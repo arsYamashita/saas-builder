@@ -24,12 +24,23 @@
  * used の合計が limit を超えることはない
  * (day_care_web_app/functions/src/utils/firestoreAdapters.ts の
  * firestoreUsageStore と同じ設計 — Codex review 2026-07-03 指摘2 対応済みパターン)。
+ *
+ * finalize/release は Reservation が保持する **予約時の期間キー** の
+ * ドキュメントに対して補正する — now() を再計算しない
+ * (UTC日/月境界跨ぎの補正ずれ防止, Codex review 2026-07-06 P2 on PR #39)。
  */
 
 import { createHash } from "node:crypto";
 import type { AlertSink } from "../core/alerts";
 import { DEFAULT_DAILY_TOKEN_LIMIT, DEFAULT_MONTHLY_TOKEN_LIMIT } from "../core/limits";
-import { applyReservation, reservationAdjustment, yyyyMM, yyyyMMdd, type TenantUsageGuard } from "../core/reservation";
+import {
+  applyReservation,
+  reservationAdjustment,
+  yyyyMM,
+  yyyyMMdd,
+  type Reservation,
+  type TenantUsageGuard,
+} from "../core/reservation";
 
 export const LLM_USAGE_DAILY_COLLECTION = "llm_usage_daily";
 export const LLM_USAGE_MONTHLY_COLLECTION = "llm_usage_monthly";
@@ -82,12 +93,18 @@ export function firestoreUsageStore(
   const now = options.now ?? (() => new Date());
   const alertSink = options.alertSink;
 
-  async function adjust(tenantId: string, delta: number): Promise<void> {
+  /**
+   * 予約時の期間キー (reservation.dailyKey/monthlyKey) のドキュメントに
+   * 対して delta を補正する — now() から期間キーを再計算しない。
+   */
+  async function adjust(reservation: Reservation, delta: number): Promise<void> {
     if (delta === 0) return;
-    const day = yyyyMMdd(now());
-    const month = yyyyMM(now());
-    const dailyRef = db.collection(LLM_USAGE_DAILY_COLLECTION).doc(usageDocId(tenantId, day));
-    const monthlyRef = db.collection(LLM_USAGE_MONTHLY_COLLECTION).doc(usageDocId(tenantId, month));
+    const dailyRef = db
+      .collection(LLM_USAGE_DAILY_COLLECTION)
+      .doc(usageDocId(reservation.tenantId, reservation.dailyKey));
+    const monthlyRef = db
+      .collection(LLM_USAGE_MONTHLY_COLLECTION)
+      .doc(usageDocId(reservation.tenantId, reservation.monthlyKey));
 
     await db.runTransaction(async (tx) => {
       const [dailyDoc, monthlyDoc] = await Promise.all([tx.get(dailyRef), tx.get(monthlyRef)]);
@@ -96,23 +113,34 @@ export function firestoreUsageStore(
 
       tx.set(
         dailyRef,
-        { tenantId, periodKey: day, tokensUsed: Math.max(0, dailyUsed + delta), updatedAt: now().toISOString() },
+        {
+          tenantId: reservation.tenantId,
+          periodKey: reservation.dailyKey,
+          tokensUsed: Math.max(0, dailyUsed + delta),
+          updatedAt: now().toISOString(),
+        },
         { merge: true },
       );
       tx.set(
         monthlyRef,
-        { tenantId, periodKey: month, tokensUsed: Math.max(0, monthlyUsed + delta), updatedAt: now().toISOString() },
+        {
+          tenantId: reservation.tenantId,
+          periodKey: reservation.monthlyKey,
+          tokensUsed: Math.max(0, monthlyUsed + delta),
+          updatedAt: now().toISOString(),
+        },
         { merge: true },
       );
     });
   }
 
   return {
-    async reserve(tenantId: string, tokens: number): Promise<boolean> {
-      const day = yyyyMMdd(now());
-      const month = yyyyMM(now());
-      const dailyRef = db.collection(LLM_USAGE_DAILY_COLLECTION).doc(usageDocId(tenantId, day));
-      const monthlyRef = db.collection(LLM_USAGE_MONTHLY_COLLECTION).doc(usageDocId(tenantId, month));
+    async reserve(tenantId: string, tokens: number): Promise<Reservation | null> {
+      const nowDate = now();
+      const dailyKey = yyyyMMdd(nowDate);
+      const monthlyKey = yyyyMM(nowDate);
+      const dailyRef = db.collection(LLM_USAGE_DAILY_COLLECTION).doc(usageDocId(tenantId, dailyKey));
+      const monthlyRef = db.collection(LLM_USAGE_MONTHLY_COLLECTION).doc(usageDocId(tenantId, monthlyKey));
 
       const { accepted, dailyResult, monthlyResult } = await db.runTransaction(async (tx) => {
         const [dailyDoc, monthlyDoc] = await Promise.all([tx.get(dailyRef), tx.get(monthlyRef)]);
@@ -129,12 +157,12 @@ export function firestoreUsageStore(
 
         tx.set(
           dailyRef,
-          { tenantId, periodKey: day, tokensUsed: dResult.newUsed, updatedAt: now().toISOString() },
+          { tenantId, periodKey: dailyKey, tokensUsed: dResult.newUsed, updatedAt: nowDate.toISOString() },
           { merge: true },
         );
         tx.set(
           monthlyRef,
-          { tenantId, periodKey: month, tokensUsed: mResult.newUsed, updatedAt: now().toISOString() },
+          { tenantId, periodKey: monthlyKey, tokensUsed: mResult.newUsed, updatedAt: nowDate.toISOString() },
           { merge: true },
         );
         return { accepted: true, dailyResult: dResult, monthlyResult: mResult };
@@ -150,20 +178,21 @@ export function firestoreUsageStore(
           used,
           limit,
           estimatedTokens: tokens,
-          timestamp: now(),
+          timestamp: nowDate,
         });
+        return null;
       }
 
-      return accepted;
+      return { tenantId, estimatedTokens: tokens, dailyKey, monthlyKey };
     },
 
-    async finalize(tenantId: string, estimatedTokens: number, actualTokens: number): Promise<void> {
-      const delta = reservationAdjustment(estimatedTokens, actualTokens);
-      await adjust(tenantId, delta);
+    async finalize(reservation: Reservation, actualTokens: number): Promise<void> {
+      const delta = reservationAdjustment(reservation.estimatedTokens, actualTokens);
+      await adjust(reservation, delta);
     },
 
-    async release(tenantId: string, estimatedTokens: number): Promise<void> {
-      await adjust(tenantId, -estimatedTokens);
+    async release(reservation: Reservation): Promise<void> {
+      await adjust(reservation, -reservation.estimatedTokens);
     },
   };
 }

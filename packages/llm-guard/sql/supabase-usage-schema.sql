@@ -56,26 +56,35 @@ create policy "tenants can view own monthly usage"
 --   accepted = false → いずれかの軸で上限超過のため予約を拒否（両カウンタとも
 --                       加算しない）。scope は超過した軸 ("daily" | "monthly")。
 --                       両方超過している場合は "monthly" を優先して報告する。
+-- 期間キー (p_day / p_month) はクライアント (@saas/llm-guard アダプタ) が
+-- 予約時に確定して渡す (Codex review 2026-07-06 P2 on PR #39):
+-- DB 側で now() から再計算すると、UTC日/月境界を跨いだ adjust_llm_usage の
+-- 補正が新しいバケットに当たり、前日の予約が残置 + 新日がマイナス補正になる。
+-- Reservation (TS側) が予約時のキーを保持し、補正 RPC にも同じキーを渡す。
+-- p_month は当月1日 (例 '2026-07-01')。
 create or replace function public.reserve_llm_usage(
   p_tenant_id    uuid,
   p_provider     text,
   p_tokens       integer,
   p_daily_limit  integer,
-  p_monthly_limit integer
+  p_monthly_limit integer,
+  p_day          date,
+  p_month        date
 ) returns jsonb
 language plpgsql
 security definer
 set search_path = public
 as $$
 declare
-  v_day   date := (now() at time zone 'utc')::date;
-  v_month date := (date_trunc('month', now() at time zone 'utc'))::date;
+  v_day   date := p_day;
+  v_month date := p_month;
   v_daily_used   integer;
   v_monthly_used integer;
 begin
   if p_tokens is null or p_tokens <= 0
      or p_daily_limit is null or p_tokens > p_daily_limit
-     or p_monthly_limit is null or p_tokens > p_monthly_limit then
+     or p_monthly_limit is null or p_tokens > p_monthly_limit
+     or p_day is null or p_month is null then
     return jsonb_build_object('accepted', false, 'scope', 'monthly', 'used', 0, 'limit', coalesce(p_monthly_limit, 0));
   end if;
 
@@ -128,20 +137,26 @@ $$;
 -- delta = 実測 - 予約 (finalize) または delta = -予約 (release)。
 -- 上限チェックは行わない（実測が予約を上回った場合も事実として記録し、
 -- 超過分は次回の予約が拒否されることで回収される — navigator 版と同じ方針）。
+-- p_day / p_month は **予約時の期間キー** をそのまま渡すこと
+-- (Codex review 2026-07-06 P2 on PR #39): DB 側で now() から再計算すると
+-- UTC日/月境界を跨いだ補正が新バケットに当たる（前日の予約残置 + 新日の
+-- マイナス補正 — greatest(0) にクランプされてずれが黙って揉み消される）。
 create or replace function public.adjust_llm_usage(
   p_tenant_id uuid,
   p_provider  text,
-  p_delta     integer
+  p_delta     integer,
+  p_day       date,
+  p_month     date
 ) returns void
 language plpgsql
 security definer
 set search_path = public
 as $$
 declare
-  v_day   date := (now() at time zone 'utc')::date;
-  v_month date := (date_trunc('month', now() at time zone 'utc'))::date;
+  v_day   date := p_day;
+  v_month date := p_month;
 begin
-  if p_delta is null or p_delta = 0 then
+  if p_delta is null or p_delta = 0 or p_day is null or p_month is null then
     return;
   end if;
 
@@ -159,10 +174,10 @@ $$;
 
 -- SECURITY DEFINER 関数はデフォルトで PUBLIC に EXECUTE が付与されるため
 -- 明示的に剥奪。予約・補正は Edge Function (service_role) のみが実行できる。
-revoke execute on function public.reserve_llm_usage(uuid, text, integer, integer, integer) from public, anon, authenticated;
-revoke execute on function public.adjust_llm_usage(uuid, text, integer) from public, anon, authenticated;
-grant execute on function public.reserve_llm_usage(uuid, text, integer, integer, integer) to service_role;
-grant execute on function public.adjust_llm_usage(uuid, text, integer) to service_role;
+revoke execute on function public.reserve_llm_usage(uuid, text, integer, integer, integer, date, date) from public, anon, authenticated;
+revoke execute on function public.adjust_llm_usage(uuid, text, integer, date, date) from public, anon, authenticated;
+grant execute on function public.reserve_llm_usage(uuid, text, integer, integer, integer, date, date) to service_role;
+grant execute on function public.adjust_llm_usage(uuid, text, integer, date, date) to service_role;
 
 create index if not exists llm_usage_daily_tenant_idx on public.llm_usage_daily (tenant_id, provider, day desc);
 create index if not exists llm_usage_monthly_tenant_idx on public.llm_usage_monthly (tenant_id, provider, month desc);

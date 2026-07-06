@@ -17,6 +17,7 @@ export {
   InMemoryTenantUsageGuard,
   DEFAULT_MONTHLY_TOKEN_LIMIT,
   DEFAULT_ESTIMATED_TOKENS_PER_REQUEST,
+  type Reservation,
   type ReservationResult,
   type TenantUsageGuard,
 } from "@saas/llm-guard";

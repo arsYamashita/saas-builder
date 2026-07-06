@@ -45,10 +45,9 @@ const VALID_EXTRACTION = {
 function makeDeps(client: ClaudeMessagesClient | null) {
   return {
     client,
-    // dailyTokenLimit=Infinity: このテストは月次上限の挙動だけを検証するため、
-    // 日次上限（@saas/llm-guard で指示書2026-07-06_025により追加された軸）は
-    // 無効化しておく。
-    usageGuard: new InMemoryTenantUsageGuard(Number.POSITIVE_INFINITY, 1_000_000),
+    // 後方互換シグネチャ: 第1引数 = 月次上限（移設前の gov-doc-engine と同じ）。
+    // 日次上限は options で明示オプトイン — このテストは月次のみ検証する。
+    usageGuard: new InMemoryTenantUsageGuard(1_000_000),
     alertSink: new InMemoryAlertSink(),
     failureTracker: new FailureThresholdTracker(60, 3),
   };

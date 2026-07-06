@@ -16,8 +16,10 @@ export {
   InMemoryTenantUsageGuard,
   yyyyMM,
   yyyyMMdd,
+  type Reservation,
   type ReservationResult,
   type TenantUsageGuard,
+  type InMemoryTenantUsageGuardOptions,
 } from "./core/reservation";
 
 export {

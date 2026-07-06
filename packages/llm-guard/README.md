@@ -44,17 +44,23 @@ import {
   DEFAULT_MONTHLY_TOKEN_LIMIT,
 } from "@saas/llm-guard";
 
-const guard = new InMemoryTenantUsageGuard(
-  DEFAULT_DAILY_TOKEN_LIMIT,
-  DEFAULT_MONTHLY_TOKEN_LIMIT,
-  () => new Date(),
-  new ConsoleAlertSink(),
-);
+// Backward-compatible signature: 1st arg = MONTHLY limit (same meaning as the
+// original gov-doc-engine `new InMemoryTenantUsageGuard(monthly)`), daily is
+// explicit opt-in via options (Codex review 2026-07-06 P2 on PR #39).
+const guard = new InMemoryTenantUsageGuard(DEFAULT_MONTHLY_TOKEN_LIMIT, {
+  dailyTokenLimit: DEFAULT_DAILY_TOKEN_LIMIT,
+  alertSink: new ConsoleAlertSink(),
+});
 
 const check = await checkAndReserveUsage(guard, tenantId, estimatedTokens);
 if (!check.allowed) {
   return Response.json({ error: check.message }, { status: check.status });
 }
+// check.reservation carries the reservation-time period keys — pass it back:
+//   on success: await guard.finalize(check.reservation, actualTokens)
+//   on failure: await guard.release(check.reservation)
+// This guarantees the adjustment lands in the bucket the reservation was made
+// in, even if the call crosses a UTC day/month boundary (Codex P2 on PR #39).
 
 const model = MODELS.opus;
 assertValidModel(model); // throws UnknownModelError on unknown/empty/old-gen IDs
@@ -62,7 +68,9 @@ assertValidModel(model); // throws UnknownModelError on unknown/empty/old-gen ID
 
 For production, swap `InMemoryTenantUsageGuard` for `firestoreUsageStore(db,
 opts)` or `supabaseUsageStore(client, opts)` — both implement the same
-`TenantUsageGuard` interface.
+`TenantUsageGuard` interface (and both default `dailyTokenLimit` to
+`DEFAULT_DAILY_TOKEN_LIMIT`, since they are new APIs with no
+backward-compatibility constraint).
 
 ## Limits are placeholders
 

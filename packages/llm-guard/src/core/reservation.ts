@@ -22,15 +22,27 @@
  * 同一の Codex 指摘を独立に踏んでいた。予約 (reserve) を唯一のゲートにする
  * ことで解消する:
  *
- *   1. 呼び出し前: reserve() — 推定トークンをアトミックに予約。false なら
+ *   1. 呼び出し前: reserve() — 推定トークンをアトミックに予約。null なら
  *      呼び出し元は Claude を呼ばず上限超過として扱う（429 相当）。
- *   2. 呼び出し成功後: finalize() — 実測トークンとの差分を補正。
- *   3. 呼び出し失敗時: release() — 予約分を返却（finalize(id, estimated, 0) と同義）。
+ *      成功時は Reservation オブジェクト（予約時の期間バケットキーを含む）
+ *      を返す。
+ *   2. 呼び出し成功後: finalize(reservation, actual) — 実測トークンとの
+ *      差分を **予約時のバケット** に対して補正。
+ *   3. 呼び出し失敗時: release(reservation) — 予約分を予約時のバケットへ返却。
+ *
+ * ## 予約が期間キーを保持する理由 (Codex review 2026-07-06 P2 on PR #39)
+ *
+ * finalize/release 時に now() から期間キーを再計算すると、UTC の日/月境界を
+ * 跨いだ補正が **新しいバケット** に当たってしまう:
+ * 23:59:59 に予約 → 00:00:01 に release すると、前日のバケットに予約分が
+ * 残置され（=その日の枠が戻らない）、新日のバケットが負方向に補正される
+ * （Math.max(0) で 0 にクランプされ、ずれが黙って揉み消される）。
+ * これを防ぐため、reserve() が予約時点の dailyKey/monthlyKey を
+ * Reservation に固定し、finalize/release は必ずそのキーに対して補正する。
+ * Firestore/Supabase アダプタ（と SQL RPC）も同様に予約時キーを引数で
+ * 受け渡す。
  *
  * 日次上限は既存3実装のどれにも無かった新規要件（指示書2026-07-06_025）。
- * `TenantUsageGuard` インターフェイス自体は単一の `reserve/finalize/release`
- * のまま保つ（既存呼び出し側の互換性維持）— 日次+月次の両方を見るかどうかは
- * 実装（アダプタ）側の責務とする。
  *
  * このモジュールが提供する純関数はストレージ非依存のミラー実装であり、
  * 実際の永続化（Firestore transaction / Postgres atomic upsert）が真実源。
@@ -43,6 +55,21 @@ import type { AlertSink } from "./alerts";
 export interface ReservationResult {
   accepted: boolean;
   newUsed: number;
+}
+
+/**
+ * 予約ハンドル。reserve() 成功時に返り、finalize()/release() に渡す。
+ * dailyKey/monthlyKey は **予約時点** の UTC 期間バケットキー —
+ * 補正が日/月境界を跨いでも必ず予約時のバケットに当たることを保証する
+ * (Codex review 2026-07-06 P2 on PR #39)。
+ */
+export interface Reservation {
+  tenantId: string;
+  estimatedTokens: number;
+  /** 予約時点の日次バケットキー (UTC, `yyyy-MM-dd`)。 */
+  dailyKey: string;
+  /** 予約時点の月次バケットキー (UTC, `yyyy-MM`)。 */
+  monthlyKey: string;
 }
 
 /**
@@ -76,18 +103,49 @@ export function reservationAdjustment(estimatedTokens: number, actualTokens: num
  * ここでは規定しない — adapters/ 配下がプロダクトごとに実装する。
  */
 export interface TenantUsageGuard {
-  /** 予約。true = 予約成功(呼び出し可)、false = 上限超過(呼び出し不可)。 */
-  reserve(tenantId: string, tokens: number): Promise<boolean>;
-  /** 呼び出し成功後、実測トークンとの差分を補正する。 */
-  finalize(tenantId: string, estimatedTokens: number, actualTokens: number): Promise<void>;
-  /** 呼び出し失敗時、予約分を返却する。 */
-  release(tenantId: string, estimatedTokens: number): Promise<void>;
+  /**
+   * 予約。Reservation = 予約成功(呼び出し可)、null = 上限超過(呼び出し不可)。
+   * 返された Reservation を finalize()/release() にそのまま渡すこと。
+   */
+  reserve(tenantId: string, tokens: number): Promise<Reservation | null>;
+  /** 呼び出し成功後、実測トークンとの差分を予約時バケットに対して補正する。 */
+  finalize(reservation: Reservation, actualTokens: number): Promise<void>;
+  /** 呼び出し失敗時、予約分を予約時バケットへ返却する。 */
+  release(reservation: Reservation): Promise<void>;
+}
+
+export interface InMemoryTenantUsageGuardOptions {
+  /**
+   * 日次上限。省略時は **無制限**。
+   *
+   * 後方互換 (Codex review 2026-07-06 P2 on PR #39): 移設元 gov-doc-engine の
+   * 旧シグネチャ `new InMemoryTenantUsageGuard(monthlyLimit)` は月次のみの
+   * ガードだった。日次に暗黙の既定値を入れると、旧来の1引数呼び出しの
+   * 月次専用ガードが黙って日次でも拒否し始める（TSなら型エラーで気づけるが
+   * JS利用者はサイレントに挙動が変わる）ため、日次上限は明示オプトインとする。
+   * 本番アダプタ (firestoreUsageStore / supabaseUsageStore) は
+   * DEFAULT_DAILY_TOKEN_LIMIT を既定値に持つ — あちらは新規APIで
+   * 後方互換の制約がないため。
+   */
+  dailyTokenLimit?: number;
+  now?: () => Date;
+  /**
+   * 上限超過時に通知する AlertSink（任意）。指示書2026-07-06_025の
+   * 「超過アラート」要件。省略時は通知しない（テストでの静音実行用）。
+   */
+  alertSink?: AlertSink;
 }
 
 /**
  * テスト・単一プロセス用途向けの参照実装。日次+月次の両方をチェックする —
  * どちらか一方でも上限を超える場合は予約全体を拒否し、両カウンタとも
  * 変更しない（部分適用によるカウンタのずれを防ぐ）。
+ *
+ * 後方互換シグネチャ: **第1引数は月次上限**（移設元 gov-doc-engine の
+ * `new InMemoryTenantUsageGuard(1_000_000)` と同じ意味）。日次上限は
+ * options で明示指定する:
+ * `new InMemoryTenantUsageGuard(monthly, { dailyTokenLimit })`。
+ *
  * 本番で複数プロセス/インスタンスからテナントを跨いで使う場合は、
  * adapters/firestore.ts または adapters/supabase.ts のような DB アトミック
  * 実装を使うこと（このクラスを真実源にしない）。
@@ -95,29 +153,25 @@ export interface TenantUsageGuard {
 export class InMemoryTenantUsageGuard implements TenantUsageGuard {
   private readonly dailyUsed = new Map<string, number>();
   private readonly monthlyUsed = new Map<string, number>();
+  private readonly dailyTokenLimit: number;
+  private readonly now: () => Date;
+  private readonly alertSink?: AlertSink;
 
   constructor(
-    private readonly dailyTokenLimit: number,
-    private readonly monthlyTokenLimit: number,
-    private readonly now: () => Date = () => new Date(),
-    /**
-     * 上限超過時に通知する AlertSink（任意）。指示書2026-07-06_025の
-     * 「超過アラート」要件。省略時は通知しない（テストでの静音実行用）。
-     */
-    private readonly alertSink?: AlertSink,
-  ) {}
-
-  private dailyKey(tenantId: string): string {
-    return `${tenantId}_${yyyyMMdd(this.now())}`;
+    private readonly monthlyTokenLimit: number = DEFAULT_MONTHLY_TOKEN_LIMIT,
+    options: InMemoryTenantUsageGuardOptions = {},
+  ) {
+    this.dailyTokenLimit = options.dailyTokenLimit ?? Number.POSITIVE_INFINITY;
+    this.now = options.now ?? (() => new Date());
+    this.alertSink = options.alertSink;
   }
 
-  private monthlyKey(tenantId: string): string {
-    return `${tenantId}_${yyyyMM(this.now())}`;
-  }
-
-  async reserve(tenantId: string, tokens: number): Promise<boolean> {
-    const dKey = this.dailyKey(tenantId);
-    const mKey = this.monthlyKey(tenantId);
+  async reserve(tenantId: string, tokens: number): Promise<Reservation | null> {
+    const nowDate = this.now();
+    const dailyKey = yyyyMMdd(nowDate);
+    const monthlyKey = yyyyMM(nowDate);
+    const dKey = `${tenantId}_${dailyKey}`;
+    const mKey = `${tenantId}_${monthlyKey}`;
 
     const dailyResult = applyReservation(
       this.dailyUsed.get(dKey) ?? 0,
@@ -143,47 +197,57 @@ export class InMemoryTenantUsageGuard implements TenantUsageGuard {
         used,
         limit,
         estimatedTokens: tokens,
-        timestamp: this.now(),
+        timestamp: nowDate,
       });
-      return false;
+      return null;
     }
 
     this.dailyUsed.set(dKey, dailyResult.newUsed);
     this.monthlyUsed.set(mKey, monthlyResult.newUsed);
-    return true;
+    return { tenantId, estimatedTokens: tokens, dailyKey, monthlyKey };
   }
 
-  async finalize(tenantId: string, estimatedTokens: number, actualTokens: number): Promise<void> {
-    const delta = reservationAdjustment(estimatedTokens, actualTokens);
+  async finalize(reservation: Reservation, actualTokens: number): Promise<void> {
+    const delta = reservationAdjustment(reservation.estimatedTokens, actualTokens);
     if (delta === 0) return;
 
-    const dKey = this.dailyKey(tenantId);
-    const mKey = this.monthlyKey(tenantId);
+    // 予約時のバケットキーに対して補正する — now() を再計算しない
+    // (UTC日/月境界跨ぎの補正ずれ防止, Codex review 2026-07-06 P2 on PR #39)。
+    const dKey = `${reservation.tenantId}_${reservation.dailyKey}`;
+    const mKey = `${reservation.tenantId}_${reservation.monthlyKey}`;
     this.dailyUsed.set(dKey, Math.max(0, (this.dailyUsed.get(dKey) ?? 0) + delta));
     this.monthlyUsed.set(mKey, Math.max(0, (this.monthlyUsed.get(mKey) ?? 0) + delta));
   }
 
-  async release(tenantId: string, estimatedTokens: number): Promise<void> {
-    await this.finalize(tenantId, estimatedTokens, 0);
+  async release(reservation: Reservation): Promise<void> {
+    await this.finalize(reservation, 0);
   }
 
-  /** テスト用ヘルパー: 現在の日次予約済みトークン数を読む。 */
-  getDailyUsed(tenantId: string): number {
-    return this.dailyUsed.get(this.dailyKey(tenantId)) ?? 0;
+  /**
+   * テスト用ヘルパー: 日次予約済みトークン数を読む。
+   * dailyKey 省略時は現在(now())のバケット。
+   */
+  getDailyUsed(tenantId: string, dailyKey?: string): number {
+    const key = dailyKey ?? yyyyMMdd(this.now());
+    return this.dailyUsed.get(`${tenantId}_${key}`) ?? 0;
   }
 
-  /** テスト用ヘルパー: 現在の月次予約済みトークン数を読む。 */
-  getMonthlyUsed(tenantId: string): number {
-    return this.monthlyUsed.get(this.monthlyKey(tenantId)) ?? 0;
+  /**
+   * テスト用ヘルパー: 月次予約済みトークン数を読む。
+   * monthlyKey 省略時は現在(now())のバケット。
+   */
+  getMonthlyUsed(tenantId: string, monthlyKey?: string): number {
+    const key = monthlyKey ?? yyyyMM(this.now());
+    return this.monthlyUsed.get(`${tenantId}_${key}`) ?? 0;
   }
 }
 
-/** UTC基準の `yyyyMM`（月次スコープキー）。aria-for-salon-app の currentYyyyMM と同じ形式。 */
+/** UTC基準の `yyyy-MM`（月次スコープキー）。aria-for-salon-app の currentYyyyMM と同じ形式。 */
 export function yyyyMM(now: Date): string {
   return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
-/** UTC基準の `yyyyMMdd`（日次スコープキー）。 */
+/** UTC基準の `yyyy-MM-dd`（日次スコープキー）。 */
 export function yyyyMMdd(now: Date): string {
   return `${yyyyMM(now)}-${String(now.getUTCDate()).padStart(2, "0")}`;
 }

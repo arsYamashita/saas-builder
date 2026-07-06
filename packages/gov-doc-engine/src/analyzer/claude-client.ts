@@ -130,8 +130,11 @@ export async function analyzeDiff(
   }
 
   const estimatedTokens = DEFAULT_ESTIMATED_TOKENS_PER_REQUEST;
-  const accepted = await deps.usageGuard.reserve(request.tenantId, estimatedTokens);
-  if (!accepted) {
+  // reserve() は予約時の期間バケットキーを保持する Reservation を返す。
+  // finalize/release にこのハンドルを渡すことで、UTC日/月境界を跨いだ補正が
+  // 必ず予約時のバケットに当たる (Codex review 2026-07-06 P2 on PR #39)。
+  const reservation = await deps.usageGuard.reserve(request.tenantId, estimatedTokens);
+  if (!reservation) {
     throw new AiUsageLimitExceededError(`Tenant ${request.tenantId} exceeded its monthly Claude usage budget`);
   }
 
@@ -149,7 +152,7 @@ export async function analyzeDiff(
       messages: [{ role: "user", content: buildUserPrompt(request) }],
     });
   } catch (err) {
-    await deps.usageGuard.release(request.tenantId, estimatedTokens);
+    await deps.usageGuard.release(reservation);
     await recordAiFailure(
       deps.alertSink,
       deps.failureTracker,
@@ -162,7 +165,7 @@ export async function analyzeDiff(
   // 呼び出し自体は成功した（トークンは実際に消費された）ので、パース結果に関わらず先に確定させる。
   // cache_creation/cache_read も含めた総量で確定する (Codex P2: input+output のみだと過小計上)。
   const actualTokens = totalTokensFromUsage(response.usage);
-  await deps.usageGuard.finalize(request.tenantId, estimatedTokens, actualTokens);
+  await deps.usageGuard.finalize(reservation, actualTokens);
 
   if (response.stop_reason === "refusal") {
     await recordAiFailure(deps.alertSink, deps.failureTracker, { pipeline: PIPELINE_NAME, reason: "refusal" }, now());
