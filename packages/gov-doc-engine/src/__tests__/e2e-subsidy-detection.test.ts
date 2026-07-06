@@ -10,6 +10,7 @@ import { analyzeDiff, type ClaudeMessagesClient } from "../analyzer/claude-clien
 import { InMemoryTenantUsageGuard } from "../analyzer/usage-guard";
 import { FailureThresholdTracker, InMemoryAlertSink } from "../analyzer/alerts";
 import { loadFixture } from "../test-utils/fixtures";
+import { DEFAULT_DAILY_TOKEN_LIMIT, DEFAULT_MONTHLY_TOKEN_LIMIT } from "@saas/llm-guard";
 
 // このテストは gov-doc-engine の MVP スコープ (助成金検知) の
 // 「収集層(差分検知) → 解析層(Claude構造化抽出)」を fixture ベースで通しで検証する
@@ -41,7 +42,7 @@ function makeClientReturning(json: unknown): ClaudeMessagesClient {
 function freshDeps(client: ClaudeMessagesClient) {
   return {
     client,
-    usageGuard: new InMemoryTenantUsageGuard(),
+    usageGuard: new InMemoryTenantUsageGuard(DEFAULT_DAILY_TOKEN_LIMIT, DEFAULT_MONTHLY_TOKEN_LIMIT),
     alertSink: new InMemoryAlertSink(),
     failureTracker: new FailureThresholdTracker(),
   };

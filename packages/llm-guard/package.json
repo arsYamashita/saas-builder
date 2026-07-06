@@ -1,0 +1,12 @@
+{
+  "name": "@saas/llm-guard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared LLM governance primitives: tenant-scoped daily/monthly token cost guard (Firestore + Supabase adapters), overage alerting, common Claude model ID constants, and a silent-model-degradation guard. Consolidates the three independent implementations that emerged from 30_Knowledge/errors/claude_api_user_cost_limit_missing.md (gov-doc-engine, aria-for-salon-app, ai-business-navigator) into one package so new callers don't reinvent it.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {}
+}

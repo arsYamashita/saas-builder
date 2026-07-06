@@ -20,7 +20,12 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
   "gemini-2.0-flash": { inputPer1M: 0.10, outputPer1M: 0.40 },
   "gemini-2.5-flash-preview-05-20": { inputPer1M: 0.15, outputPer1M: 0.60 },
   "gemini-2.5-pro-preview-05-06": { inputPer1M: 1.25, outputPer1M: 10.00 },
-  // Claude
+  // Claude — 現行世代 (2026-07-06 指示書031: @saas/llm-guard MODELS 定数に対応する
+  // エントリを追加。旧世代の行は履歴データ (過去の generation_run レコードに
+  // 残る model 文字列) のコスト再計算のため残す — 削除しない)
+  "claude-opus-4-8": { inputPer1M: 5.00, outputPer1M: 25.00 },
+  "claude-sonnet-5": { inputPer1M: 3.00, outputPer1M: 15.00 },
+  // 旧世代 (履歴データ用に維持)
   "claude-sonnet-4-5": { inputPer1M: 3.00, outputPer1M: 15.00 },
   "claude-sonnet-4-20250514": { inputPer1M: 3.00, outputPer1M: 15.00 },
   "claude-opus-4-20250514": { inputPer1M: 15.00, outputPer1M: 75.00 },

@@ -10,6 +10,8 @@
  * - 契約書: tracking clause changes
  */
 
+import { MODELS, assertValidModel } from "@/lib/ai/models";
+
 // ── Types ───────────────────────────────────────────────────
 
 export interface DocumentDiffInput {
@@ -127,6 +129,11 @@ export async function compareDocuments(
 
   const prompt = buildDiffPrompt(input);
 
+  // 2026-07-06 (指示書2026-07-06_031): 直書きされていた "claude-sonnet-4-5"
+  // (旧世代モデルID) を共通定数 MODELS.sonnet に置換 + 呼び出し直前にガード。
+  const model = MODELS.sonnet;
+  assertValidModel(model);
+
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -135,7 +142,7 @@ export async function compareDocuments(
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
-      model: "claude-sonnet-4-5",
+      model,
       max_tokens: 8192,
       messages: [{ role: "user", content: prompt }],
     }),
