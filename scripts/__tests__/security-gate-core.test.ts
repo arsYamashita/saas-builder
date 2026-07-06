@@ -8,6 +8,7 @@ import {
   findMigrationViewViolations,
   isClientComponent,
   stripComments,
+  stripSqlComments,
   type SourceFile,
 } from "../security-gate-core";
 
@@ -151,6 +152,78 @@ describe("security-gate-core: migration security_invoker violations", () => {
       content: "ALTER TABLE public.contents ADD COLUMN archived boolean DEFAULT false;",
     };
     expect(findMigrationViewViolations([file])).toEqual([]);
+  });
+
+  // Codex review (PR #36, P2) regression cases: the check must be
+  // per-view and comment-aware, not a whole-file substring test.
+
+  it("flags the UNCOVERED view when a multi-view migration protects only the first (P2 case 1)", () => {
+    const file = loadFixture(
+      "bad-migration-multi-view-partial-invoker.sql",
+      "supabase/migrations/0102_two_views.sql"
+    );
+    const violations = findMigrationViewViolations([file]);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].rule).toBe("no-view-without-security-invoker");
+    // The covered view (contents_published) must NOT be flagged; the
+    // uncovered one (contents_drafts) must be named in the message.
+    expect(violations[0].message).toContain("contents_drafts");
+    expect(violations[0].message).not.toContain("contents_published");
+    // Line number points at the second CREATE VIEW, not the first.
+    const lines = file.content.split("\n");
+    expect(lines[violations[0].line - 1]).toContain("contents_drafts");
+  });
+
+  it("flags a view whose only security_invoker mention is inside comments (P2 case 2)", () => {
+    const file = loadFixture(
+      "bad-migration-comment-only-invoker.sql",
+      "supabase/migrations/0103_comment_only.sql"
+    );
+    const violations = findMigrationViewViolations([file]);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].rule).toBe("no-view-without-security-invoker");
+    expect(violations[0].message).toContain("contents_published");
+  });
+
+  it("passes a multi-view migration where EVERY view is covered — inline WITH and ALTER, schema-qualified or not (P2 case 3)", () => {
+    const file = loadFixture(
+      "good-migration-multi-view-all-invoker.sql",
+      "supabase/migrations/0104_two_views_ok.sql"
+    );
+    // Fixture deliberately mixes coverage styles: view 1 inline
+    // `WITH (security_invoker = true)`, view 2 created UNqualified
+    // (`contents_drafts`) but altered qualified (`public.contents_drafts`).
+    expect(findMigrationViewViolations([file])).toEqual([]);
+  });
+
+  it("does not let one covered view name vouch for a different view", () => {
+    const file: SourceFile = {
+      path: "supabase/migrations/0105_mismatched_alter.sql",
+      content: [
+        "CREATE VIEW public.reports AS SELECT id FROM public.contents;",
+        "ALTER VIEW public.other_view SET (security_invoker = true);",
+      ].join("\n"),
+    };
+    const violations = findMigrationViewViolations([file]);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].message).toContain("public.reports");
+  });
+});
+
+describe("security-gate-core: stripSqlComments", () => {
+  it("blanks out -- line comments and /* */ block comments, preserving line count", () => {
+    const input = [
+      "CREATE TABLE t (id int); -- security_invoker = true",
+      "/* CREATE VIEW fake AS",
+      "   security_invoker = true */",
+      "SELECT 1;",
+    ].join("\n");
+    const out = stripSqlComments(input);
+    expect(out.split("\n")).toHaveLength(4);
+    expect(out).not.toContain("security_invoker");
+    expect(out).not.toContain("fake");
+    expect(out).toContain("CREATE TABLE t (id int);");
+    expect(out).toContain("SELECT 1;");
   });
 });
 

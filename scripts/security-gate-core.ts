@@ -202,8 +202,63 @@ export function findStripeDirectCallViolations(
   return violations;
 }
 
-const CREATE_VIEW_RE = /\bCREATE\s+(OR\s+REPLACE\s+)?VIEW\b/i;
-const SECURITY_INVOKER_RE = /security_invoker\s*=\s*true/i;
+/**
+ * Blanks out SQL comments (`-- ...` line comments and `/* ... *\/` block
+ * comments) while preserving line count, so a comment that merely MENTIONS
+ * `security_invoker = true` (or `CREATE VIEW`) never influences the
+ * migration check — Codex review (PR #36, P2) pointed out that a
+ * whole-file substring test let "security_invoker = true" inside a comment
+ * greenlight a file whose actual VIEW had no such setting.
+ *
+ * Same known limitation as stripComments() for TS: comment markers inside
+ * string literals aren't lexed. Migration SQL realistically never puts
+ * `--`/`/*` inside a string in a way that matters here, and the failure
+ * mode is a false POSITIVE (over-stripping → flagged for human review),
+ * never a silent pass.
+ */
+export function stripSqlComments(content: string): string {
+  const noBlockComments = content.replace(/\/\*[\s\S]*?\*\//g, (match) =>
+    match.replace(/[^\n]/g, " ")
+  );
+  return noBlockComments
+    .split("\n")
+    .map((line) => line.replace(/--.*$/, ""))
+    .join("\n");
+}
+
+const CREATE_VIEW_STMT_RE =
+  /\bCREATE\s+(?:OR\s+REPLACE\s+)?(?:TEMP\s+|TEMPORARY\s+)?VIEW\s+(?:IF\s+NOT\s+EXISTS\s+)?("[^"]+"|[A-Za-z0-9_.]+(?:\."[^"]+")?)/gi;
+const ALTER_VIEW_STMT_RE =
+  /\bALTER\s+VIEW\s+(?:IF\s+EXISTS\s+)?("[^"]+"|[A-Za-z0-9_.]+(?:\."[^"]+")?)([\s\S]*?)(?=;|$)/gi;
+const SECURITY_INVOKER_OPTION_RE = /security_invoker\s*=\s*(?:true|on)\b/i;
+
+/**
+ * Normalizes a (possibly schema-qualified, possibly quoted) view name for
+ * comparison: strips double quotes, lowercases unquoted parts the way
+ * Postgres folds them. Quoted identifiers are case-sensitive in Postgres,
+ * but for a security GATE, folding everything to lowercase only risks a
+ * false match between two views that differ solely by case — which makes
+ * the gate STRICTER (an ALTER on the "wrong" case won't cause a miss, and
+ * a same-name-different-case pair in one migration is pathological enough
+ * to deserve human eyes anyway).
+ */
+function normalizeViewName(raw: string): string {
+  return raw.replace(/"/g, "").toLowerCase();
+}
+
+/** True when `a` and `b` refer to the same view, tolerating an omitted schema on either side. */
+function viewNamesMatch(a: string, b: string): boolean {
+  if (a === b) return true;
+  const aParts = a.split(".");
+  const bParts = b.split(".");
+  // If either side is unqualified (no schema), compare the bare view name —
+  // `CREATE VIEW public.foo` + `ALTER VIEW foo` target the same object
+  // under the default search_path used by Supabase migrations.
+  if (aParts.length !== bParts.length) {
+    return aParts[aParts.length - 1] === bParts[bParts.length - 1];
+  }
+  return false;
+}
 
 /**
  * Checklist item "security_invoker" (docs/security-checklist.md #2).
@@ -218,25 +273,72 @@ const SECURITY_INVOKER_RE = /security_invoker\s*=\s*true/i;
  * scripts/security-gate-check.ts's git-diff-based selection) so an
  * existing, already-reviewed view definition is never re-flagged on every
  * subsequent PR.
+ *
+ * Evaluated PER VIEW, not per file (Codex review, PR #36, P2): SQL
+ * comments are stripped first, then every `CREATE [OR REPLACE] VIEW`
+ * statement is located individually, and each view passes only if
+ *   (a) its own CREATE statement carries a `security_invoker = true`
+ *       option (`WITH (security_invoker = true)`), or
+ *   (b) the same file also contains an
+ *       `ALTER VIEW <same name> SET (security_invoker = true)`.
+ * A file defining two views where only the first is covered flags the
+ * second; `security_invoker` appearing only in a comment covers nothing.
  */
 export function findMigrationViewViolations(files: SourceFile[]): Violation[] {
   const violations: Violation[] = [];
 
   for (const file of files) {
-    if (!CREATE_VIEW_RE.test(file.content)) continue;
-    if (SECURITY_INVOKER_RE.test(file.content)) continue;
+    const scannable = stripSqlComments(file.content);
 
-    const lines = file.content.split("\n");
-    const lineIdx = lines.findIndex((l) => CREATE_VIEW_RE.test(l));
+    // Collect every view name that an ALTER VIEW ... security_invoker=true
+    // statement covers. The lazy `[\s\S]*?` body in ALTER_VIEW_STMT_RE stops
+    // at the statement's own `;`, so an option on a LATER statement can't
+    // bleed backwards onto an earlier ALTER.
+    // Array.from instead of for...of over matchAll: this tsconfig has no
+    // explicit `target`, so iterating a RegExpStringIterator directly
+    // fails typecheck (TS2802) without downlevelIteration.
+    const alterCoveredViews: string[] = [];
+    for (const match of Array.from(scannable.matchAll(ALTER_VIEW_STMT_RE))) {
+      const [, rawName, body] = match;
+      if (SECURITY_INVOKER_OPTION_RE.test(body)) {
+        alterCoveredViews.push(normalizeViewName(rawName));
+      }
+    }
 
-    violations.push({
-      rule: "no-view-without-security-invoker",
-      file: file.path,
-      line: lineIdx === -1 ? 1 : lineIdx + 1,
-      snippet: (lineIdx === -1 ? lines[0] : lines[lineIdx]).trim(),
-      message:
-        "New migration creates a VIEW without `security_invoker = true` — it will bypass the base table's RLS for every caller. Add `ALTER VIEW ... SET (security_invoker = true);` (or CREATE VIEW ... WITH (security_invoker = true) on PG15+). See [[supabase_view_rls_bypass_security_invoker]].",
-    });
+    for (const match of Array.from(scannable.matchAll(CREATE_VIEW_STMT_RE))) {
+      const rawName = match[1];
+      const viewName = normalizeViewName(rawName);
+      const stmtStart = match.index ?? 0;
+
+      // The CREATE VIEW statement's own text: from the match to its
+      // terminating `;` (or EOF). `security_invoker` can only legally
+      // appear in the WITH (...) options clause of this statement, so a
+      // simple containment test on the statement slice is sufficient —
+      // and it cannot see a neighboring statement's options.
+      const stmtEnd = scannable.indexOf(";", stmtStart);
+      const stmtText = scannable.slice(
+        stmtStart,
+        stmtEnd === -1 ? scannable.length : stmtEnd
+      );
+
+      const coveredInline = SECURITY_INVOKER_OPTION_RE.test(stmtText);
+      const coveredByAlter = alterCoveredViews.some((covered) =>
+        viewNamesMatch(covered, viewName)
+      );
+      if (coveredInline || coveredByAlter) continue;
+
+      const line = scannable.slice(0, stmtStart).split("\n").length;
+      const originalLines = file.content.split("\n");
+
+      violations.push({
+        rule: "no-view-without-security-invoker",
+        file: file.path,
+        line,
+        snippet: (originalLines[line - 1] ?? "").trim(),
+        message:
+          `New migration creates VIEW \`${viewName}\` without \`security_invoker = true\` — it will bypass the base table's RLS for every caller. Add \`ALTER VIEW ${viewName} SET (security_invoker = true);\` (or CREATE VIEW ... WITH (security_invoker = true) on PG15+). See [[supabase_view_rls_bypass_security_invoker]].`,
+      });
+    }
   }
 
   return violations;
