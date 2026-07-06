@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/db/supabase/admin";
 import { markReferralConverted } from "@/lib/affiliate/mark-referral-converted";
 import { createCommission } from "@/lib/affiliate/commission";
 import { MissingWebhookMetadataError } from "@/lib/billing/webhook-errors";
+import { verifyWebhookSignature } from "@/lib/payments";
 
 function getWebhookSecret() {
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -148,7 +149,7 @@ export async function POST(req: Request) {
       return new Response("Missing stripe-signature", { status: 400 });
     }
 
-    event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
+    event = verifyWebhookSignature(stripe, body, signature, webhookSecret);
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Invalid signature";

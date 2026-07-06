@@ -68,13 +68,19 @@ Every query must include tenant_id where applicable.
 
 ## Payments (Stripe) — Security Baseline (mandatory)
 Do not re-implement Stripe wiring from scratch. Import the Stripe client,
-webhook error types, and idempotency-key helper from `@/lib/payments`.
+webhook error types, and idempotency-key helper from `@/lib/payments`
+(re-exports the `@saas/payments` workspace package — see
+`packages/payments/README.md` for the full mandatory usage rules, including
+`createCheckoutSession()`/`verifyWebhookSignature()`, whose signatures make
+it impossible to create a Checkout Session without an idempotency key or
+construct a webhook event without signature verification).
 
 - `POST /api/stripe/webhook` MUST verify the `stripe-signature` header via
-  `stripe.webhooks.constructEvent()` inside its own try/catch that always
-  returns 400 on failure (Stripe does not retry a 400, and an invalid
-  signature is never a transient condition). See
-  [[stripe_webhook_signature_missing]].
+  `verifyWebhookSignature()` from `@/lib/payments` (wraps
+  `stripe.webhooks.constructEvent()` — there is no variant that skips
+  verification) inside its own try/catch that always returns 400 on
+  failure (Stripe does not retry a 400, and an invalid signature is never
+  a transient condition). See [[stripe_webhook_signature_missing]].
 - Webhook event *processing* MUST be a SEPARATE try/catch from signature
   verification: transient failures (DB outage, etc.) return 500 so Stripe
   retries for up to 3 days; known-permanent errors (missing metadata /
@@ -90,10 +96,14 @@ webhook error types, and idempotency-key helper from `@/lib/payments`.
   [[affiliate_commission_idempotency_missing]],
   [[stripe_recurring_subscription_missing_conflict_guard]].
 - Any endpoint that creates a Stripe object as a side effect of a client
-  request (`checkout.sessions.create`, `paymentIntents.create`, etc.)
-  MUST pass an `idempotencyKey` (use `buildIdempotencyKey()` from
-  `@/lib/payments`) so a client retry or network timeout does not create a
-  duplicate Stripe object / duplicate charge. The key MUST be built only
+  request (Checkout Sessions, `paymentIntents.create`, etc.) MUST pass an
+  `idempotencyKey`. For Checkout Sessions, call `createCheckoutSession()`
+  from `@/lib/payments` rather than `stripe.checkout.sessions.create()`
+  directly — its `idempotencyKey` parameter is required (no overload
+  omits it), so it is impossible to reach Stripe without one. Build the
+  key with `buildIdempotencyKey()` from `@/lib/payments` so a client retry
+  or network timeout does not create a duplicate Stripe object / duplicate
+  charge. The key MUST be built only
   from STABLE parts — never a timestamp or time bucket (a retry that
   crosses the bucket boundary gets a new key and defeats the protection;
   Stripe keys stay valid for 24h, so no time component is needed). To
