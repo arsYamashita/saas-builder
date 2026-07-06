@@ -1,3 +1,10 @@
+-- ⚠️ 本ファイルは旧 0013_commissions_idempotency.sql のリネーム（内容無変更）。
+-- 理由: 0014(スキーマ復元) が commissions テーブルを作るため、0013 のままだと
+-- 番号順適用で relation not found になる。本番(ujzxysqdmengpekqfqyk)は 0013 未適用を
+-- migration list で実測確認済み(2026-07-06)のためリネームは安全。
+-- もし旧 0013 を適用済みの環境がある場合の修復手順:
+--   supabase migration repair --status reverted 0013
+--   その後 db push（0014 は冪等・0015 は UNIQUE 既存なら no-op）
 -- 冪等性・信頼性パック (M2 指示書 2026-07-03_009 項目2):
 -- commissions への重複挿入を DB レベルで防ぐ。
 --
