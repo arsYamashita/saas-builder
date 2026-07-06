@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getStripeClient, buildIdempotencyKey } from "@/lib/payments";
+import {
+  getStripeClient,
+  buildIdempotencyKey,
+  createCheckoutSession,
+} from "@/lib/payments";
 import { createAdminClient } from "@/lib/db/supabase/admin";
 import { requireCurrentUser } from "@/lib/auth/current-user";
 import { getCurrentTenantForUser } from "@/lib/tenant/current-tenant";
@@ -109,7 +113,8 @@ export async function POST(req: NextRequest) {
       attemptId ?? "",
     ]);
 
-    const session = await stripe.checkout.sessions.create(
+    const session = await createCheckoutSession(
+      stripe,
       {
         mode: "subscription",
         line_items: [
@@ -130,7 +135,7 @@ export async function POST(req: NextRequest) {
           affiliate_id: affiliateId ?? "",
         },
       },
-      { idempotencyKey }
+      idempotencyKey
     );
 
     return NextResponse.json({ url: session.url }, { status: 200 });
