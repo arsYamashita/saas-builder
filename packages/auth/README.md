@@ -5,18 +5,39 @@ guard helpers, extracted from saas-builder so the same hardened auth/RLS
 code is reused across saas-builder and generated templates instead of being
 re-implemented (and re-broken) per app.
 
-## Exports
+## Entrypoints — pick by environment, never mix
+
+The package is split into three entrypoints so server-only APIs
+(`next/headers`, the service-role key) can never enter a Next.js client
+bundle. There is deliberately NO mixed barrel that exports both browser
+and server factories.
+
+### `@saas/auth/client` — Client Components only
 
 - `createBrowserSupabaseClient()` — browser-side client (anon key + cookies).
-- `createServerSupabaseClient()` — server-side client for Route
-  Handlers/Server Actions/Server Components (anon key + request cookies;
-  RLS still applies).
+
+### `@saas/auth/server` — Route Handlers / Server Components / Server Actions
+
+Guarded by `import "server-only"`: importing this entrypoint from a Client
+Component module graph fails `next build` with a clear error instead of a
+confusing bundle failure.
+
+- `createServerSupabaseClient()` — server-side client (anon key + request
+  cookies; RLS still applies).
 - `createAdminSupabaseClient()` — service-role client. **Bypasses RLS
   entirely.**
 - `getAuthSession()` — resolves the current authenticated user from the
   server-side session, or `{ user: null }`.
+- `assertTenantScopedRow()` — re-exported for convenience.
+
+### `@saas/auth` (root) — universal helpers only
+
 - `assertTenantScopedRow(row, tenantId, notFoundMessage?)` — IDOR guard;
   throws unless `row` is non-null and `row.tenant_id === tenantId`.
+
+Note for non-Next test runners (vitest etc.): `server-only` throws at
+import time outside a `react-server` environment — alias it to an empty
+stub module (see the consuming app's `vitest.config.ts`).
 
 ## Mandatory usage rules (required on every call site)
 
@@ -44,7 +65,10 @@ buggy tenant filter, so a bug there fails closed (404) instead of leaking
 another tenant's row (IDOR).
 
 ```ts
-import { createAdminSupabaseClient, assertTenantScopedRow } from "@saas/auth";
+import {
+  createAdminSupabaseClient,
+  assertTenantScopedRow,
+} from "@saas/auth/server";
 
 const supabase = createAdminSupabaseClient();
 const { data: project } = await supabase
