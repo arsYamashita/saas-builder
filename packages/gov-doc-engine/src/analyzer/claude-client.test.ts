@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import {
   analyzeDiff,
+  totalTokensFromUsage,
   AiApiUnavailableError,
   AiUsageLimitExceededError,
   AiResponseParseError,
@@ -161,5 +162,64 @@ describe("analyzeDiff", () => {
     await analyzeDiff(makeRequest(), deps);
 
     expect(client.messages.create).toHaveBeenCalledWith(expect.objectContaining({ model: "claude-sonnet-5" }));
+  });
+});
+
+describe("totalTokensFromUsage / cache token accounting (Codex P2: cache分の過小計上防止)", () => {
+  it("includes cache_creation and cache_read tokens when present", () => {
+    expect(
+      totalTokensFromUsage({
+        input_tokens: 100,
+        output_tokens: 50,
+        cache_creation_input_tokens: 700,
+        cache_read_input_tokens: 1150,
+      }),
+    ).toBe(2000);
+  });
+
+  it("is null-safe / optional-safe when cache fields are absent or null", () => {
+    expect(totalTokensFromUsage({ input_tokens: 100, output_tokens: 50 })).toBe(150);
+    expect(
+      totalTokensFromUsage({
+        input_tokens: 100,
+        output_tokens: 50,
+        cache_creation_input_tokens: null,
+        cache_read_input_tokens: null,
+      }),
+    ).toBe(150);
+  });
+
+  it("analyzeDiff finalizes with cache tokens included (regression: cached usage fields present)", async () => {
+    const client = makeClient({
+      stop_reason: "end_turn",
+      content: [{ type: "text", text: JSON.stringify(VALID_EXTRACTION) }],
+      // 実測合計 = 200 + 300 + 900 + 1600 = 3000。
+      // 旧実装 (input+output のみ) だと 500 と過小計上され、予約8000との差 7500 が
+      // 過剰に払い戻されてテナントが月次上限をすり抜けられた。
+      usage: {
+        input_tokens: 200,
+        output_tokens: 300,
+        cache_creation_input_tokens: 900,
+        cache_read_input_tokens: 1600,
+      },
+    });
+    const deps = makeDeps(client);
+
+    await analyzeDiff(makeRequest(), deps);
+
+    expect(deps.usageGuard.getUsed("tenant-1")).toBe(3000);
+  });
+
+  it("analyzeDiff still finalizes correctly when cache fields are absent (regression: no cached fields)", async () => {
+    const client = makeClient({
+      stop_reason: "end_turn",
+      content: [{ type: "text", text: JSON.stringify(VALID_EXTRACTION) }],
+      usage: { input_tokens: 1200, output_tokens: 300 },
+    });
+    const deps = makeDeps(client);
+
+    await analyzeDiff(makeRequest(), deps);
+
+    expect(deps.usageGuard.getUsed("tenant-1")).toBe(1500);
   });
 });

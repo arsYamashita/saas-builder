@@ -17,7 +17,18 @@
  * プロダクト側の適用層 (application/) が担う。
  */
 
-export type AiFailureReason = "api_key_missing" | "call_error" | "json_parse_error" | "refusal";
+/**
+ * "selector_missing" は収集層（watcher）のセレクタ不一致（サイト改装等）を表す。
+ * AI 呼び出しの失敗ではないが、「監視パイプラインが静かに死ぬ」という点で
+ * ai_api_silent_degradation_no_alert と同種の問題のため、同じアラート経路に流す
+ * (Codex P2 対応)。
+ */
+export type AiFailureReason =
+  | "api_key_missing"
+  | "call_error"
+  | "json_parse_error"
+  | "refusal"
+  | "selector_missing";
 
 export interface AiFailureEvent {
   pipeline: string;

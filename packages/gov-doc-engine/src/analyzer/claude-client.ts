@@ -17,7 +17,33 @@ export class AiRefusalError extends Error {}
 export interface ClaudeMessageResponse {
   stop_reason: string | null;
   content: Array<{ type: string; text?: string }>;
-  usage: { input_tokens: number; output_tokens: number };
+  usage: {
+    input_tokens: number;
+    output_tokens: number;
+    /**
+     * cache_control 使用時、Anthropic はキャッシュ書き込み/読み出しトークンを
+     * input_tokens (非キャッシュ分のみ) とは別勘定で返す。これらを実測合算に
+     * 含めないと finalize の払い戻しが過多になり、テナントが月次上限を
+     * 実質すり抜けられる (Codex P2 指摘)。SDK/プロバイダによっては欠落・null に
+     * なり得るため optional/null-safe に扱う。
+     */
+    cache_creation_input_tokens?: number | null;
+    cache_read_input_tokens?: number | null;
+  };
+}
+
+/**
+ * 実測トークンの合算。プロンプト総量 =
+ * input_tokens(非キャッシュ分) + cache_creation + cache_read、これに output_tokens を加える。
+ * cache フィールドは optional/null-safe（未提供なら 0 扱い）。
+ */
+export function totalTokensFromUsage(usage: ClaudeMessageResponse["usage"]): number {
+  return (
+    usage.input_tokens +
+    usage.output_tokens +
+    (usage.cache_creation_input_tokens ?? 0) +
+    (usage.cache_read_input_tokens ?? 0)
+  );
 }
 
 /**
@@ -134,7 +160,8 @@ export async function analyzeDiff(
   }
 
   // 呼び出し自体は成功した（トークンは実際に消費された）ので、パース結果に関わらず先に確定させる。
-  const actualTokens = response.usage.input_tokens + response.usage.output_tokens;
+  // cache_creation/cache_read も含めた総量で確定する (Codex P2: input+output のみだと過小計上)。
+  const actualTokens = totalTokensFromUsage(response.usage);
   await deps.usageGuard.finalize(request.tenantId, estimatedTokens, actualTokens);
 
   if (response.stop_reason === "refusal") {

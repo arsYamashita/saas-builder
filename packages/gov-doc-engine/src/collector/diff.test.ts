@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { normalizeHtml } from "./normalize";
-import { extractSection } from "./extract";
+import { extractSection, SelectorNotFoundError } from "./extract";
 import { detectDiff } from "./diff";
 import { loadFixture } from "../test-utils/fixtures";
 
@@ -22,9 +22,9 @@ describe("extractSection", () => {
     expect(extractSection(html, "main#main-content")).toContain("<p>hi</p>");
   });
 
-  it("returns empty string when selector does not match", () => {
+  it("returns null (not empty string) when selector does not match — no silent coercion (Codex P2)", () => {
     const html = `<html><body><main id="other"></main></body></html>`;
-    expect(extractSection(html, "main#main-content")).toBe("");
+    expect(extractSection(html, "main#main-content")).toBeNull();
   });
 });
 
@@ -83,5 +83,37 @@ describe("detectDiff — fixture based (mirasapo-plus / jnet21 / mhlw)", () => {
       selector: "main#main-content",
     });
     expect(result.changed).toBe(false);
+  });
+});
+
+describe("detectDiff — missing selector handling (Codex P2: サイト改装で監視が静かに死ぬのを防ぐ)", () => {
+  it("throws SelectorNotFoundError when the current page no longer matches the selector", () => {
+    const before = loadFixture("mirasapo-plus-before.html");
+    const redesigned = `<html><body><div id="totally-new-layout">改装後レイアウト</div></body></html>`;
+    expect(() =>
+      detectDiff({ previousHtml: before, currentHtml: redesigned, selector: "main#main-content" }),
+    ).toThrow(SelectorNotFoundError);
+  });
+
+  it("regression: two consecutive selector-missing pages do NOT silently compare as unchanged", () => {
+    // 旧実装では 空文字 vs 空文字 で changed=false になり監視が死んでいた。
+    const redesigned = `<html><body><div id="totally-new-layout">改装後</div></body></html>`;
+    expect(() =>
+      detectDiff({ previousHtml: redesigned, currentHtml: redesigned, selector: "main#main-content" }),
+    ).toThrow(SelectorNotFoundError);
+  });
+
+  it("treats a stale previous snapshot (selector matches current but not previous) as a first observation", () => {
+    // 設定のセレクタを更新した直後など。監視を止めず changed=true で新スナップショットへ移行する。
+    const previousWithOldLayout = `<html><body><div id="old-layout">旧レイアウト</div></body></html>`;
+    const current = loadFixture("mirasapo-plus-before.html");
+    const result = detectDiff({
+      previousHtml: previousWithOldLayout,
+      currentHtml: current,
+      selector: "main#main-content",
+    });
+    expect(result.changed).toBe(true);
+    expect(result.previousHash).toBeNull();
+    expect(result.previousNormalized).toBeNull();
   });
 });

@@ -6,7 +6,7 @@ export { WatcherSourceSchema, WatcherConfigSchema, type WatcherSource, type Watc
 export { loadWatcherConfigFromYaml, loadWatcherConfigFromFile } from "./collector/config-loader";
 export { normalizeHtml } from "./collector/normalize";
 export { hashContent } from "./collector/hash";
-export { extractSection } from "./collector/extract";
+export { extractSection, SelectorNotFoundError } from "./collector/extract";
 export { detectDiff, type DiffResult } from "./collector/diff";
 export {
   DocumentWatcher,
@@ -14,6 +14,7 @@ export {
   type FetchFn,
   type WatcherStore,
   type WatchResult,
+  type WatcherAlertDeps,
   type SchedulerHandle,
 } from "./collector/watcher";
 
@@ -47,6 +48,7 @@ export {
   analyzeDiff,
   createAnthropicClaudeClient,
   createClaudeClientFromEnv,
+  totalTokensFromUsage,
   AiApiUnavailableError,
   AiUsageLimitExceededError,
   AiResponseParseError,
