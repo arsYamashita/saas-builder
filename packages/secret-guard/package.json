@@ -1,0 +1,11 @@
+{
+  "name": "@saas/secret-guard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Secret-shape masking for saas-builder and generated templates. Enforces 'enumerate every output route, then pin it with a wiring test' via registerSink(): a coverage test fails if a whole route kind (log/http_response/error_message/url_query/artifact_file) has nothing wired. See README.md and ci/gitleaks.toml for the repo-level (git history) half of this defense-in-depth pair.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

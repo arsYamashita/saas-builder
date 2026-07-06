@@ -29,7 +29,9 @@
  *     validation), lib/db/supabase/{admin,server,client}.ts, lib/payments/*,
  *     lib/billing/{stripe,webhook-errors}.ts, lib/rate-limit.ts,
  *     docs/rules/*.md (the shared generation contract — 06/08 are the
- *     mandatory ones for API + DB boundaries).
+ *     mandatory ones for API + DB boundaries), docs/security-checklist.md
+ *     (9-item security checklist, kept alongside the derived app so it
+ *     stays reviewable after divergence — see M5 instruction 2026-07-06_034).
  *   - With --template <key>: templates/<key>/src/** flattened onto the
  *     project root (src/app -> app, src/lib -> lib, src/types -> types)
  *     and templates/<key>/supabase/{migrations,seed.sql} -> supabase/.
@@ -160,6 +162,18 @@ async function main() {
   // top level are the shared contract; leave any subdirs as-is (harmless
   // reference material) rather than filtering, to keep this step simple.
   track("docs/rules/*.md (shared generation contract; 06 + 08 are mandatory)");
+
+  // docs/security-checklist.md is the curated 9-item security checklist
+  // (RLS/security_invoker/Stripe/rate-limit/error-leak/parseJsonBody/
+  // LLM-cost/env-validation/secrets) with links to the canonical
+  // implementations above — every derived app must ship with a copy so it
+  // stays reviewable even after diverging from saas-builder. See M5
+  // instruction 2026-07-06_034.
+  copyFile(
+    path.join(REPO_ROOT, "docs/security-checklist.md"),
+    path.join(outDir, "docs/security-checklist.md")
+  );
+  track("docs/security-checklist.md (9-item security checklist)");
 
   // ── 4. Optional business template overlay ──
   if (templateKey) {

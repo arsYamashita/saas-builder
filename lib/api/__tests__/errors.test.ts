@@ -150,4 +150,27 @@ describe("serverErrorResponse", () => {
     expect(json.error).toBe("Internal server error");
     expect(JSON.stringify(json)).not.toContain("commissions_subscription_id_key");
   });
+
+  // secret-guard wiring: serverErrorResponse is the `log`-kind sink
+  // registered in lib/api/errors.ts (see the module-level registerSink()
+  // call there). A downstream SDK error can embed a secret in its
+  // .message — this must never reach console.error unmasked. Regression
+  // shape matches gemini_api_key_url_query_masker_bypass (aeo-service
+  // b2acc6e): the secret rides a URL query string inside the error text,
+  // not a header, so a naive "look for Authorization: Bearer" check would
+  // miss it.
+  it("masks a secret embedded in the cause message before logging it", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const leakedKey = "AIza" + "x".repeat(35);
+    const upstreamError = new Error(
+      `fetch failed for https://generativelanguage.googleapis.com/v1/models/gemini:generateContent?key=${leakedKey}`
+    );
+
+    serverErrorResponse("documents/parse", upstreamError);
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    const [, loggedCause] = spy.mock.calls[0];
+    expect(loggedCause).not.toContain(leakedKey);
+    expect(loggedCause).toMatch(/key=(AIza)?\[MASKED\]/);
+  });
 });

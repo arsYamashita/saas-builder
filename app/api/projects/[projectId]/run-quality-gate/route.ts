@@ -110,10 +110,27 @@ export async function POST(_req: NextRequest, { params }: Props) {
       error instanceof Error ? error.message : "Unknown quality gate error";
 
     if (qualityRunId) {
+      // Best-effort cleanup writes: the primary failure is already captured
+      // in `message` / returned via serverErrorResponse below, so a
+      // secondary failure here must not throw past this catch block — but
+      // it must not be silently dropped either (see
+      // docs/security-checklist.md, "no silent catch").
       await updateQualityStep(qualityRunId, "lint", "failed", message).catch(
-        () => {}
+        (cleanupError) => {
+          // eslint-disable-next-line no-console -- intentional server-side-only log
+          console.error(
+            `[projects/run-quality-gate] failed to record failure status for qualityRunId=${qualityRunId}:`,
+            cleanupError
+          );
+        }
       );
-      await finishQualityRun(qualityRunId, "failed").catch(() => {});
+      await finishQualityRun(qualityRunId, "failed").catch((cleanupError) => {
+        // eslint-disable-next-line no-console -- intentional server-side-only log
+        console.error(
+          `[projects/run-quality-gate] failed to finish quality run as failed for qualityRunId=${qualityRunId}:`,
+          cleanupError
+        );
+      });
     }
 
     return serverErrorResponse("projects/run-quality-gate", error, {
