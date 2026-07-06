@@ -101,18 +101,23 @@ final List<MaskPattern> patterns = [
     ),
   ),
 
-  // Generic `api_key=`/`token=`/`token:`/etc. assignments (ad hoc internal
-  // tokens that don't match a known provider prefix — including opaque
-  // non-hex values). The bare `token` alternative (Codex review P2 on
-  // PR #37) also catches compound names ending in it (`auth_token=`,
-  // `refresh_token=`); it can't false-match `tokenizer=` because `=`/`:`
-  // must immediately follow `token` (modulo whitespace). Value min-length
+  // Generic `api_key=`/`token=`/`token:`/`"token": "..."`/etc. assignments
+  // (ad hoc internal tokens that don't match a known provider prefix —
+  // including opaque non-hex values). Two Codex review rounds on PR #37
+  // shaped this: bare `token` in the alternation (also catches compounds
+  // ending in it: `auth_token=`, `refresh_token=`), and optional quotes
+  // around the KEY side — without them, the JSON-serialized form
+  // `{"token":"..."}` (quoted key, `"` between key name and `:`) never
+  // matched, which is exactly the http_response / structured-log shape
+  // this package exists for. It can't false-match `tokenizer=` /
+  // `"tokenizer":` because `=`/`:` (modulo an optional closing quote and
+  // whitespace) must immediately follow the key name. Value min-length
   // stays at {20,} — same false-positive guard as the other alternatives.
   MaskPattern(
     'generic-key-assignment',
     (t) => t.replaceAllMapped(
       RegExp(
-        r'''(api[_-]?key|apikey|api[_-]?token|access[_-]?token|secret[_-]?key|token)\s*[=:]\s*["']?([A-Za-z0-9\-_.]{20,})["']?''',
+        r'''["']?(api[_-]?key|apikey|api[_-]?token|access[_-]?token|secret[_-]?key|token)["']?\s*[=:]\s*["']?([A-Za-z0-9\-_.]{20,})["']?''',
         caseSensitive: false,
       ),
       (m) => '${m.group(1)}=[MASKED]',

@@ -112,6 +112,30 @@ void main() {
     expect(mask(text), text);
   });
 
+  // Codex review round 2 P2 (PR #37): the JSON-serialized form has a
+  // QUOTED key — `"token":"..."` puts a `"` between the key name and the
+  // `:`, which the unquoted-key regex never matched. This is exactly the
+  // http_response / structured-log shape this package exists for.
+  test('masks a JSON-serialized {"token":"..."} body (quoted key)', () {
+    const opaqueValue = 'OpaqueJsonBodyValue-v4_AbC1234567890defGHI';
+    final body = jsonEncode({'token': opaqueValue, 'ok': false});
+    final out = mask(body);
+    expect(out.contains(opaqueValue), isFalse);
+    expect(out.contains('token=[MASKED]'), isTrue);
+  });
+
+  test("masks a single-quoted 'token': '...' assignment (quoted key)", () {
+    const opaqueValue = 'OpaqueSingleQuoteValue_v5-JkL0987654321mnoPQR';
+    final out = mask("{'token': '$opaqueValue'}");
+    expect(out.contains(opaqueValue), isFalse);
+    expect(out.contains('token=[MASKED]'), isTrue);
+  });
+
+  test('does NOT false-match a quoted compound key like "tokenizer":', () {
+    const text = '{"tokenizer":"streamingWordPieceLongValue01"}';
+    expect(mask(text), text);
+  });
+
   test('does NOT mask a short ordinary token= value (min-length guard)', () {
     const text = 'token=abc123';
     expect(mask(text), text);

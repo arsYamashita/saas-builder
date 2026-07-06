@@ -5,6 +5,11 @@
 # One-time setup (per clone):
 #   git config core.hooksPath packages/secret-guard/ci
 #
+# This file MUST be named exactly `pre-commit` (no extension): with
+# core.hooksPath set, Git looks up hooks in that directory strictly by
+# hook name, so a file named e.g. pre-commit-hook.sh would never fire
+# (Codex review P3 on PR #37 — the original filename had exactly that bug).
+#
 # (git only supports one hooksPath per repo — if this repo later adds
 # other shared hooks, move this script's body into that shared hook
 # instead of fighting over hooksPath. Not needed yet.)

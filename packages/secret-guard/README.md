@@ -4,8 +4,11 @@ Two-layer defense against secrets leaking out of this monorepo (and any repo
 that adopts this package):
 
 1. **Repo history layer** — `ci/gitleaks.toml` + `ci/github-actions-secret-guard.yml`
-   (a reusable PR-gate template) + `ci/pre-commit-hook.sh` (local, fast
-   feedback). Scans what's *committed*.
+   (a reusable PR-gate template) + `ci/pre-commit` (local, fast feedback —
+   the filename must be exactly `pre-commit`: after
+   `git config core.hooksPath packages/secret-guard/ci`, Git looks up hooks
+   in that directory *by hook name*, so any other filename never fires).
+   Scans what's *committed*.
 2. **Runtime layer** — a `mask()` API (TypeScript in `src/`, Dart in
    `dart/`) that sanitizes secret-shaped substrings out of any string
    *before it leaves the process* — a log line, an HTTP response body, a
