@@ -1,27 +1,6 @@
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
-
-export async function createClient() {
-  const cookieStore = await cookies();
-
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll(cookiesToSet: Array<{ name: string; value: string; options?: Record<string, unknown> }>) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }: { name: string; value: string; options?: Record<string, unknown> }) => {
-              cookieStore.set(name, value, options as Parameters<typeof cookieStore.set>[2]);
-            });
-          } catch {
-            // Route Handler / Server Action outside mutable cookie context
-          }
-        },
-      },
-    }
-  );
-}
+/**
+ * Re-exports the server-side Supabase client from @saas/auth. Kept as a
+ * local path (and the original `createClient` name) so existing call sites
+ * keep working unchanged after the extraction — see packages/auth/.
+ */
+export { createServerSupabaseClient as createClient } from "@saas/auth";

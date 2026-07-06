@@ -1,5 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // packages/* workspace packages ship raw TypeScript source (no build
+  // step) — Next.js must transpile them like first-party app code.
+  transpilePackages: ['@saas/payments', '@saas/auth'],
   experimental: {
     optimizePackageImports: ['lucide-react'],
     // Enables instrumentation.ts's register() hook, used to validate
