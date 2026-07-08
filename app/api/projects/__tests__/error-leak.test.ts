@@ -100,20 +100,18 @@ describe("GET/POST /api/projects — error-leak wiring", () => {
     expect(JSON.parse(text)).toEqual({ error: "Failed to fetch projects" });
   });
 
-  it("POST: does not leak the DB error when tenant creation fails", async () => {
+  it("POST: does not leak the DB error when the atomic tenant-creation RPC fails", async () => {
+    // create_tenant_with_owner sanitizes its own internal errors (see
+    // supabase/migrations/0016_create_tenant_with_owner_atomic.sql), but
+    // this test simulates a raw PostgrestError reaching the route anyway
+    // (e.g. a network-level RPC failure) to prove the route itself never
+    // forwards `.message`/`.code` to the client either.
     const dbError = fakePostgresError({
       message: 'duplicate key value violates unique constraint "tenants_slug_key"',
       code: "23505",
     });
-    mockCreateAdminClient.mockReturnValue({
-      from: () => ({
-        insert: () => ({
-          select: () => ({
-            single: () => Promise.resolve({ data: null, error: dbError }),
-          }),
-        }),
-      }),
-    } as any);
+    const mockRpc = vi.fn().mockResolvedValue({ data: null, error: dbError });
+    mockCreateAdminClient.mockReturnValue({ rpc: mockRpc } as any);
 
     const req = new NextRequest("https://example.com/api/projects", {
       method: "POST",
@@ -127,37 +125,38 @@ describe("GET/POST /api/projects — error-leak wiring", () => {
     expect(JSON.parse(text)).toEqual({ error: "Failed to create tenant" });
   });
 
-  it("POST: does not leak the DB error when project creation fails", async () => {
-    const dbError = fakePostgresError({
-      message: 'insert into "projects" violates check constraint "projects_status_check"',
-      code: "23514",
+  it("POST: creates tenant/owner/project through exactly one atomic RPC call, never separate table inserts", async () => {
+    // Locks in the fix for [[tenant_creation_non_transactional_orphan]]:
+    // the old code made three unguarded sequential `.from(...).insert(...)`
+    // calls, and a failure on the second (tenant_users) call was not even
+    // checked, leaving an orphan `tenants` row with no owner. Asserting
+    // that `.from()` is never called for tenants/tenant_users/projects on
+    // the write path — only a single `.rpc("create_tenant_with_owner")` —
+    // fixes that failure mode structurally: there is no second write call
+    // left to fail independently, and thus no way to observe a tenant
+    // without its owner membership.
+    const mockFrom = vi.fn();
+    const mockRpc = vi.fn().mockResolvedValue({
+      data: [
+        {
+          id: "project-1",
+          tenant_id: "tenant-1",
+          name: validProjectBody.name,
+          industry: validProjectBody.templateKey,
+          template_key: validProjectBody.templateKey,
+          status: "draft",
+          description: validProjectBody.summary,
+          metadata_json: {},
+          created_by: "user-1",
+          created_at: "2026-01-01T00:00:00Z",
+          updated_at: "2026-01-01T00:00:00Z",
+        },
+      ],
+      error: null,
     });
-    let insertCallCount = 0;
     mockCreateAdminClient.mockReturnValue({
-      from: (table: string) => {
-        if (table === "tenants") {
-          return {
-            insert: () => ({
-              select: () => ({
-                single: () =>
-                  Promise.resolve({ data: { id: "tenant-1" }, error: null }),
-              }),
-            }),
-          };
-        }
-        if (table === "tenant_users") {
-          return { insert: () => Promise.resolve({ error: null }) };
-        }
-        // projects
-        insertCallCount += 1;
-        return {
-          insert: () => ({
-            select: () => ({
-              single: () => Promise.resolve({ data: null, error: dbError }),
-            }),
-          }),
-        };
-      },
+      rpc: mockRpc,
+      from: mockFrom,
     } as any);
 
     const req = new NextRequest("https://example.com/api/projects", {
@@ -166,10 +165,39 @@ describe("GET/POST /api/projects — error-leak wiring", () => {
     });
 
     const res = await POST(req);
-    expect(insertCallCount).toBe(1);
+
+    expect(res.status).toBe(201);
+    expect(mockRpc).toHaveBeenCalledTimes(1);
+    expect(mockRpc).toHaveBeenCalledWith(
+      "create_tenant_with_owner",
+      expect.objectContaining({
+        p_user_id: "user-1",
+        p_template_key: validProjectBody.templateKey,
+      })
+    );
+    // No fallback/legacy `.from("tenants"|"tenant_users"|"projects").insert(...)`
+    // path exists anymore — the write is 100% inside the RPC.
+    expect(mockFrom).not.toHaveBeenCalled();
+  });
+
+  it("POST: does not leak internal detail and returns 500 when the RPC reports success but returns no row", async () => {
+    // Defends against a future refactor accidentally treating `{ data: null,
+    // error: null }` (or an empty array) as success — the orphan bug this
+    // migration fixes was exactly this class of "unchecked partial result"
+    // mistake, just one layer up (an unchecked .insert() instead of an
+    // unchecked empty RPC result).
+    const mockRpc = vi.fn().mockResolvedValue({ data: [], error: null });
+    mockCreateAdminClient.mockReturnValue({ rpc: mockRpc } as any);
+
+    const req = new NextRequest("https://example.com/api/projects", {
+      method: "POST",
+      body: JSON.stringify(validProjectBody),
+    });
+
+    const res = await POST(req);
     expect(res.status).toBe(500);
     const text = await res.text();
-    assertNoLeak(text, ["projects_status_check", "check constraint", "23514"]);
-    expect(JSON.parse(text)).toEqual({ error: "Failed to create project" });
+    assertNoLeak(text);
+    expect(JSON.parse(text)).toEqual({ error: "Failed to create tenant" });
   });
 });

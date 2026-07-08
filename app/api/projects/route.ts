@@ -74,43 +74,23 @@ export async function POST(req: NextRequest) {
     const tenantSlugBase = slugify(input.name || "project");
     const tenantSlug = `${tenantSlugBase}-${crypto.randomUUID().slice(0, 8)}`;
 
-    const { data: tenant, error: tenantError } = await supabase
-      .from("tenants")
-      .insert({
-        name: input.name,
-        slug: tenantSlug,
-        plan_type: "starter",
-        status: "active",
-      })
-      .select()
-      .single();
-
-    if (tenantError) {
-      console.error("Create tenant error:", tenantError.message);
-      return NextResponse.json(
-        { error: "Failed to create tenant" },
-        { status: 500 }
-      );
-    }
-
-    // Link the creating user to the new tenant
-    await supabase.from("tenant_users").insert({
-      tenant_id: tenant.id,
-      user_id: user.id,
-      role: "owner",
-      status: "active",
-    });
-
-    const { data: project, error: projectError } = await supabase
-      .from("projects")
-      .insert({
-        tenant_id: tenant.id,
-        name: input.name,
-        industry: input.templateKey,
-        template_key: input.templateKey,
-        status: "draft",
-        description: input.summary,
-        metadata_json: {
+    // Single atomic RPC call — see
+    // supabase/migrations/0016_create_tenant_with_owner_atomic.sql.
+    // tenants/tenant_users/projects are created inside one Postgres
+    // function invocation, so a mid-way failure (e.g. the tenant_users
+    // INSERT) rolls back every row this call would otherwise have
+    // created, instead of leaving an orphan tenant with no owner
+    // membership ([[tenant_creation_non_transactional_orphan]]).
+    const { data: rows, error: rpcError } = await supabase.rpc(
+      "create_tenant_with_owner",
+      {
+        p_name: input.name,
+        p_slug: tenantSlug,
+        p_user_id: user.id,
+        p_template_key: input.templateKey,
+        p_industry: input.templateKey,
+        p_description: input.summary,
+        p_metadata: {
           targetUsers: input.targetUsers,
           problemToSolve: input.problemToSolve,
           referenceServices: input.referenceServices,
@@ -128,14 +108,21 @@ export async function POST(req: NextRequest) {
           notes: input.notes,
           priority: input.priority,
         },
-      })
-      .select()
-      .single();
+      }
+    );
 
-    if (projectError) {
-      console.error("Create project error:", projectError.message);
+    // Never treat a missing/errored RPC result as success — this is
+    // exactly the failure mode the old code silently swallowed for the
+    // tenant_users INSERT (no error check at all). Any RPC error, or an
+    // empty result set, must surface as a 500.
+    const project = Array.isArray(rows) ? rows[0] : rows;
+    if (rpcError || !project) {
+      console.error(
+        "Create tenant (atomic RPC) error:",
+        rpcError?.message ?? "no row returned"
+      );
       return NextResponse.json(
-        { error: "Failed to create project" },
+        { error: "Failed to create tenant" },
         { status: 500 }
       );
     }
