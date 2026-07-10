@@ -7,6 +7,7 @@ import { buildStepMeta } from "@/lib/providers/step-meta";
 import { resolveFinalPromptPath } from "@/lib/ai/template-prompt-resolver";
 import { requireProjectAccess } from "@/lib/auth/current-user";
 import { aiRatelimit, checkRateLimit, getIp, rateLimitResponse } from "@/lib/ratelimit";
+import { projectImplementationRunForClient } from "@/lib/documents/response-projection";
 
 type Props = {
   params: Promise<{ projectId: string }>;
@@ -64,7 +65,7 @@ export async function POST(req: NextRequest, { params }: Props) {
     });
 
     return NextResponse.json({
-      implementationRun: saved,
+      implementationRun: projectImplementationRunForClient(saved),
       outputText,
       _meta: buildStepMeta("schema", result),
     });

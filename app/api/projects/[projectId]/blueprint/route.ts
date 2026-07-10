@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/db/supabase/admin";
 import { blueprintSchema } from "@/lib/validation/blueprint";
 import { requireProjectAccess } from "@/lib/auth/current-user";
+import { projectBlueprintForClient } from "@/lib/documents/response-projection";
 
 type Props = {
   params: Promise<{ projectId: string }>;
@@ -77,7 +78,7 @@ export async function POST(req: NextRequest, { params }: Props) {
       );
     }
 
-    return NextResponse.json({ blueprint: inserted }, { status: 201 });
+    return NextResponse.json({ blueprint: projectBlueprintForClient(inserted) }, { status: 201 });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Unknown server error";

@@ -7,6 +7,7 @@ import { executeTask } from "@/lib/providers/task-router";
 import { buildStepMeta } from "@/lib/providers/step-meta";
 import { resolveFinalPromptPath } from "@/lib/ai/template-prompt-resolver";
 import { requireProjectAccess } from "@/lib/auth/current-user";
+import { projectImplementationRunForClient } from "@/lib/documents/response-projection";
 
 type Props = {
   params: Promise<{ projectId: string }>;
@@ -79,7 +80,7 @@ export async function POST(_req: NextRequest, { params }: Props) {
     }
 
     return NextResponse.json({
-      run: latestRun,
+      run: projectImplementationRunForClient(latestRun),
       savedFiles,
       _meta: buildStepMeta("file_split", result),
     });

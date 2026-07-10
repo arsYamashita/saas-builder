@@ -8,6 +8,7 @@ import { extractJsonFromText } from "@/lib/providers/result-normalizer";
 import { buildStepMeta, mergeStepMetas } from "@/lib/providers/step-meta";
 import { requireProjectAccess } from "@/lib/auth/current-user";
 import { aiRatelimit, checkRateLimit, getIp, rateLimitResponse } from "@/lib/ratelimit";
+import { projectBlueprintForClient } from "@/lib/documents/response-projection";
 
 type Props = {
   params: Promise<{ projectId: string }>;
@@ -148,7 +149,7 @@ export async function POST(req: NextRequest, { params }: Props) {
     return NextResponse.json({
       project,
       intake: intakeText,
-      blueprint: inserted,
+      blueprint: projectBlueprintForClient(inserted),
       _meta,
     });
   } catch (error) {
