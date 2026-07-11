@@ -1,3 +1,5 @@
+import { serializeJsonLd } from "@/lib/seo/serialize-json-ld";
+
 export function JsonLd() {
   const baseUrl =
     process.env.NEXT_PUBLIC_APP_URL || "https://saas-builder-cyan.vercel.app";
@@ -35,7 +37,7 @@ export function JsonLd() {
   return (
     <script
       type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }}
+      dangerouslySetInnerHTML={{ __html: serializeJsonLd(data) }}
     />
   );
 }
