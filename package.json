@@ -38,6 +38,7 @@
     "@saas/llm-guard": "*",
     "@saas/payments": "*",
     "@saas/secret-guard": "*",
+    "@saas/supabase-guard": "*",
     "@anthropic-ai/sdk": "^0.110.0",
     "@google/generative-ai": "^0.21.0",
     "@hookform/resolvers": "^3.9.0",
