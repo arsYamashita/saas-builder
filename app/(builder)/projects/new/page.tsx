@@ -30,18 +30,27 @@ import {
   resolveSubmitLabel,
   summarizeIssues,
 } from "@/lib/forms/errors";
+import { z } from "zod";
 
 /**
  * The wizard only collects `name` / `summary` / `targetUsers` by hand — the
  * rest of `projectFormSchema` is derived from the selected template preset
  * (see `buildPayload` below). `.pick` keeps this a *view* onto the single
- * canonical schema rather than a hand-maintained duplicate.
+ * canonical schema rather than a hand-maintained duplicate for `name` /
+ * `summary`.
+ *
+ * `targetUsers` is deliberately re-declared (not picked as-is): the
+ * canonical schema requires 5+ characters because by the time
+ * `buildPayload` runs, an empty value has already been replaced by the
+ * template's recommended target users (or "一般ユーザー"). The wizard UI
+ * marks this field "任意" and must accept it blank — validating the raw
+ * keystroke-level input against the canonical min-length here would block
+ * submission with no visible error (the field only renders on step 2, but
+ * submit only happens on step 3).
  */
-const projectBasicInfoSchema = projectFormSchema.pick({
-  name: true,
-  summary: true,
-  targetUsers: true,
-});
+export const projectBasicInfoSchema = projectFormSchema
+  .pick({ name: true, summary: true, targetUsers: true })
+  .extend({ targetUsers: z.string().optional().default("") });
 const BASIC_INFO_FIELDS = ["name", "summary", "targetUsers"] as const;
 
 /* ---------- Template icon mapping ---------- */
