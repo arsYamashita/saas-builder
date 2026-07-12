@@ -27,7 +27,15 @@
  *     writeExportScaffold() helper the DB-driven export route uses.
  *   - Additionally (always): lib/env.ts + instrumentation.ts (startup env
  *     validation), lib/db/supabase/{admin,server,client}.ts, lib/payments/*,
- *     lib/billing/{stripe,webhook-errors}.ts, lib/rate-limit.ts,
+ *     lib/billing/{stripe,webhook-errors}.ts, lib/rate-limit.ts, PLUS
+ *     whichever packages/<name> (@saas/<name>) workspace packages those
+ *     files actually import (currently @saas/auth + @saas/payments,
+ *     auto-detected — see detectSaasWorkspaceDeps() below) copied in under
+ *     packages/, declared as "@saas/<name>": "file:./packages/<name>" in
+ *     the generated package.json, and added to next.config.js's
+ *     transpilePackages (these ship raw TS source, not a prebuilt dist).
+ *     Without this, the generated app's own @saas/* imports are dangling —
+ *     see [[saas_builder_scaffold_missing_saas_packages]].
  *     docs/rules/*.md (the shared generation contract — 06/08 are the
  *     mandatory ones for API + DB boundaries), docs/security-checklist.md
  *     (9-item security checklist, kept alongside the derived app so it
@@ -44,8 +52,77 @@
 import fs from "node:fs";
 import path from "node:path";
 import { writeExportScaffold } from "../lib/quality/write-export-scaffold";
+import { getScaffoldNextConfig } from "../lib/quality/scaffold/next-config";
 
 const REPO_ROOT = path.resolve(__dirname, "..");
+
+const SAAS_IMPORT_RE = /@saas\/([a-zA-Z0-9_-]+)/g;
+
+/**
+ * Scans already-copied files for `@saas/<name>` import specifiers. The
+ * files copied in step 2 below (lib/db/supabase/*, lib/payments/*,
+ * lib/billing/{stripe,webhook-errors}.ts, lib/rate-limit.ts) are thin
+ * re-export shims around `@saas/*` workspace packages (packages/auth,
+ * packages/payments, ...) — this detects which of those packages actually
+ * need to ship alongside the generated app. Scanning (rather than
+ * hardcoding ["auth", "payments"]) means a future shim change (e.g.
+ * lib/rate-limit.ts moving onto @saas/supabase-guard) is picked up
+ * automatically, without another manual edit here. See
+ * [[saas_builder_scaffold_missing_saas_packages]].
+ */
+function detectSaasWorkspaceDeps(filePaths: string[]): string[] {
+  const names = new Set<string>();
+  for (const filePath of filePaths) {
+    if (!fs.existsSync(filePath)) continue;
+    const content = fs.readFileSync(filePath, "utf8");
+    const matches = content.match(SAAS_IMPORT_RE);
+    if (!matches) continue;
+    for (const m of matches) names.add(m.slice("@saas/".length));
+  }
+  return Array.from(names).sort();
+}
+
+/**
+ * Copies packages/<name> (the `@saas/<name>` workspace package source —
+ * package.json + src/) into outDir/packages/<name>, skipping the
+ * package's own node_modules and test files, so the generated app is a
+ * self-contained copy that does not depend on this monorepo being present
+ * alongside it.
+ */
+function copySaasWorkspacePackage(name: string, outDir: string) {
+  const srcDir = path.join(REPO_ROOT, "packages", name);
+  if (!fs.existsSync(srcDir)) {
+    throw new Error(
+      `[create-app] Detected an "@saas/${name}" import in a copied file, but packages/${name} does not exist in this repo.`
+    );
+  }
+  copyDirSkippingTests(srcDir, path.join(outDir, "packages", name));
+}
+
+function copyDirSkippingTests(srcDir: string, destDir: string) {
+  for (const entry of fs.readdirSync(srcDir, { withFileTypes: true })) {
+    if (entry.name === "__tests__" || entry.name === "node_modules") continue;
+    if (/\.test\.[jt]sx?$/.test(entry.name)) continue;
+    const srcPath = path.join(srcDir, entry.name);
+    const destPath = path.join(destDir, entry.name);
+    if (entry.isDirectory()) {
+      copyDirSkippingTests(srcPath, destPath);
+    } else {
+      copyFile(srcPath, destPath);
+    }
+  }
+}
+
+function listFilesRecursive(dir: string): string[] {
+  if (!fs.existsSync(dir)) return [];
+  const out: string[] = [];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...listFilesRecursive(p));
+    else out.push(p);
+  }
+  return out;
+}
 
 function parseArgs(argv: string[]) {
   const args: Record<string, string> = {};
@@ -146,6 +223,50 @@ async function main() {
   // paid-API endpoints)". See [[saas_builder_security_debt_inheritance]].
   copyFile(path.join(REPO_ROOT, "lib/rate-limit.ts"), path.join(outDir, "lib/rate-limit.ts"));
   track("lib/env.ts + instrumentation.ts (startup validation wiring), lib/db/supabase/*, lib/payments/* (idempotency), lib/billing/{stripe,webhook-errors}.ts, lib/rate-limit.ts");
+
+  // ── 2b. `@saas/*` workspace packages — lib/db/supabase/* and
+  //        lib/payments/*/lib/billing/* (just copied above) are thin
+  //        re-export shims around packages/auth and packages/payments;
+  //        without shipping the package source + declaring the dependency,
+  //        the generated app's `@saas/auth`, `@saas/auth/server`,
+  //        `@saas/auth/client`, and `@saas/payments` imports are dangling —
+  //        `npm install` / `tsc` fail immediately. See
+  //        [[saas_builder_scaffold_missing_saas_packages]]. ──
+  const saasDeps = detectSaasWorkspaceDeps([
+    path.join(outDir, "lib/db/supabase/admin.ts"),
+    path.join(outDir, "lib/db/supabase/server.ts"),
+    path.join(outDir, "lib/db/supabase/client.ts"),
+    ...listFilesRecursive(path.join(outDir, "lib/payments")),
+    path.join(outDir, "lib/billing/stripe.ts"),
+    path.join(outDir, "lib/billing/webhook-errors.ts"),
+    path.join(outDir, "lib/rate-limit.ts"),
+  ]);
+
+  if (saasDeps.length > 0) {
+    for (const depName of saasDeps) {
+      copySaasWorkspacePackage(depName, outDir);
+    }
+
+    const pkgJsonPath = path.join(outDir, "package.json");
+    const pkgJson = JSON.parse(fs.readFileSync(pkgJsonPath, "utf8"));
+    pkgJson.dependencies = pkgJson.dependencies ?? {};
+    for (const depName of saasDeps) {
+      pkgJson.dependencies[`@saas/${depName}`] = `file:./packages/${depName}`;
+    }
+    fs.writeFileSync(pkgJsonPath, JSON.stringify(pkgJson, null, 2) + "\n");
+
+    // Regenerate next.config.js with transpilePackages — @saas/* ships raw
+    // TS source (not a prebuilt dist), so Next must transpile it like
+    // first-party app code (see next-config.ts).
+    fs.writeFileSync(
+      path.join(outDir, "next.config.js"),
+      getScaffoldNextConfig(saasDeps.map((depName) => `@saas/${depName}`))
+    );
+
+    track(
+      `packages/{${saasDeps.join(",")}} (@saas/* workspace package source, copied in) + matching file: dependencies in package.json + next.config.js transpilePackages`
+    );
+  }
 
   // ── 3. Shared generation-contract docs (06/08 are the mandatory API/DB
   //       boundary rules; the rest are included as reference since new code
