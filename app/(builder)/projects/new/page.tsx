@@ -20,7 +20,29 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { FormAlert } from "@/components/ui/form-alert";
+import { FormFieldError } from "@/components/ui/form-field-error";
 import { cn } from "@/lib/utils/cn";
+import { useZodForm } from "@/lib/forms/useZodForm";
+import {
+  applyZodIssuesToForm,
+  partitionIssuesByFields,
+  resolveSubmitLabel,
+  summarizeIssues,
+} from "@/lib/forms/errors";
+
+/**
+ * The wizard only collects `name` / `summary` / `targetUsers` by hand — the
+ * rest of `projectFormSchema` is derived from the selected template preset
+ * (see `buildPayload` below). `.pick` keeps this a *view* onto the single
+ * canonical schema rather than a hand-maintained duplicate.
+ */
+const projectBasicInfoSchema = projectFormSchema.pick({
+  name: true,
+  summary: true,
+  targetUsers: true,
+});
+const BASIC_INFO_FIELDS = ["name", "summary", "targetUsers"] as const;
 
 /* ---------- Template icon mapping ---------- */
 const TEMPLATE_ICONS: Record<string, string> = {
@@ -57,12 +79,12 @@ type StepNumber = 1 | 2 | 3;
 export default function NewProjectPage() {
   const [currentStep, setCurrentStep] = useState<StepNumber>(1);
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
-  const [name, setName] = useState("");
-  const [summary, setSummary] = useState("");
-  const [targetUsers, setTargetUsers] = useState("");
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [submitting, setSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const form = useZodForm(projectBasicInfoSchema, {
+    defaultValues: { name: "", summary: "", targetUsers: "" },
+    mode: "onChange",
+  });
+  const [watchedName, watchedSummary, watchedTargetUsers] = form.watch(BASIC_INFO_FIELDS);
 
   /* ---------- Derived catalog entry ---------- */
   const selectedCatalog = useMemo(
@@ -73,20 +95,28 @@ export default function NewProjectPage() {
   /* ---------- Navigation ---------- */
   const canGoNext = useCallback((): boolean => {
     if (currentStep === 1) return selectedTemplate !== null;
-    if (currentStep === 2) return name.trim().length >= 2 && summary.trim().length >= 10;
-    return false;
-  }, [currentStep, selectedTemplate, name, summary]);
-
-  const goNext = () => {
     if (currentStep === 2) {
-      const newErrors: Record<string, string> = {};
-      if (name.trim().length < 2) newErrors.name = "サービス名は2文字以上で入力してください";
-      if (summary.trim().length < 10) newErrors.summary = "サービス概要は10文字以上で入力してください";
-      if (Object.keys(newErrors).length > 0) {
-        setErrors(newErrors);
-        return;
-      }
-      setErrors({});
+      return (
+        watchedName.trim().length > 0 &&
+        watchedSummary.trim().length > 0 &&
+        !form.formState.errors.name &&
+        !form.formState.errors.summary
+      );
+    }
+    return false;
+  }, [
+    currentStep,
+    selectedTemplate,
+    watchedName,
+    watchedSummary,
+    form.formState.errors.name,
+    form.formState.errors.summary,
+  ]);
+
+  const goNext = async () => {
+    if (currentStep === 2) {
+      const valid = await form.trigger(["name", "summary"]);
+      if (!valid) return;
     }
     if (currentStep < 3) setCurrentStep((s) => (s + 1) as StepNumber);
   };
@@ -100,51 +130,64 @@ export default function NewProjectPage() {
     setSelectedTemplate(key);
   };
 
-  /* ---------- Build full form payload from wizard state ---------- */
-  const buildPayload = useCallback(() => {
-    const base = { ...defaultProjectFormValues };
-    const templateKey = (selectedTemplate || "custom") as TemplateKey;
+  /* ---------- Build full form payload from wizard state + user-entered basics ---------- */
+  const buildPayload = useCallback(
+    (basicInfo: { name: string; summary: string; targetUsers: string }) => {
+      const base = { ...defaultProjectFormValues };
+      const templateKey = (selectedTemplate || "custom") as TemplateKey;
 
-    // Apply preset if available
-    const preset = PRESET_MAP[templateKey];
-    if (preset) {
-      Object.assign(base, preset);
-    }
+      // Apply preset if available
+      const preset = PRESET_MAP[templateKey];
+      if (preset) {
+        Object.assign(base, preset);
+      }
 
-    // Override with user-entered values
-    base.templateKey = templateKey;
-    base.name = name.trim();
-    base.summary = summary.trim();
-    base.targetUsers = targetUsers.trim() || selectedCatalog?.targetUsers || "一般ユーザー";
+      // Override with user-entered values
+      base.templateKey = templateKey;
+      base.name = basicInfo.name.trim();
+      base.summary = basicInfo.summary.trim();
+      base.targetUsers =
+        basicInfo.targetUsers.trim() || selectedCatalog?.targetUsers || "一般ユーザー";
 
-    // Auto-fill problemToSolve from template if not customized
-    if (!base.problemToSolve || base.problemToSolve === defaultProjectFormValues.problemToSolve) {
-      base.problemToSolve =
-        TEMPLATE_PROBLEM_DEFAULTS[templateKey] ||
-        `${base.name}を通じてユーザーの課題を解決したい`;
-    }
+      // Auto-fill problemToSolve from template if not customized
+      if (!base.problemToSolve || base.problemToSolve === defaultProjectFormValues.problemToSolve) {
+        base.problemToSolve =
+          TEMPLATE_PROBLEM_DEFAULTS[templateKey] ||
+          `${base.name}を通じてユーザーの課題を解決したい`;
+      }
 
-    return base;
-  }, [selectedTemplate, name, summary, targetUsers, selectedCatalog]);
+      return base;
+    },
+    [selectedTemplate, selectedCatalog]
+  );
 
-  /* ---------- Submit ---------- */
-  const handleSubmit = async () => {
-    const payload = buildPayload();
+  /* ---------- Submit ----------
+   * Client validation: react-hook-form + zodResolver(projectBasicInfoSchema)
+   * gates the 3 hand-entered fields (also enforced per-step via `goNext`).
+   * Server-shape validation: `buildPayload` merges in the template-derived
+   * fields the user never edits directly, then the *canonical*
+   * `projectFormSchema` (same schema `app/api/projects/route.ts` re-parses)
+   * is run again as a safety net before the request goes out. Both stages
+   * report through the same `form` error state so messages are consistent.
+   */
+  const onSubmit = form.handleSubmit(async (basicInfo) => {
+    const payload = buildPayload(basicInfo);
     const result = projectFormSchema.safeParse(payload);
 
     if (!result.success) {
-      const fieldErrors: Record<string, string> = {};
-      for (const issue of result.error.issues) {
-        const key = issue.path.join(".");
-        fieldErrors[key] = issue.message;
+      const { managed, unmanaged } = partitionIssuesByFields(
+        result.error.issues,
+        BASIC_INFO_FIELDS
+      );
+      applyZodIssuesToForm(form.setError, managed);
+      const summary = summarizeIssues(unmanaged);
+      if (summary) {
+        form.setError("root.serverError", { type: "server", message: summary });
       }
-      setErrors(fieldErrors);
       return;
     }
 
-    setErrors({});
-    setSubmitting(true);
-    setSubmitError(null);
+    form.clearErrors("root.serverError");
 
     try {
       const res = await fetch("/api/projects", {
@@ -154,21 +197,29 @@ export default function NewProjectPage() {
       });
 
       if (!res.ok) {
-        setSubmitError("プロジェクト作成に失敗しました");
+        form.setError("root.serverError", {
+          type: "server",
+          message: "プロジェクト作成に失敗しました",
+        });
         return;
       }
 
       const json = await res.json();
       window.location.href = `/projects/${json.project.id}`;
     } catch {
-      setSubmitError("通信エラーが発生しました");
-    } finally {
-      setSubmitting(false);
+      form.setError("root.serverError", {
+        type: "server",
+        message: "通信エラーが発生しました",
+      });
     }
-  };
+  });
 
   /* ---------- Progress percentage ---------- */
   const progressPercent = (currentStep / 3) * 100;
+  const submitLabel = resolveSubmitLabel(form.formState.isSubmitting, {
+    idle: "プロジェクトを作成",
+    pending: "作成中...",
+  });
 
   return (
     <main className="min-h-screen bg-background">
@@ -329,16 +380,13 @@ export default function NewProjectPage() {
                   </label>
                   <Input
                     id="service-name"
-                    aria-describedby={errors.name ? "service-name-error" : undefined}
-                    aria-invalid={!!errors.name}
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
+                    aria-describedby={form.formState.errors.name ? "service-name-error" : undefined}
+                    aria-invalid={!!form.formState.errors.name}
                     placeholder="例: マイCRM"
                     className="h-12 text-base"
+                    {...form.register("name")}
                   />
-                  {errors.name && (
-                    <p id="service-name-error" className="text-sm text-destructive">{errors.name}</p>
-                  )}
+                  <FormFieldError id="service-name-error" message={form.formState.errors.name?.message} />
                 </div>
 
                 {/* Summary */}
@@ -351,19 +399,21 @@ export default function NewProjectPage() {
                   </label>
                   <Textarea
                     id="service-summary"
-                    aria-describedby={errors.summary ? "service-summary-error" : "service-summary-hint"}
-                    aria-invalid={!!errors.summary}
-                    value={summary}
-                    onChange={(e) => setSummary(e.target.value)}
+                    aria-describedby={
+                      form.formState.errors.summary ? "service-summary-error" : "service-summary-hint"
+                    }
+                    aria-invalid={!!form.formState.errors.summary}
                     placeholder="例: 中小企業向けの顧客管理システム。連絡先、商談、活動履歴を一元管理し、営業効率を向上させるSaaSサービス。"
                     className="min-h-[120px] text-base leading-relaxed"
+                    {...form.register("summary")}
                   />
                   <p id="service-summary-hint" className="text-xs text-muted-foreground">
                     どんなサービスで、誰のどんな課題を解決するか教えてください（10文字以上）
                   </p>
-                  {errors.summary && (
-                    <p id="service-summary-error" className="text-sm text-destructive">{errors.summary}</p>
-                  )}
+                  <FormFieldError
+                    id="service-summary-error"
+                    message={form.formState.errors.summary?.message}
+                  />
                 </div>
 
                 {/* Target users */}
@@ -379,13 +429,12 @@ export default function NewProjectPage() {
                   </label>
                   <Input
                     id="target-users"
-                    value={targetUsers}
-                    onChange={(e) => setTargetUsers(e.target.value)}
                     placeholder={
                       selectedCatalog?.targetUsers ||
                       "例: 中小企業の営業チーム"
                     }
                     className="h-12 text-base"
+                    {...form.register("targetUsers")}
                   />
                   <p className="text-xs text-muted-foreground">
                     未入力の場合、テンプレートの推奨ターゲットが使用されます
@@ -418,16 +467,16 @@ export default function NewProjectPage() {
                         : selectedCatalog?.label || selectedTemplate || ""
                     }
                   />
-                  <ReviewRow label="サービス名" value={name} />
-                  <ReviewRow label="サービス概要" value={summary} />
+                  <ReviewRow label="サービス名" value={watchedName} />
+                  <ReviewRow label="サービス概要" value={watchedSummary} />
                   <ReviewRow
                     label="ターゲットユーザー"
                     value={
-                      targetUsers ||
+                      watchedTargetUsers ||
                       selectedCatalog?.targetUsers ||
                       "一般ユーザー"
                     }
-                    muted={!targetUsers}
+                    muted={!watchedTargetUsers}
                   />
                   {selectedCatalog && (
                     <>
@@ -474,24 +523,13 @@ export default function NewProjectPage() {
                 </div>
               </div>
 
-              {/* Validation errors */}
-              {Object.keys(errors).length > 0 && (
-                <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive space-y-1">
-                  <p className="font-medium">入力内容にエラーがあります</p>
-                  {Object.entries(errors).map(([key, message]) => (
-                    <p key={key}>{message}</p>
-                  ))}
-                </div>
-              )}
             </section>
           )}
         </div>
 
         {/* ===== Submit Error ===== */}
-        {submitError && (
-          <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
-            {submitError}
-          </div>
+        {form.formState.errors.root?.serverError && (
+          <FormAlert>{form.formState.errors.root.serverError.message}</FormAlert>
         )}
 
         {/* ===== Navigation Buttons ===== */}
@@ -522,17 +560,17 @@ export default function NewProjectPage() {
             ) : (
               <Button
                 size="lg"
-                onClick={handleSubmit}
-                disabled={submitting}
+                onClick={onSubmit}
+                disabled={form.formState.isSubmitting}
                 className="min-w-[180px]"
               >
-                {submitting ? (
+                {form.formState.isSubmitting ? (
                   <span className="flex items-center gap-2">
                     <LoadingSpinner />
-                    作成中...
+                    {submitLabel}
                   </span>
                 ) : (
-                  "プロジェクトを作成"
+                  submitLabel
                 )}
               </Button>
             )}
