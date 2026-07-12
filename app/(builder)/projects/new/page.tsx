@@ -40,17 +40,27 @@ import { z } from "zod";
  * `summary`.
  *
  * `targetUsers` is deliberately re-declared (not picked as-is): the
- * canonical schema requires 5+ characters because by the time
- * `buildPayload` runs, an empty value has already been replaced by the
- * template's recommended target users (or "一般ユーザー"). The wizard UI
- * marks this field "任意" and must accept it blank — validating the raw
- * keystroke-level input against the canonical min-length here would block
- * submission with no visible error (the field only renders on step 2, but
- * submit only happens on step 3).
+ * canonical schema's `min(5)` is meant for the *post-fallback* value
+ * `buildPayload` computes (template default / "一般ユーザー"), not the raw
+ * "任意" field on step 2, which must accept blank. But it must still reject
+ * a short *non-blank* value here (not merely allow anything) — the wizard's
+ * only opportunity to show a field-level error is step 2; by step 3 (where
+ * submit happens) this field isn't rendered, so if an invalid value slipped
+ * through to the final `projectFormSchema.safeParse` in `onSubmit`, that
+ * failure would have nowhere visible to surface (see 2026-07-11 codex
+ * review, gpt-5.6-terra).
  */
 export const projectBasicInfoSchema = projectFormSchema
   .pick({ name: true, summary: true, targetUsers: true })
-  .extend({ targetUsers: z.string().optional().default("") });
+  .extend({
+    targetUsers: z
+      .string()
+      .optional()
+      .default("")
+      .refine((value) => value.length === 0 || value.length >= 5, {
+        message: "5文字以上で入力するか、空欄のままにしてください",
+      }),
+  });
 const BASIC_INFO_FIELDS = ["name", "summary", "targetUsers"] as const;
 
 /* ---------- Template icon mapping ---------- */
@@ -109,7 +119,8 @@ export default function NewProjectPage() {
         watchedName.trim().length > 0 &&
         watchedSummary.trim().length > 0 &&
         !form.formState.errors.name &&
-        !form.formState.errors.summary
+        !form.formState.errors.summary &&
+        !form.formState.errors.targetUsers
       );
     }
     return false;
@@ -120,11 +131,15 @@ export default function NewProjectPage() {
     watchedSummary,
     form.formState.errors.name,
     form.formState.errors.summary,
+    form.formState.errors.targetUsers,
   ]);
 
   const goNext = async () => {
     if (currentStep === 2) {
-      const valid = await form.trigger(["name", "summary"]);
+      // `targetUsers` is included so an invalid-but-non-blank value (too
+      // short) is caught here, with its error visible on this step — it
+      // isn't rendered on step 3, where submit happens.
+      const valid = await form.trigger(BASIC_INFO_FIELDS);
       if (!valid) return;
     }
     if (currentStep < 3) setCurrentStep((s) => (s + 1) as StepNumber);
@@ -438,6 +453,10 @@ export default function NewProjectPage() {
                   </label>
                   <Input
                     id="target-users"
+                    aria-describedby={
+                      form.formState.errors.targetUsers ? "target-users-error" : "target-users-hint"
+                    }
+                    aria-invalid={!!form.formState.errors.targetUsers}
                     placeholder={
                       selectedCatalog?.targetUsers ||
                       "例: 中小企業の営業チーム"
@@ -445,9 +464,13 @@ export default function NewProjectPage() {
                     className="h-12 text-base"
                     {...form.register("targetUsers")}
                   />
-                  <p className="text-xs text-muted-foreground">
+                  <p id="target-users-hint" className="text-xs text-muted-foreground">
                     未入力の場合、テンプレートの推奨ターゲットが使用されます
                   </p>
+                  <FormFieldError
+                    id="target-users-error"
+                    message={form.formState.errors.targetUsers?.message}
+                  />
                 </div>
               </div>
             </section>
