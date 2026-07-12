@@ -94,6 +94,51 @@ const STEPS = [
 
 type StepNumber = 1 | 2 | 3;
 
+/**
+ * Merges the 3 hand-entered fields (already validated by
+ * `projectBasicInfoSchema`) with the selected template's preset into a full
+ * `projectFormSchema`-shaped payload. Extracted to module scope (pure,
+ * dependency-injected) so the "no re-trim" invariant that fixed the
+ * whitespace-padding bug above can be unit tested directly — see
+ * `__tests__/project-basic-info-schema.test.ts`.
+ */
+export function buildProjectPayload(
+  basicInfo: { name: string; summary: string; targetUsers: string },
+  selectedTemplate: string | null,
+  selectedCatalogTargetUsers: string | undefined
+) {
+  const base = { ...defaultProjectFormValues };
+  const templateKey = (selectedTemplate || "custom") as TemplateKey;
+
+  // Apply preset if available
+  const preset = PRESET_MAP[templateKey];
+  if (preset) {
+    Object.assign(base, preset);
+  }
+
+  // Override with user-entered values. Deliberately *not* re-trimmed here:
+  // `basicInfo` already passed `projectBasicInfoSchema` (raw, untrimmed
+  // length checks — same as the canonical `projectFormSchema` this payload
+  // is re-validated against on submit). Trimming at this stage would
+  // validate one string and store a shorter one, which can flip a
+  // borderline-valid value (e.g. a 2-char name with a leading space) into
+  // one that fails the second-layer check silently, after the wizard has
+  // already moved to the step where these fields aren't rendered (caught in
+  // codex review, gpt-5.6-terra).
+  base.templateKey = templateKey;
+  base.name = basicInfo.name;
+  base.summary = basicInfo.summary;
+  base.targetUsers = basicInfo.targetUsers || selectedCatalogTargetUsers || "一般ユーザー";
+
+  // Auto-fill problemToSolve from template if not customized
+  if (!base.problemToSolve || base.problemToSolve === defaultProjectFormValues.problemToSolve) {
+    base.problemToSolve =
+      TEMPLATE_PROBLEM_DEFAULTS[templateKey] || `${base.name}を通じてユーザーの課題を解決したい`;
+  }
+
+  return base;
+}
+
 /* ---------- Main Component ---------- */
 export default function NewProjectPage() {
   const [currentStep, setCurrentStep] = useState<StepNumber>(1);
@@ -156,32 +201,8 @@ export default function NewProjectPage() {
 
   /* ---------- Build full form payload from wizard state + user-entered basics ---------- */
   const buildPayload = useCallback(
-    (basicInfo: { name: string; summary: string; targetUsers: string }) => {
-      const base = { ...defaultProjectFormValues };
-      const templateKey = (selectedTemplate || "custom") as TemplateKey;
-
-      // Apply preset if available
-      const preset = PRESET_MAP[templateKey];
-      if (preset) {
-        Object.assign(base, preset);
-      }
-
-      // Override with user-entered values
-      base.templateKey = templateKey;
-      base.name = basicInfo.name.trim();
-      base.summary = basicInfo.summary.trim();
-      base.targetUsers =
-        basicInfo.targetUsers.trim() || selectedCatalog?.targetUsers || "一般ユーザー";
-
-      // Auto-fill problemToSolve from template if not customized
-      if (!base.problemToSolve || base.problemToSolve === defaultProjectFormValues.problemToSolve) {
-        base.problemToSolve =
-          TEMPLATE_PROBLEM_DEFAULTS[templateKey] ||
-          `${base.name}を通じてユーザーの課題を解決したい`;
-      }
-
-      return base;
-    },
+    (basicInfo: { name: string; summary: string; targetUsers: string }) =>
+      buildProjectPayload(basicInfo, selectedTemplate, selectedCatalog?.targetUsers),
     [selectedTemplate, selectedCatalog]
   );
 
