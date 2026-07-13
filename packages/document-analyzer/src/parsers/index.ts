@@ -1,4 +1,4 @@
-import pdfParse from 'pdf-parse';
+import { PDFParse } from 'pdf-parse';
 import mammoth from 'mammoth';
 
 export interface ParseResult {
@@ -8,12 +8,28 @@ export interface ParseResult {
 }
 
 export async function parsePDF(buffer: Buffer): Promise<ParseResult> {
-  const data = await pdfParse(buffer);
-  return {
-    text: data.text,
-    metadata: { info: data.info, version: data.version },
-    pageCount: data.numpages,
-  };
+  const parser = new PDFParse({ data: new Uint8Array(buffer) });
+  try {
+    const textResult = await parser.getText();
+
+    let info: unknown;
+    let version: unknown;
+    try {
+      const infoResult = await parser.getInfo();
+      info = infoResult.info;
+      version = infoResult.info?.PDFFormatVersion;
+    } catch {
+      // Info extraction may fail for some PDFs — continue with text only
+    }
+
+    return {
+      text: textResult.text,
+      metadata: { info, version },
+      pageCount: textResult.total,
+    };
+  } finally {
+    await parser.destroy();
+  }
 }
 
 export async function parseWord(buffer: Buffer): Promise<ParseResult> {

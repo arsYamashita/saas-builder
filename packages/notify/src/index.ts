@@ -9,8 +9,8 @@
  * 依存: @supabase/supabase-js, @/lib/db/supabase/server（各プロジェクトで解決）
  */
 
-export type { NotificationPayload, NotificationProvider, NotificationType } from "../../lib/notifications/inbox";
+export type { NotificationPayload, NotificationProvider, NotificationType } from "../../../lib/notifications/inbox";
 export {
   createInboxNotification,
   notify,
-} from "../../lib/notifications/inbox";
+} from "../../../lib/notifications/inbox";

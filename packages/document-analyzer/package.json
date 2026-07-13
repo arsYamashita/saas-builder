@@ -10,13 +10,12 @@
     "dev": "tsc --watch"
   },
   "dependencies": {
-    "pdf-parse": "^1.1.1",
+    "pdf-parse": "^2.4.5",
     "mammoth": "^1.7.0",
     "diff": "^5.2.0",
     "openai": "^4.0.0"
   },
   "devDependencies": {
-    "@types/pdf-parse": "^1.1.5",
     "typescript": "^5.4.0",
     "vitest": "^1.6.0"
   }
