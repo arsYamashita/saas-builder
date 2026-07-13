@@ -100,18 +100,22 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - name: Install postgresql-client (psql)
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client
-      - name: Regenerate + diff community_membership_saas types
+      - name: Install jq + postgresql-client (psql)
+        run: sudo apt-get update && sudo apt-get install -y jq postgresql-client
+      - name: Regenerate + diff every scripts/schema-drift-targets.json entry
+        # --all reads scripts/schema-drift-targets.json and checks EVERY
+        # registered target, not just community_membership_saas — a new
+        # template added to that registry is freshness-checked
+        # automatically with no CI YAML change (see
+        # docs/schema-drift-guide.md, "Onboarding a new Supabase-based
+        # template"). SCHEMA_DRIFT_DB_URL has NO database name — the
+        # script creates one throwaway DB per target on it.
         env:
           # 172.17.0.1 = default docker0 bridge gateway on GitHub Actions'
           # Linux runners — reachable both from this job's own steps and
           # from the `supabase` CLI's internal postgres-meta container.
-          SCHEMA_DRIFT_DB_URL: postgresql://postgres@172.17.0.1:5432/schema_drift_check
-        run: |
-          bash scripts/schema-drift/regen-and-diff.sh \
-            templates/community_membership_saas/supabase/migrations \
-            templates/community_membership_saas/src/types/database.generated.ts
+          SCHEMA_DRIFT_DB_URL: postgresql://postgres@172.17.0.1:5432
+        run: bash scripts/schema-drift/regen-and-diff.sh --all
 
   playwright:
     name: Playwright Smoke Tests

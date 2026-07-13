@@ -43,6 +43,16 @@ describe("firestore-drift-gate-core: undeclared collection references", () => {
     });
   });
 
+  it("does not flag a comment-only mention of an undeclared collection name", () => {
+    const files: SourceFile[] = [
+      {
+        path: "lib/db.ts",
+        content: '// old code: db.collection("legacyTemplates").get();\nconst x = 1;',
+      },
+    ];
+    expect(findUndeclaredCollectionReferences(files, schema)).toEqual([]);
+  });
+
   it("does not flag a dynamic (non-string-literal) .collection() call — avoids false positives", () => {
     const files: SourceFile[] = [
       { path: "lib/db.ts", content: "db.collection(collectionNameVar).get();" },

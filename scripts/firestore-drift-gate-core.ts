@@ -85,6 +85,12 @@ export function findUndeclaredCollectionReferences(
     const lines = file.content.split("\n");
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
+      const trimmed = line.trim();
+      // Same comment-only skip as findDeprecatedFieldReferences() below —
+      // a `// old code: db.collection("legacyTemplates")` example in a
+      // doc comment references no real collection at runtime and must
+      // not fail the gate.
+      if (trimmed.startsWith("//") || trimmed.startsWith("*")) continue;
       COLLECTION_CALL_RE.lastIndex = 0;
       let m: RegExpExecArray | null;
       while ((m = COLLECTION_CALL_RE.exec(line))) {

@@ -107,6 +107,18 @@ function main(): void {
     const mapping = Object.fromEntries(
       Object.entries(rawMapping).filter(([key]) => !key.startsWith("$"))
     );
+    if (Object.keys(mapping).length === 0) {
+      // An empty mapping (all entries accidentally deleted, or only
+      // "$comment" left) would make diffSchemaAndHandTypes() emit only
+      // non-blocking "unmapped_schema_table" findings — a hard-mode gate
+      // would silently report 0 blocking findings and pass, exactly when
+      // its own configuration is broken. Refuse to run rather than
+      // collapse into a false "0 findings" pass — see
+      // [[auto_scan_output_empty_silent_success]].
+      throw new Error(
+        `[schema-drift-gate] ${target.mappingFile} has no real mapping entries (only "$..." documentation keys, or none at all) — refusing to report "0 findings" from a target that was never actually compared.`
+      );
+    }
 
     const schemaTables = parseGeneratedSchemaColumns(generatedContent);
     const handTypes = parseHandWrittenTypeColumns(handContent);
