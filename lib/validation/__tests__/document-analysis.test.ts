@@ -4,7 +4,11 @@ import {
   diffRequestSchema,
   documentChangeSchema,
 } from "../document-analysis";
-import { MAX_LLM_INPUT_CHARS, MAX_LLM_INPUT_BASE64_BYTES } from "../llm-input-limits";
+import {
+  MAX_LLM_INPUT_CHARS,
+  MAX_LLM_INPUT_BASE64_BYTES,
+  MAX_LOCAL_DIFF_INPUT_CHARS,
+} from "../llm-input-limits";
 
 describe("parseRequestSchema", () => {
   it("accepts valid base64 request", () => {
@@ -95,6 +99,33 @@ describe("diffRequestSchema", () => {
   it("rejects newText one char over the max length (does not reach LLM call)", () => {
     const newText = "a".repeat(MAX_LLM_INPUT_CHARS + 1);
     const result = diffRequestSchema.safeParse({ oldText: "a", newText });
+    expect(result.success).toBe(false);
+  });
+
+  // Codex review (指示書043, P2): localOnly=true never reaches Claude, so it
+  // must not be capped by the LLM-specific limit — only by the much larger
+  // local-diff safety cap.
+  it("accepts oldText/newText over MAX_LLM_INPUT_CHARS when localOnly=true", () => {
+    const text = "a".repeat(MAX_LLM_INPUT_CHARS + 1);
+    const result = diffRequestSchema.safeParse({ oldText: text, newText: text, localOnly: true });
+    expect(result.success).toBe(true);
+  });
+
+  it("still rejects text over MAX_LOCAL_DIFF_INPUT_CHARS even when localOnly=true", () => {
+    const text = "a".repeat(MAX_LOCAL_DIFF_INPUT_CHARS + 1);
+    const result = diffRequestSchema.safeParse({ oldText: text, newText: "b", localOnly: true });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects oldText over MAX_LLM_INPUT_CHARS when localOnly is omitted (defaults to LLM path)", () => {
+    const oldText = "a".repeat(MAX_LLM_INPUT_CHARS + 1);
+    const result = diffRequestSchema.safeParse({ oldText, newText: "b" });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects oldText over MAX_LLM_INPUT_CHARS when localOnly is explicitly false", () => {
+    const oldText = "a".repeat(MAX_LLM_INPUT_CHARS + 1);
+    const result = diffRequestSchema.safeParse({ oldText, newText: "b", localOnly: false });
     expect(result.success).toBe(false);
   });
 });

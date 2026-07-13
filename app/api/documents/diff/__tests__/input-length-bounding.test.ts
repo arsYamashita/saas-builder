@@ -15,12 +15,13 @@ vi.mock("@/lib/document-analysis/document-diff", () => ({
 }));
 
 import { requireCurrentUser } from "@/lib/auth/current-user";
-import { compareDocuments } from "@/lib/document-analysis/document-diff";
+import { compareDocuments, compareDocumentsLocal } from "@/lib/document-analysis/document-diff";
 import { MAX_LLM_INPUT_CHARS } from "@/lib/validation/llm-input-limits";
 import { POST } from "../route";
 
 const mockRequireCurrentUser = vi.mocked(requireCurrentUser);
 const mockCompareDocuments = vi.mocked(compareDocuments);
+const mockCompareDocumentsLocal = vi.mocked(compareDocumentsLocal);
 
 function makeRequest(body: Record<string, unknown>) {
   return new NextRequest("https://example.com/api/documents/diff", {
@@ -76,5 +77,24 @@ describe("POST /api/documents/diff — input length bounding", () => {
 
     expect(res.status).toBe(200);
     expect(mockCompareDocuments).toHaveBeenCalledTimes(1);
+  });
+
+  // Codex review (指示書043, P2): localOnly=true never reaches Claude, so
+  // text over MAX_LLM_INPUT_CHARS must still be accepted and routed to
+  // compareDocumentsLocal — the LLM-cost cap must not block this path.
+  it("allows oldText/newText over MAX_LLM_INPUT_CHARS through to compareDocumentsLocal when localOnly=true", async () => {
+    mockCompareDocumentsLocal.mockReturnValue({
+      addedLines: 0,
+      removedLines: 0,
+      unchangedLines: 1,
+      changeRatio: 0,
+    } as any);
+
+    const text = "a".repeat(MAX_LLM_INPUT_CHARS + 1);
+    const res = await POST(makeRequest({ oldText: text, newText: text, localOnly: true }));
+
+    expect(res.status).toBe(200);
+    expect(mockCompareDocumentsLocal).toHaveBeenCalledTimes(1);
+    expect(mockCompareDocuments).not.toHaveBeenCalled();
   });
 });

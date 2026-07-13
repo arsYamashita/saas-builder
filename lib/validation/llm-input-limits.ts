@@ -30,3 +30,13 @@ export const MAX_LLM_ARRAY_ITEMS = 30;
 
 /** Cap for base64-encoded file payloads (~20MB source file, base64-inflated). */
 export const MAX_LLM_INPUT_BASE64_BYTES = 28 * 1024 * 1024;
+
+/**
+ * Generous safety cap for the local-only diff path (compareDocumentsLocal),
+ * which never calls the LLM. This is NOT a cost-governance cap — it's a
+ * basic DoS guard against pathological in-memory diffs — so it is much
+ * larger than MAX_LLM_INPUT_CHARS. Applied regardless of localOnly so the
+ * field always has *some* upper bound; the tighter MAX_LLM_INPUT_CHARS is
+ * applied additionally whenever the request will reach Claude.
+ */
+export const MAX_LOCAL_DIFF_INPUT_CHARS = 2_000_000;

@@ -6,6 +6,7 @@ import { z } from "zod";
 import {
   MAX_LLM_INPUT_CHARS,
   MAX_LLM_INPUT_BASE64_BYTES,
+  MAX_LOCAL_DIFF_INPUT_CHARS,
 } from "./llm-input-limits";
 
 // ── Parse API ───────────────────────────────────────────────
@@ -48,22 +49,47 @@ export const parseResponseSchema = z.object({
 
 // ── Diff API ────────────────────────────────────────────────
 
-export const diffRequestSchema = z.object({
-  oldText: z
-    .string()
-    .min(1, "oldText is required")
-    .max(MAX_LLM_INPUT_CHARS, `oldText is too large (max ${MAX_LLM_INPUT_CHARS} chars)`),
-  newText: z
-    .string()
-    .min(1, "newText is required")
-    .max(MAX_LLM_INPUT_CHARS, `newText is too large (max ${MAX_LLM_INPUT_CHARS} chars)`),
-  oldLabel: z.string().optional(),
-  newLabel: z.string().optional(),
-  domain: z.string().optional(),
-  language: z.string().optional(),
-  /** If true, use local diff only (no LLM call) */
-  localOnly: z.boolean().optional(),
-});
+export const diffRequestSchema = z
+  .object({
+    // Always-applied cap is the generous local-diff safety limit (basic DoS
+    // guard, no LLM involved). When the request will reach Claude
+    // (localOnly !== true), superRefine below additionally enforces the
+    // tighter MAX_LLM_INPUT_CHARS cost-governance cap.
+    // See KB: llm_api_unbounded_text_input; Codex review 指示書043 P2
+    // (local-only diffs must not be blocked by the LLM-specific limit).
+    oldText: z
+      .string()
+      .min(1, "oldText is required")
+      .max(MAX_LOCAL_DIFF_INPUT_CHARS, `oldText is too large (max ${MAX_LOCAL_DIFF_INPUT_CHARS} chars)`),
+    newText: z
+      .string()
+      .min(1, "newText is required")
+      .max(MAX_LOCAL_DIFF_INPUT_CHARS, `newText is too large (max ${MAX_LOCAL_DIFF_INPUT_CHARS} chars)`),
+    oldLabel: z.string().optional(),
+    newLabel: z.string().optional(),
+    domain: z.string().optional(),
+    language: z.string().optional(),
+    /** If true, use local diff only (no LLM call) */
+    localOnly: z.boolean().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.localOnly) return; // local-only path never reaches Claude
+
+    if (data.oldText.length > MAX_LLM_INPUT_CHARS) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["oldText"],
+        message: `oldText is too large for the LLM diff (max ${MAX_LLM_INPUT_CHARS} chars). Use localOnly=true for larger local-only diffs.`,
+      });
+    }
+    if (data.newText.length > MAX_LLM_INPUT_CHARS) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["newText"],
+        message: `newText is too large for the LLM diff (max ${MAX_LLM_INPUT_CHARS} chars). Use localOnly=true for larger local-only diffs.`,
+      });
+    }
+  });
 
 export const documentChangeSchema = z.object({
   type: z.enum(["added", "removed", "modified", "moved"]),
