@@ -58,11 +58,16 @@ export const projectFormSchema = z.object({
   managedData: briefStringArray("管理データの項目が長すぎます").min(1),
   endUserCreatedData: briefStringArray("エンドユーザー作成データの項目が長すぎます"),
 
+  // roles is enum-constrained per item, but with no count cap a caller could
+  // still submit e.g. millions of repeated enum values; JSON.stringify(meta.roles)
+  // is interpolated into the blueprint-generation prompt just like the other
+  // arrays above, so it needs the same item-count bound. Codex review 指示書043 P1.
   roles: z
     .array(
       z.enum(["owner", "admin", "editor", "staff", "member", "affiliate_manager", "sales", "operator"])
     )
-    .min(1),
+    .min(1)
+    .max(MAX_LLM_ARRAY_ITEMS, `ロールの項目数が多すぎます（最大${MAX_LLM_ARRAY_ITEMS}件）`),
 
   billingModel: z.enum(["subscription", "one_time", "hybrid", "none"]),
   affiliateEnabled: z.boolean(),

@@ -119,6 +119,25 @@ describe("projectFormSchema", () => {
     }
   });
 
+  // Codex review (指示書043, P1): roles is JSON.stringify'd into the
+  // blueprint-generation LLM prompt just like the other arrays, so a huge
+  // (but enum-valid) roles array must not bypass the count cap.
+  it("rejects a roles array with one more entry than MAX_LLM_ARRAY_ITEMS", () => {
+    const result = projectFormSchema.safeParse({
+      ...validInput,
+      roles: Array.from({ length: MAX_LLM_ARRAY_ITEMS + 1 }, () => "owner"),
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts a roles array with exactly MAX_LLM_ARRAY_ITEMS entries", () => {
+    const result = projectFormSchema.safeParse({
+      ...validInput,
+      roles: Array.from({ length: MAX_LLM_ARRAY_ITEMS }, () => "owner"),
+    });
+    expect(result.success).toBe(true);
+  });
+
   it("rejects invalid billingModel", () => {
     const result = projectFormSchema.safeParse({ ...validInput, billingModel: "freemium" });
     expect(result.success).toBe(false);

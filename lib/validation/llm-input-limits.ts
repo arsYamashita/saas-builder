@@ -36,8 +36,19 @@ export const MAX_LLM_ARRAY_ITEM_CHARS = 200;
 /** Cap on the number of entries in a string array field feeding an LLM prompt. */
 export const MAX_LLM_ARRAY_ITEMS = 30;
 
-/** Cap for base64-encoded file payloads (~20MB source file, base64-inflated). */
-export const MAX_LLM_INPUT_BASE64_BYTES = 28 * 1024 * 1024;
+/**
+ * Cap for base64-encoded file payloads, sized to the exact base64 expansion
+ * of a 20MB source file (base64 encodes 3 bytes as 4 chars, rounded up to
+ * the next 4-char block): ceil(20MiB / 3) * 4 = 27,962,028 chars.
+ *
+ * This must match — not just approximate — the route's post-decode 20MB
+ * check (app/api/documents/parse/route.ts). A looser round-number cap (e.g.
+ * 28 * 1024 * 1024) lets a several-MB-oversized base64 string pass Zod,
+ * still get fully allocated by `Buffer.from()`, and only be rejected after
+ * that allocation — defeating the point of validating before decode.
+ * Codex review 指示書043 P2.
+ */
+export const MAX_LLM_INPUT_BASE64_BYTES = Math.ceil((20 * 1024 * 1024) / 3) * 4;
 
 /**
  * Generous safety cap for the local-only diff path (compareDocumentsLocal),

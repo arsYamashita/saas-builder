@@ -46,6 +46,16 @@ describe("parseRequestSchema", () => {
     const result = parseRequestSchema.safeParse({ base64 });
     expect(result.success).toBe(false);
   });
+
+  // Codex review (指示書043, P2): the cap must match — not just loosely
+  // approximate — the route's post-decode 20MB check, so oversized base64
+  // is rejected by Zod before Buffer.from() ever allocates memory for it.
+  it("MAX_LLM_INPUT_BASE64_BYTES is exactly the base64 expansion of 20MB (not a looser round number)", () => {
+    const exactBase64LengthFor20MB = Math.ceil((20 * 1024 * 1024) / 3) * 4;
+    expect(MAX_LLM_INPUT_BASE64_BYTES).toBe(exactBase64LengthFor20MB);
+    // Guard against silent regression to the old, too-loose 28*1024*1024 cap.
+    expect(MAX_LLM_INPUT_BASE64_BYTES).toBeLessThan(28 * 1024 * 1024);
+  });
 });
 
 describe("diffRequestSchema", () => {
