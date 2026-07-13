@@ -54,6 +54,65 @@ jobs:
       - run: git fetch origin main --quiet
       - run: npm run security:gate
 
+  schema-drift-gate:
+    name: Schema Drift Gate (structural)
+    runs-on: ubuntu-latest
+    steps:
+      # Offline, deterministic — diffs two files already committed to the
+      # repo (database.generated.ts vs. database.ts). No DB/Docker
+      # dependency, cannot flake. See docs/schema-drift-guide.md.
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run schema:drift:gate
+
+  schema-drift-freshness:
+    name: Schema Drift — regen check (community_membership_saas)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Networking note (docs/schema-drift-guide.md, "Two CI jobs, two
+    # different reliability guarantees"): `supabase gen types typescript`
+    # launches its own Docker helper container which must independently
+    # reach the postgres service below over the docker bridge network —
+    # a class of environment-dependent flakiness that must never block an
+    # unrelated PR. The blocking safety net is schema-drift-gate above.
+    continue-on-error: true
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_DB: schema_drift_check
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Install postgresql-client (psql)
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Regenerate + diff community_membership_saas types
+        env:
+          # 172.17.0.1 = default docker0 bridge gateway on GitHub Actions'
+          # Linux runners — reachable both from this job's own steps and
+          # from the `supabase` CLI's internal postgres-meta container.
+          SCHEMA_DRIFT_DB_URL: postgresql://postgres@172.17.0.1:5432/schema_drift_check
+        run: |
+          bash scripts/schema-drift/regen-and-diff.sh \
+            templates/community_membership_saas/supabase/migrations \
+            templates/community_membership_saas/src/types/database.generated.ts
+
   playwright:
     name: Playwright Smoke Tests
     runs-on: ubuntu-latest

@@ -1,0 +1,14 @@
+{
+  "$comment": "Explicit hand-type-name -> real-table-name mapping used by scripts/schema-drift-gate-check.ts. Deliberately NOT inferred from pluralization (e.g. 'MembershipPlan' -> 'membership_plans' is not a mechanical rule the parser can derive reliably) — every hand type in database.ts that models a real table must have an entry here, or it is invisible to the drift gate.",
+  "Tenant": "tenants",
+  "User": "users",
+  "Membership": "memberships",
+  "MembershipPlan": "membership_plans",
+  "Subscription": "subscriptions",
+  "Content": "contents",
+  "ContentAccessRule": "content_access_rules",
+  "Purchase": "purchases",
+  "Tag": "tags",
+  "UserTag": "user_tags",
+  "AuditLog": "audit_logs"
+}
