@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { projectFormSchema } from "../project-form";
-import { MAX_LLM_BRIEF_FIELD_CHARS } from "../llm-input-limits";
+import {
+  MAX_LLM_BRIEF_FIELD_CHARS,
+  MAX_LLM_ARRAY_ITEM_CHARS,
+  MAX_LLM_ARRAY_ITEMS,
+} from "../llm-input-limits";
 
 const validInput = {
   name: "My SaaS",
@@ -166,5 +170,60 @@ describe("projectFormSchema", () => {
       summary: "a".repeat(MAX_LLM_BRIEF_FIELD_CHARS),
     });
     expect(result.success).toBe(true);
+  });
+
+  // Aggregate-cost regression test (Codex review, 指示書043): array fields
+  // need BOTH a per-item cap and a count cap, or N short-ish items can still
+  // add up to megabytes of aggregate text forwarded to the LLM prompt.
+  it("rejects a single array item one char over the per-item max", () => {
+    const result = projectFormSchema.safeParse({
+      ...validInput,
+      requiredFeatures: ["a".repeat(MAX_LLM_ARRAY_ITEM_CHARS + 1)],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts an array item exactly at the per-item max", () => {
+    const result = projectFormSchema.safeParse({
+      ...validInput,
+      requiredFeatures: ["a".repeat(MAX_LLM_ARRAY_ITEM_CHARS)],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects an array with one more entry than MAX_LLM_ARRAY_ITEMS", () => {
+    const result = projectFormSchema.safeParse({
+      ...validInput,
+      requiredFeatures: Array.from({ length: MAX_LLM_ARRAY_ITEMS + 1 }, (_, i) => `f${i}`),
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts an array with exactly MAX_LLM_ARRAY_ITEMS entries", () => {
+    const result = projectFormSchema.safeParse({
+      ...validInput,
+      requiredFeatures: Array.from({ length: MAX_LLM_ARRAY_ITEMS }, (_, i) => `f${i}`),
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("bounds worst-case aggregate array text to a small multiple of items*chars, not unbounded", () => {
+    // 5 array fields x MAX_LLM_ARRAY_ITEMS x MAX_LLM_ARRAY_ITEM_CHARS is the
+    // hard ceiling — well below the old (unbounded) 200-items x 10,000-chars
+    // per array that Codex flagged as a ~10M-char aggregate LLM input.
+    const maxArray = Array.from({ length: MAX_LLM_ARRAY_ITEMS }, () =>
+      "a".repeat(MAX_LLM_ARRAY_ITEM_CHARS)
+    );
+    const result = projectFormSchema.safeParse({
+      ...validInput,
+      requiredFeatures: maxArray,
+      managedData: maxArray,
+      endUserCreatedData: maxArray,
+      mvpScope: maxArray,
+      excludedInitialScope: maxArray,
+    });
+    expect(result.success).toBe(true);
+    const worstCaseAggregateChars = 5 * MAX_LLM_ARRAY_ITEMS * MAX_LLM_ARRAY_ITEM_CHARS;
+    expect(worstCaseAggregateChars).toBeLessThan(50_000);
   });
 });

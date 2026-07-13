@@ -16,5 +16,17 @@ export const MAX_LLM_INPUT_CHARS = 100_000;
 /** Smaller cap for short structured brief/form fields that get embedded into a prompt. */
 export const MAX_LLM_BRIEF_FIELD_CHARS = 10_000;
 
+/**
+ * Cap for individual entries in a string array field (e.g. feature/data
+ * labels) that gets embedded into a prompt. Array fields also need a count
+ * cap (MAX_LLM_ARRAY_ITEMS) — without both, N items x per-item max still
+ * lets a single request smuggle megabytes of aggregate text into the LLM
+ * call. See KB: llm_api_unbounded_text_input.
+ */
+export const MAX_LLM_ARRAY_ITEM_CHARS = 200;
+
+/** Cap on the number of entries in a string array field feeding an LLM prompt. */
+export const MAX_LLM_ARRAY_ITEMS = 30;
+
 /** Cap for base64-encoded file payloads (~20MB source file, base64-inflated). */
 export const MAX_LLM_INPUT_BASE64_BYTES = 28 * 1024 * 1024;

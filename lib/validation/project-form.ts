@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { getRegisteredTemplateKeys } from "@/lib/templates/template-registry";
-import { MAX_LLM_BRIEF_FIELD_CHARS } from "./llm-input-limits";
+import {
+  MAX_LLM_BRIEF_FIELD_CHARS,
+  MAX_LLM_ARRAY_ITEM_CHARS,
+  MAX_LLM_ARRAY_ITEMS,
+} from "./llm-input-limits";
 
 /** Template keys from registry + non-registry placeholders. */
 const TEMPLATE_KEY_ENUM = [
@@ -18,8 +22,20 @@ const briefTextField = (message: string) =>
     .string()
     .max(MAX_LLM_BRIEF_FIELD_CHARS, `${message}（最大 ${MAX_LLM_BRIEF_FIELD_CHARS} 文字）`);
 
+// Array fields (feature/data labels) need BOTH a per-item cap and a count
+// cap — N short items still add up to megabytes without a count limit.
+// Codex review (指示書043) flagged the earlier per-item-only version: 5
+// arrays x 200 items x 10,000 chars = ~10M aggregate chars into a single
+// paid blueprint-generation LLM call.
+const briefArrayItem = (message: string) =>
+  z
+    .string()
+    .max(MAX_LLM_ARRAY_ITEM_CHARS, `${message}（項目は最大 ${MAX_LLM_ARRAY_ITEM_CHARS} 文字）`);
+
 const briefStringArray = (message: string) =>
-  z.array(briefTextField(message)).max(200, `項目数が多すぎます（最大200件）`);
+  z
+    .array(briefArrayItem(message))
+    .max(MAX_LLM_ARRAY_ITEMS, `項目数が多すぎます（最大${MAX_LLM_ARRAY_ITEMS}件）`);
 
 export const projectFormSchema = z.object({
   name: briefTextField("サービス名が長すぎます").min(2, "サービス名は2文字以上で入力してください"),
