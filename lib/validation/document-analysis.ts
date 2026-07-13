@@ -3,13 +3,23 @@
  */
 
 import { z } from "zod";
+import {
+  MAX_LLM_INPUT_CHARS,
+  MAX_LLM_INPUT_BASE64_BYTES,
+} from "./llm-input-limits";
 
 // ── Parse API ───────────────────────────────────────────────
 
 /** Request body for /api/documents/parse (multipart/form-data with "file" field) */
 export const parseRequestSchema = z.object({
   /** Base64-encoded PDF content (alternative to file upload) */
-  base64: z.string().min(1, "base64 content is required"),
+  base64: z
+    .string()
+    .min(1, "base64 content is required")
+    .max(
+      MAX_LLM_INPUT_BASE64_BYTES,
+      `base64 content too large (max ${MAX_LLM_INPUT_BASE64_BYTES} chars, ~20MB file)`
+    ),
   /** Optional filename for metadata */
   filename: z.string().optional(),
 });
@@ -39,8 +49,14 @@ export const parseResponseSchema = z.object({
 // ── Diff API ────────────────────────────────────────────────
 
 export const diffRequestSchema = z.object({
-  oldText: z.string().min(1, "oldText is required"),
-  newText: z.string().min(1, "newText is required"),
+  oldText: z
+    .string()
+    .min(1, "oldText is required")
+    .max(MAX_LLM_INPUT_CHARS, `oldText is too large (max ${MAX_LLM_INPUT_CHARS} chars)`),
+  newText: z
+    .string()
+    .min(1, "newText is required")
+    .max(MAX_LLM_INPUT_CHARS, `newText is too large (max ${MAX_LLM_INPUT_CHARS} chars)`),
   oldLabel: z.string().optional(),
   newLabel: z.string().optional(),
   domain: z.string().optional(),

@@ -4,6 +4,7 @@ import {
   diffRequestSchema,
   documentChangeSchema,
 } from "../document-analysis";
+import { MAX_LLM_INPUT_CHARS, MAX_LLM_INPUT_BASE64_BYTES } from "../llm-input-limits";
 
 describe("parseRequestSchema", () => {
   it("accepts valid base64 request", () => {
@@ -23,6 +24,21 @@ describe("parseRequestSchema", () => {
 
   it("rejects missing base64", () => {
     const result = parseRequestSchema.safeParse({});
+    expect(result.success).toBe(false);
+  });
+
+  // Wiring test for llm_api_unbounded_text_input: an oversized base64 payload
+  // must be rejected at the validation layer, before it ever reaches the
+  // PDF parser / LLM call.
+  it("accepts base64 exactly at the max length", () => {
+    const base64 = "A".repeat(MAX_LLM_INPUT_BASE64_BYTES);
+    const result = parseRequestSchema.safeParse({ base64 });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects base64 one char over the max length (does not reach LLM call)", () => {
+    const base64 = "A".repeat(MAX_LLM_INPUT_BASE64_BYTES + 1);
+    const result = parseRequestSchema.safeParse({ base64 });
     expect(result.success).toBe(false);
   });
 });
@@ -60,6 +76,26 @@ describe("diffRequestSchema", () => {
     expect(diffRequestSchema.safeParse({}).success).toBe(false);
     expect(diffRequestSchema.safeParse({ oldText: "a" }).success).toBe(false);
     expect(diffRequestSchema.safeParse({ newText: "b" }).success).toBe(false);
+  });
+
+  // Wiring test for llm_api_unbounded_text_input: oversized oldText/newText
+  // must be rejected before compareDocuments() forwards them to Claude.
+  it("accepts oldText/newText exactly at the max length", () => {
+    const text = "a".repeat(MAX_LLM_INPUT_CHARS);
+    const result = diffRequestSchema.safeParse({ oldText: text, newText: text });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects oldText one char over the max length (does not reach LLM call)", () => {
+    const oldText = "a".repeat(MAX_LLM_INPUT_CHARS + 1);
+    const result = diffRequestSchema.safeParse({ oldText, newText: "b" });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects newText one char over the max length (does not reach LLM call)", () => {
+    const newText = "a".repeat(MAX_LLM_INPUT_CHARS + 1);
+    const result = diffRequestSchema.safeParse({ oldText: "a", newText });
+    expect(result.success).toBe(false);
   });
 });
 

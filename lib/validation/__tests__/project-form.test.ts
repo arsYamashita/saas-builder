@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { projectFormSchema } from "../project-form";
+import { MAX_LLM_BRIEF_FIELD_CHARS } from "../llm-input-limits";
 
 const validInput = {
   name: "My SaaS",
@@ -137,5 +138,33 @@ describe("projectFormSchema", () => {
   it("rejects empty stackPreference", () => {
     const result = projectFormSchema.safeParse({ ...validInput, stackPreference: "" });
     expect(result.success).toBe(false);
+  });
+
+  // Wiring test for llm_api_unbounded_text_input: these free-text fields are
+  // embedded verbatim into the generate-blueprint LLM prompt via
+  // buildUserInputFromProject(); an oversized submission must be rejected
+  // at the form-validation layer before it ever reaches that prompt.
+  it("rejects summary one char over the max length (does not reach LLM prompt)", () => {
+    const result = projectFormSchema.safeParse({
+      ...validInput,
+      summary: "a".repeat(MAX_LLM_BRIEF_FIELD_CHARS + 1),
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects notes one char over the max length (does not reach LLM prompt)", () => {
+    const result = projectFormSchema.safeParse({
+      ...validInput,
+      notes: "a".repeat(MAX_LLM_BRIEF_FIELD_CHARS + 1),
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts summary exactly at the max length", () => {
+    const result = projectFormSchema.safeParse({
+      ...validInput,
+      summary: "a".repeat(MAX_LLM_BRIEF_FIELD_CHARS),
+    });
+    expect(result.success).toBe(true);
   });
 });
