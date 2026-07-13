@@ -8,6 +8,7 @@ import {
   MAX_LLM_INPUT_CHARS,
   MAX_LLM_INPUT_BASE64_BYTES,
   MAX_LOCAL_DIFF_INPUT_CHARS,
+  MAX_LLM_LABEL_FIELD_CHARS,
 } from "../llm-input-limits";
 
 describe("parseRequestSchema", () => {
@@ -127,6 +128,49 @@ describe("diffRequestSchema", () => {
     const oldText = "a".repeat(MAX_LLM_INPUT_CHARS + 1);
     const result = diffRequestSchema.safeParse({ oldText, newText: "b", localOnly: false });
     expect(result.success).toBe(false);
+  });
+
+  // Codex review (指示書043, P1): buildDiffPrompt() interpolates
+  // oldLabel/newLabel/domain verbatim (domain twice) — a caller could keep
+  // oldText/newText within limits while smuggling megabytes into a "label"
+  // field instead. Must be bounded independently of the body-text caps.
+  it("rejects oldLabel one char over the label max length", () => {
+    const result = diffRequestSchema.safeParse({
+      oldText: "a",
+      newText: "b",
+      oldLabel: "x".repeat(MAX_LLM_LABEL_FIELD_CHARS + 1),
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects newLabel one char over the label max length", () => {
+    const result = diffRequestSchema.safeParse({
+      oldText: "a",
+      newText: "b",
+      newLabel: "x".repeat(MAX_LLM_LABEL_FIELD_CHARS + 1),
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects domain one char over the label max length", () => {
+    const result = diffRequestSchema.safeParse({
+      oldText: "a",
+      newText: "b",
+      domain: "x".repeat(MAX_LLM_LABEL_FIELD_CHARS + 1),
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts label fields exactly at the max length", () => {
+    const label = "x".repeat(MAX_LLM_LABEL_FIELD_CHARS);
+    const result = diffRequestSchema.safeParse({
+      oldText: "a",
+      newText: "b",
+      oldLabel: label,
+      newLabel: label,
+      domain: label,
+    });
+    expect(result.success).toBe(true);
   });
 });
 

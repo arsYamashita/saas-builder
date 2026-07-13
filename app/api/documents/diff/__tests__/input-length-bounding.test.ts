@@ -65,6 +65,22 @@ describe("POST /api/documents/diff — input length bounding", () => {
     expect(mockCompareDocuments).not.toHaveBeenCalled();
   });
 
+  // Codex review (指示書043, P1): oldLabel/newLabel/domain are prompt-bound
+  // metadata fields, not just oldText/newText — a caller could otherwise
+  // bypass the cost cap by putting the oversized payload there instead.
+  it("rejects an oversized domain field with 400 and never calls compareDocuments", async () => {
+    const res = await POST(
+      makeRequest({
+        oldText: "a",
+        newText: "b",
+        domain: "x".repeat(1000),
+      })
+    );
+
+    expect(res.status).toBe(400);
+    expect(mockCompareDocuments).not.toHaveBeenCalled();
+  });
+
   it("allows a within-limit request through to compareDocuments", async () => {
     mockCompareDocuments.mockResolvedValue({
       summary: "ok",

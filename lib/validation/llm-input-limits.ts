@@ -17,6 +17,14 @@ export const MAX_LLM_INPUT_CHARS = 100_000;
 export const MAX_LLM_BRIEF_FIELD_CHARS = 10_000;
 
 /**
+ * Cap for short label/metadata fields (e.g. version labels, domain names)
+ * that get interpolated into an LLM prompt alongside the main text body.
+ * Without this, a caller can keep oldText/newText within limits while
+ * smuggling megabytes into a "label" field instead.
+ */
+export const MAX_LLM_LABEL_FIELD_CHARS = 200;
+
+/**
  * Cap for individual entries in a string array field (e.g. feature/data
  * labels) that gets embedded into a prompt. Array fields also need a count
  * cap (MAX_LLM_ARRAY_ITEMS) — without both, N items x per-item max still

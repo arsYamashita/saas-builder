@@ -7,6 +7,7 @@ import {
   MAX_LLM_INPUT_CHARS,
   MAX_LLM_INPUT_BASE64_BYTES,
   MAX_LOCAL_DIFF_INPUT_CHARS,
+  MAX_LLM_LABEL_FIELD_CHARS,
 } from "./llm-input-limits";
 
 // ── Parse API ───────────────────────────────────────────────
@@ -65,10 +66,28 @@ export const diffRequestSchema = z
       .string()
       .min(1, "newText is required")
       .max(MAX_LOCAL_DIFF_INPUT_CHARS, `newText is too large (max ${MAX_LOCAL_DIFF_INPUT_CHARS} chars)`),
-    oldLabel: z.string().optional(),
-    newLabel: z.string().optional(),
-    domain: z.string().optional(),
-    language: z.string().optional(),
+    // buildDiffPrompt() interpolates oldLabel/newLabel/domain verbatim into
+    // the LLM prompt (domain twice). Without a cap here, a caller could keep
+    // oldText/newText within limits while smuggling megabytes into one of
+    // these "label" fields instead — bounded regardless of localOnly since
+    // they are also echoed back in local-diff-adjacent responses.
+    // Codex review 指示書043 P1.
+    oldLabel: z
+      .string()
+      .max(MAX_LLM_LABEL_FIELD_CHARS, `oldLabel is too long (max ${MAX_LLM_LABEL_FIELD_CHARS} chars)`)
+      .optional(),
+    newLabel: z
+      .string()
+      .max(MAX_LLM_LABEL_FIELD_CHARS, `newLabel is too long (max ${MAX_LLM_LABEL_FIELD_CHARS} chars)`)
+      .optional(),
+    domain: z
+      .string()
+      .max(MAX_LLM_LABEL_FIELD_CHARS, `domain is too long (max ${MAX_LLM_LABEL_FIELD_CHARS} chars)`)
+      .optional(),
+    language: z
+      .string()
+      .max(MAX_LLM_LABEL_FIELD_CHARS, `language is too long (max ${MAX_LLM_LABEL_FIELD_CHARS} chars)`)
+      .optional(),
     /** If true, use local diff only (no LLM call) */
     localOnly: z.boolean().optional(),
   })
