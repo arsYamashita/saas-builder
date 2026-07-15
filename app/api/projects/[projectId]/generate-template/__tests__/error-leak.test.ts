@@ -1,15 +1,16 @@
 /**
  * Error-leak wiring test — see docs/testing/error-leak-surfaces.md.
- * Business-logic coverage (rate-limit bucket, pipeline token propagation)
- * lives in ./route.test.ts; this file is scoped to the "does the response
- * leak internal error detail" question.
+ * Business-logic coverage (rate-limit bucket, pipeline token propagation,
+ * tenant-scoped access / IDOR) lives in ./route.test.ts; this file is scoped
+ * to the "does the response leak internal error detail" question.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { assertNoLeak, fakePostgresError } from "@/tests/helpers/assert-no-leak";
 
-const mockRequireCurrentUser = vi.fn();
+const mockRequireProjectAccess = vi.fn();
 vi.mock("@/lib/auth/current-user", () => ({
-  requireCurrentUser: (...args: unknown[]) => mockRequireCurrentUser(...args),
+  requireProjectAccess: (...args: unknown[]) =>
+    mockRequireProjectAccess(...args),
 }));
 
 const mockRateLimit = vi.fn();
@@ -28,14 +29,7 @@ vi.mock("@/lib/db/generation-runs", () => ({
   failGenerationRun: (...args: unknown[]) => mockFailGenerationRun(...args),
 }));
 
-vi.mock("@/lib/db/supabase/admin", () => ({
-  createAdminClient: vi.fn(),
-}));
-
-import { createAdminClient } from "@/lib/db/supabase/admin";
 import { POST } from "../route";
-
-const mockCreateAdminClient = vi.mocked(createAdminClient);
 
 function makeRequest() {
   return new Request(
@@ -52,7 +46,11 @@ describe("POST /api/projects/[projectId]/generate-template — error-leak wiring
   beforeEach(() => {
     vi.clearAllMocks();
     vi.spyOn(console, "error").mockImplementation(() => {});
-    mockRequireCurrentUser.mockResolvedValue({ id: "user-1" });
+    mockRequireProjectAccess.mockResolvedValue({
+      user: { id: "user-1" },
+      project: { id: "proj-1", template_key: "membership_content_affiliate" },
+      tenantId: "tenant-1",
+    });
     mockRateLimit.mockResolvedValue(true);
   });
 
@@ -60,46 +58,34 @@ describe("POST /api/projects/[projectId]/generate-template — error-leak wiring
     global.fetch = originalFetch;
   });
 
-  it("does not leak the DB error when the project lookup fails (serverErrorResponse path)", async () => {
+  it("does not leak a raw DB error surfaced through requireProjectAccess", async () => {
+    // requireProjectAccess (lib/auth/current-user.ts) resolves the project
+    // via the admin client internally; if that lookup ever threw a raw
+    // Supabase/Postgres error instead of the generic "Not found", this
+    // route's access-check catch must still respond with a generic message
+    // (it maps everything that isn't exactly "Unauthorized"/"Not found" to
+    // a generic 401) — see [[api_error_message_internal_leak]].
     const dbError = fakePostgresError({
       message: 'permission denied for relation "projects_internal_billing_meta"',
       code: "42501",
     });
-    mockCreateAdminClient.mockReturnValue({
-      from: () => ({
-        select: () => ({
-          eq: () => ({
-            single: async () => ({ data: null, error: dbError }),
-          }),
-        }),
-      }),
-    } as any);
+    mockRequireProjectAccess.mockRejectedValue(
+      new Error(`User profile not found: ${dbError.message} (code=${dbError.code})`)
+    );
 
     const res = await POST(makeRequest() as any, props as any);
 
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(401);
     const text = await res.text();
     assertNoLeak(text, [
       "projects_internal_billing_meta",
       "permission denied",
       "42501",
     ]);
-    expect(JSON.parse(text).error).toBe("Project not found");
+    expect(JSON.parse(text).error).toBe("Unauthorized");
   });
 
   it("does not leak an internal pipeline-step failure's raw detail", async () => {
-    mockCreateAdminClient.mockReturnValue({
-      from: () => ({
-        select: () => ({
-          eq: () => ({
-            single: async () => ({
-              data: { id: "proj-1", template_key: "membership_content_affiliate" },
-              error: null,
-            }),
-          }),
-        }),
-      }),
-    } as any);
     mockCreateGenerationRun.mockResolvedValue({ id: "run-1" });
     mockUpdateGenerationStep.mockResolvedValue(undefined);
     mockFailGenerationRun.mockResolvedValue(undefined);
