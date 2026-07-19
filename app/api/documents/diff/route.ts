@@ -10,10 +10,11 @@ import { compareDocuments, compareDocumentsLocal } from "@/lib/document-analysis
 import { diffRequestSchema } from "@/lib/validation/document-analysis";
 import { requireCurrentUser } from "@/lib/auth/current-user";
 import { parseJsonBody, serverErrorResponse } from "@/lib/api/errors";
+import { rateLimit } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest) {
   try {
-    await requireCurrentUser();
+    const user = await requireCurrentUser();
     const parsedBody = await parseJsonBody(request);
     if (!parsedBody.ok) return parsedBody.response;
     const parsed = diffRequestSchema.safeParse(parsedBody.data);
@@ -33,7 +34,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(result);
     }
 
-    // LLM-powered diff
+    // LLM-powered diff calls Claude directly (compareDocuments() ->
+    // fetch("https://api.anthropic.com/v1/messages")) with no cost
+    // governance until now — a single authenticated user could otherwise
+    // drive unbounded API cost. Rate limit BEFORE the LLM call, using the
+    // same shared `generate` bucket + per-user key as the sibling
+    // generate-* pipeline step routes (lib/rate-limit.ts). Only gated on
+    // this branch — the localOnly path above never reaches Claude, so it
+    // does no paid work and must not be throttled by this budget.
+    // See [[saas_builder_ai_endpoint_no_rate_limit]], SECURITY_CHECKLIST.md
+    // item 3.
+    const allowed = await rateLimit(`generate:${user.id}`, 5, 60_000);
+    if (!allowed) {
+      return NextResponse.json(
+        { error: "生成リクエストが多すぎます。しばらく待ってから再試行してください。" },
+        { status: 429 }
+      );
+    }
+
     if (!process.env.CLAUDE_API_KEY) {
       return NextResponse.json(
         { error: "CLAUDE_API_KEY is not configured. Use localOnly=true for local diff." },

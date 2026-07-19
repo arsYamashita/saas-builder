@@ -7,16 +7,57 @@ import { executeTask } from "@/lib/providers/task-router";
 import { buildStepMeta } from "@/lib/providers/step-meta";
 import { resolveFinalPromptPath } from "@/lib/ai/template-prompt-resolver";
 import { requireProjectAccess } from "@/lib/auth/current-user";
+import { rateLimit } from "@/lib/rate-limit";
+import { isInternalPipelineRequest } from "@/lib/pipeline-internal";
+import { MAX_LLM_INPUT_CHARS } from "@/lib/validation/llm-input-limits";
 
 type Props = {
   params: Promise<{ projectId: string }>;
 };
 
-export async function POST(_req: NextRequest, { params }: Props) {
+/**
+ * Defense-in-depth cap on the prior implementation run's output_text
+ * before it's interpolated into the file-split prompt. This route takes
+ * no request body of its own (its "input" is a previously-saved LLM
+ * output, already bounded by that step's own `max_tokens`, e.g. 32768 in
+ * lib/providers/claude.ts) — so this isn't closing a distinct
+ * attacker-controlled surface the way lib/validation/document-analysis.ts's
+ * diffRequestSchema caps do. It exists so a future change to how
+ * output_text is produced (or a corrupted/oversized DB row) can't silently
+ * balloon this step's own LLM cost. See [[llm_api_unbounded_text_input]].
+ */
+function truncateForFileSplitPrompt(text: string, maxChars = MAX_LLM_INPUT_CHARS): string {
+  if (text.length <= maxChars) return text;
+  return text.slice(0, maxChars) + `\n\n... (truncated, ${text.length} chars total, showing first ${maxChars})`;
+}
+
+export async function POST(req: NextRequest, { params }: Props) {
   try {
     const { projectId } = await params;
-    const { project } = await requireProjectAccess(projectId);
+    const { user, project } = await requireProjectAccess(projectId);
     const templateKey = project.template_key ?? "membership_content_affiliate";
+
+    // This route is one step of the generate-template pipeline (see
+    // app/api/projects/[projectId]/generate-template/route.ts's "Step 5:
+    // Split Files") and calls executeTask() -> Claude directly, same as
+    // its sibling pipeline-step routes (generate-schema,
+    // generate-blueprint, generate-api-design, generate-implementation) —
+    // it had NO rate-limit wiring at all until this fix. Internal
+    // pipeline calls skip the per-step limit (the pipeline is
+    // rate-limited once at its own entry point and must run atomically
+    // without a mid-run 429); everything else goes through the shared
+    // `generate` bucket. See lib/pipeline-internal.ts,
+    // [[saas_builder_ai_endpoint_no_rate_limit]], SECURITY_CHECKLIST.md
+    // item 3.
+    if (!isInternalPipelineRequest(req)) {
+      const allowed = await rateLimit(`generate:${user.id}`, 5, 60_000);
+      if (!allowed) {
+        return NextResponse.json(
+          { error: "生成リクエストが多すぎます。しばらく待ってから再試行してください。" },
+          { status: 429 }
+        );
+      }
+    }
 
     const latestRun = await getLatestImplementationRun(
       projectId,
@@ -28,7 +69,7 @@ export async function POST(_req: NextRequest, { params }: Props) {
 
     const prompt = promptTemplate.replace(
       "{{implementation_output}}",
-      latestRun.output_text
+      truncateForFileSplitPrompt(latestRun.output_text)
     );
 
     const result = await executeTask("file_split", prompt);
