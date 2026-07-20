@@ -48,6 +48,11 @@ const baseEnvSchema = z.object({
   // Rate limiting — optional (in-memory fallback for local dev).
   UPSTASH_REDIS_REST_URL: z.string().url().optional(),
   UPSTASH_REDIS_REST_TOKEN: z.string().min(1).optional(),
+  // Policy when Upstash isn't configured: "open" (default, in-memory
+  // fallback) or "closed" (deny requests instead of silently
+  // under-limiting). See lib/rate-limit.ts and
+  // packages/supabase-guard/README.md.
+  RATE_LIMIT_FAIL_MODE: z.enum(["open", "closed"]).optional(),
 
   NODE_ENV: z
     .enum(["development", "production", "test"])
@@ -181,6 +186,26 @@ export function validateEnv(env: NodeJS.ProcessEnv = process.env): ServerEnv {
       "[env] CRITICAL: Stripe is not configured in production " +
         "(STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET missing). " +
         "Billing and webhooks are disabled until the keys are set."
+    );
+  }
+
+  if (
+    result.data.NODE_ENV === "production" &&
+    !(result.data.UPSTASH_REDIS_REST_URL && result.data.UPSTASH_REDIS_REST_TOKEN)
+  ) {
+    const mode = result.data.RATE_LIMIT_FAIL_MODE === "closed" ? "closed" : "open";
+    console.warn(
+      "[env] WARNING: Upstash Redis is not configured in production " +
+        "(UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN missing). " +
+        (mode === "closed"
+          ? "RATE_LIMIT_FAIL_MODE=closed is set, so all rate-limited " +
+            "requests (login/signup/AI generation) will be denied until " +
+            "Upstash is configured."
+          : "Rate limiting will fall back to in-process in-memory " +
+            "counters, which are NOT effective across multiple serverless " +
+            "instances. Configure Upstash, or set RATE_LIMIT_FAIL_MODE=closed " +
+            "to deny instead of silently under-limiting. See " +
+            "packages/supabase-guard/README.md.")
     );
   }
 
