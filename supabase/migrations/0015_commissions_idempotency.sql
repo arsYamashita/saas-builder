@@ -40,6 +40,7 @@
 -- 単に DELETE すると過払いの実態調査ができなくなるため、削除対象を
 -- まずこのテーブルへ退避する。過払い額の集計・返金調査はこのテーブル
 -- に対して行える。調査完了後に手動で DROP してよい。
+-- rls-exempt: RLS enabled below with deliberately ZERO policies (service-role-only access; see the "ポリシーを一切定義しないことで全コマンド暗黙 deny" comment a few lines down) — intended posture for this audit/backup table, not an oversight.
 create table if not exists commissions_duplicates_backup (
   like commissions,
   backed_up_at timestamptz not null default now()

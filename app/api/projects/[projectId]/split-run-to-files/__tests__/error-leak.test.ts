@@ -29,6 +29,12 @@ vi.mock("@/lib/providers/step-meta", () => ({
 vi.mock("@/lib/ai/template-prompt-resolver", () => ({
   resolveFinalPromptPath: vi.fn(() => "prompts/fake.md"),
 }));
+// Not under test here (see rate-limit.test.ts in this directory) — stub to
+// always allow so error-leak assertions aren't flaky against the shared
+// in-memory fallback bucket.
+vi.mock("@/lib/rate-limit", () => ({
+  rateLimit: vi.fn(async () => true),
+}));
 
 import { requireProjectAccess } from "@/lib/auth/current-user";
 import { getLatestImplementationRun } from "@/lib/db/latest-run";
@@ -44,6 +50,7 @@ describe("POST /api/projects/[projectId]/split-run-to-files — error-leak wirin
     vi.clearAllMocks();
     vi.spyOn(console, "error").mockImplementation(() => {});
     mockRequireProjectAccess.mockResolvedValue({
+      user: { id: "user-1" },
       project: { template_key: "membership_content_affiliate" },
     } as any);
   });

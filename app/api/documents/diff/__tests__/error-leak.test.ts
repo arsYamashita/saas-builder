@@ -12,6 +12,12 @@ vi.mock("@/lib/document-analysis/document-diff", () => ({
   compareDocuments: vi.fn(),
   compareDocumentsLocal: vi.fn(),
 }));
+// Not under test here (see rate-limit.test.ts in this directory) — stub to
+// always allow so error-leak assertions aren't flaky against the shared
+// in-memory fallback bucket.
+vi.mock("@/lib/rate-limit", () => ({
+  rateLimit: vi.fn(async () => true),
+}));
 
 import { requireCurrentUser } from "@/lib/auth/current-user";
 import { compareDocuments } from "@/lib/document-analysis/document-diff";

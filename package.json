@@ -31,7 +31,8 @@
     "kb:checklist": "tsx scripts/generate-error-checklist.ts",
     "kb:resolve": "tsx scripts/kb-resolve.ts",
     "kb:reconcile": "tsx scripts/kb-reconcile.ts",
-    "security:gate": "tsx scripts/security-gate-check.ts"
+    "security:gate": "tsx scripts/security-gate-check.ts",
+    "security:baseline": "tsx scripts/security-baseline-check.ts"
   },
   "dependencies": {
     "@saas/auth": "*",
