@@ -1,0 +1,11 @@
+{
+  "$comment": "Example FirestoreSchemaDeclaration for scripts/firestore-drift-gate-check.ts. Copy into a Firestore-based project (e.g. the aria_app_* family) as e.g. firestore-schema.json, fill in real collection names + fields, and wire `tsx scripts/firestore-drift-gate-check.ts --schema firestore-schema.json --root app --root lib` into CI. See docs/schema-drift-guide.md.",
+  "collections": {
+    "templates": ["id", "name", "createdAt"],
+    "customTemplates": ["id", "name", "tenantId", "createdAt"],
+    "universalTemplates": ["id", "name", "createdAt"]
+  },
+  "deprecatedFields": {
+    "proposed_content": "Renamed to suggested_content — see [[daycare_dashboard_type_schema_drift]] (same drift family in the Supabase world)."
+  }
+}

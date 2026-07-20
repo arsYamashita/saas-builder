@@ -3,7 +3,7 @@
 Every SaaS derived from this repo (via `scripts/create-app.ts` or a manual
 copy) inherits saas-builder's security debt along with its code — see
 `[[saas_builder_security_debt_inheritance]]`. This checklist is the single
-place that lists the 9 security requirements a derived project (and every
+place that lists the 10 security/safety requirements a derived project (and every
 PR against saas-builder itself) must satisfy, and points at the ONE
 canonical implementation for each — do not re-implement any of these from
 scratch at a new call site; import/reuse the linked module.
@@ -201,6 +201,40 @@ only in the actual (untracked) environment.
   `2026-07-06_027_secret_guard_reusable_package` (未実施) lands
   `packages/secret-guard/` (gitleaks CI template + reusable secret-masking
   helpers) — that will make this item CI-enforced too.**
+
+## 10. Type safety: hand-written DB types must not drift from the real schema **[CI-enforced, partially]**
+
+A hand-written row type (`export type Foo = { ... }`) that stops matching
+the real schema doesn't fail loudly — reading a field the type declares
+but the real row doesn't have returns `undefined` **silently** at
+runtime, not a compile error, not a thrown exception. First diagnosed as
+`[[daycare_dashboard_type_schema_drift]]`; same failure family as
+`aria_app_collection_drift` in the Firestore world (UI/webhook collection
+name mismatches).
+
+- **Canonical pattern**: generated-types-as-source-of-truth. Full guide:
+  `docs/schema-drift-guide.md`.
+- **Supabase-based projects**: `supabase gen types typescript` output is
+  committed (`<template>/src/types/database.generated.ts`); hand-written
+  named types (`database.ts`) are diffed against it via an explicit
+  `{ HandTypeName: "table_name" }` mapping
+  (`schema-drift.config.json`) — never inferred from pluralization.
+- **Firestore-based projects (aria_app family)**:
+  `scripts/firestore-drift-gate-core.ts` — a copy-and-wire template asset
+  (not applicable to saas-builder itself, which has no Firestore usage);
+  see `docs/schema-drift-guide.md`, "Firestore-based derivatives".
+- **KB**: `[[daycare_dashboard_type_schema_drift]]`, `aria_app_collection_drift`
+- **CI gate**: `scripts/schema-drift-gate-check.ts` (`npm run
+  schema:drift:gate`) — offline, deterministic diff of the two committed
+  files above, registered per-target in `scripts/schema-drift-targets.json`.
+  **Hard-blocking** for `community_membership_saas` (confirmed 0 drift as
+  of this PR). A SEPARATE, non-blocking (`continue-on-error: true`) CI job
+  (`scripts/schema-drift/regen-and-diff.sh`) checks that the committed
+  generated snapshot is itself still fresh against live migrations — kept
+  informational because it depends on Postgres + Docker networking inside
+  CI, a class of environment flakiness that must never block an unrelated
+  PR. See `docs/schema-drift-guide.md`, "Two-stage rollout", for why new
+  targets should start in `"mode": "warning"` before promoting to `"hard"`.
 
 ---
 
