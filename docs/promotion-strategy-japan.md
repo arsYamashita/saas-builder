@@ -709,7 +709,7 @@ Given that you already have `publish_note.py` (Playwright-based note.com auto-pu
 
 ```
 Content Creation Flow:
-1. Write article in Markdown (~/Documents/my-vault/60_SNS_Content/)
+1. Write article in Markdown (~/my-vault/60_SNS_Content/)
 2. Generate eyecatch image via Pillow script ({stem}_eyecatch.png)
 3. Auto-publish to note.com via publish_note.py
 4. Cross-post adapted version to Qiita (API: POST /api/v2/items)
