@@ -19,6 +19,7 @@
     "test:e2e:all": "playwright test",
     "test:ui": "playwright test --ui",
     "test:cleanup": "tsx scripts/cleanup-e2e-data.ts",
+    "preflight:env": "tsx scripts/preflight-env.ts",
     "regression:mca": "bash scripts/run-mca-regression.sh",
     "regression:rsv": "bash scripts/run-rsv-regression.sh",
     "regression:crm": "bash scripts/run-crm-regression.sh",
