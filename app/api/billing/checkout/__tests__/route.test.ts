@@ -153,6 +153,18 @@ describe("POST /api/billing/checkout", () => {
     );
   });
 
+  it("forwards attempt_id to the reservation RPC as p_attempt_id, so a retry of the same attempt can be recognized instead of rejected (Codex review round 2 finding)", async () => {
+    const client = makeAdminClient();
+    mockCreateAdminClient.mockReturnValue(client);
+
+    await POST(makeRequest({ membership_plan_id: "plan-1", attempt_id: "attempt-abc" }));
+
+    expect(client.rpc).toHaveBeenCalledWith(
+      "reserve_subscription_checkout_slot",
+      expect.objectContaining({ p_attempt_id: "attempt-abc" })
+    );
+  });
+
   it("releases the reservation when Stripe Checkout Session creation fails, instead of blocking the user for the full TTL", async () => {
     const client = makeAdminClient();
     mockCreateAdminClient.mockReturnValue(client);

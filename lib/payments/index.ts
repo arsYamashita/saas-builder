@@ -27,6 +27,7 @@ export {
   assertNoConflictingActiveSubscription,
   reserveSubscriptionCheckoutSlot,
   releaseSubscriptionCheckoutSlot,
+  releaseSubscriptionCheckoutSlotForUser,
   SubscriptionConflictError,
   createBillingProductAndPrice,
   BillingCatalogWriteError,

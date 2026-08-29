@@ -33,6 +33,24 @@ export class BillingCatalogWriteError extends Error {
   }
 }
 
+/**
+ * Thrown instead of the generic `BillingCatalogWriteError` when a DB
+ * insert fails with a unique_violation that looks like a Stripe
+ * idempotency-key replay recording an object that's already there (see
+ * `isUniqueViolationOn`'s doc comment) — deliberately NOT compensated
+ * (Stripe objects are left alone, no DB rollback attempted), since the
+ * object in question is a legitimate, already-recorded one, not an
+ * orphan. The caller should treat this as "investigate, don't auto-heal":
+ * log it and check whether the existing `billing_products`/
+ * `billing_prices` row already matches what this call intended to create.
+ */
+export class BillingCatalogIdempotentReplayError extends BillingCatalogWriteError {
+  constructor(message: string, cause?: unknown) {
+    super(message, cause);
+    this.name = "BillingCatalogIdempotentReplayError";
+  }
+}
+
 interface StripeProductLike {
   id: string;
 }
@@ -63,9 +81,16 @@ export interface BillingCatalogStripeClient {
   };
 }
 
+/** `code` carries the Postgres error code (e.g. `"23505"` for
+ * unique_violation) when the caller's client surfaces it — used to detect
+ * "this insert failed because a Stripe idempotency-key replay handed back
+ * an object that's already recorded" (see the `isUniqueViolationOn` note
+ * below), as distinct from a genuine, unrelated DB failure. */
+type InsertError = { message: string; code?: string };
+
 type InsertResult = Promise<{
   data: { id: string } | null;
-  error: { message: string } | null;
+  error: InsertError | null;
 }>;
 
 /** Minimal Supabase-admin-client surface this function needs. */
@@ -75,9 +100,34 @@ export interface BillingCatalogClient {
       select(columns: string): { single(): InsertResult };
     };
     delete(): {
-      eq(column: string, value: string): Promise<{ error: { message: string } | null }>;
+      eq(column: string, value: string): Promise<{ error: InsertError | null }>;
     };
   };
+}
+
+const POSTGRES_UNIQUE_VIOLATION = "23505";
+
+/**
+ * True when `error` is a Postgres unique_violation whose message/constraint
+ * name mentions `column`. Used to recognize "this insert failed because
+ * the row already exists" — the expected shape of a Stripe idempotency-key
+ * REPLAY (see `idempotencyKey` doc comment below): a retried call after a
+ * lost response gets the SAME Stripe product/price id back from Stripe,
+ * then hits this DB's UNIQUE constraint on `stripe_product_id`/
+ * `stripe_price_id` on the (successful) re-insert attempt. That is NOT a
+ * "creation failed" case — the object is legitimately active and already
+ * recorded — so it must be handled differently from a genuine failure
+ * (never auto-deactivate it; see the call sites below). Codex review
+ * round 2 finding on PR #60: a bare `throw` here previously fell into the
+ * generic compensation path and deactivated a perfectly good, in-use
+ * Stripe object on every retry after the first successful attempt.
+ */
+function isUniqueViolationOn(error: InsertError | null, column: string): boolean {
+  return Boolean(
+    error &&
+      error.code === POSTGRES_UNIQUE_VIOLATION &&
+      error.message.includes(column)
+  );
 }
 
 export interface CreateBillingProductAndPriceParams {
@@ -183,6 +233,17 @@ export async function createBillingProductAndPrice(
       .select("id")
       .single();
 
+    if (isUniqueViolationOn(productError, "stripe_product_id")) {
+      throw new BillingCatalogIdempotentReplayError(
+        `billing_products insert hit a UNIQUE violation on stripe_product_id=${stripeProduct.id} ` +
+          `for tenant=${params.tenantId} — this looks like a Stripe idempotency-key replay of an ` +
+          `already-recorded product (NOT deactivating it; investigate the existing billing_products ` +
+          `row for stripe_product_id=${stripeProduct.id} instead of retrying blindly): ` +
+          `${productError!.message}`,
+        productError
+      );
+    }
+
     if (productError || !productRow) {
       throw new Error(
         productError?.message ?? "billing_products insert returned no row"
@@ -207,6 +268,22 @@ export async function createBillingProductAndPrice(
         .select("id")
         .single();
 
+      if (isUniqueViolationOn(priceError, "stripe_price_id")) {
+        // Same idempotent-replay situation as the product check above,
+        // but on the price. Do NOT roll back the billing_products row we
+        // just inserted (it's a legitimate row for a legitimate product)
+        // and do NOT deactivate either Stripe object — both are real,
+        // already-recorded objects; only the DB write hit a replay.
+        throw new BillingCatalogIdempotentReplayError(
+          `billing_prices insert hit a UNIQUE violation on stripe_price_id=${stripePrice.id} ` +
+            `for tenant=${params.tenantId} — this looks like a Stripe idempotency-key replay of an ` +
+            `already-recorded price (NOT rolling back billing_products row=${productRow.id} or ` +
+            `deactivating either Stripe object; investigate the existing billing_prices row for ` +
+            `stripe_price_id=${stripePrice.id} instead): ${priceError!.message}`,
+          priceError
+        );
+      }
+
       if (priceError || !data) {
         throw new Error(
           priceError?.message ?? "billing_prices insert returned no row"
@@ -214,6 +291,10 @@ export async function createBillingProductAndPrice(
       }
       priceRow = data;
     } catch (priceInsertErr) {
+      if (priceInsertErr instanceof BillingCatalogIdempotentReplayError) {
+        throw priceInsertErr;
+      }
+
       // Partial DB failure: billing_products committed but billing_prices
       // didn't. Roll back the orphaned product row rather than leaving a
       // product-with-no-price row behind.
@@ -247,6 +328,12 @@ export async function createBillingProductAndPrice(
       dbPriceRowId: priceRow.id,
     };
   } catch (err) {
+    if (err instanceof BillingCatalogIdempotentReplayError) {
+      // Deliberately skip all compensation — see the class doc comment
+      // and the throw sites above for why.
+      throw err;
+    }
+
     await deactivateStripeObjects(stripe, {
       productId: stripeProduct?.id,
       priceId: stripePrice?.id,

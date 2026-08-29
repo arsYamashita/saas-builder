@@ -15,6 +15,7 @@ export {
   assertNoConflictingActiveSubscription,
   reserveSubscriptionCheckoutSlot,
   releaseSubscriptionCheckoutSlot,
+  releaseSubscriptionCheckoutSlotForUser,
   SubscriptionConflictError,
   CONFLICTING_SUBSCRIPTION_STATUSES,
   DEFAULT_CHECKOUT_RESERVATION_TTL_SECONDS,
@@ -24,6 +25,7 @@ export {
 export {
   createBillingProductAndPrice,
   BillingCatalogWriteError,
+  BillingCatalogIdempotentReplayError,
   type BillingCatalogClient,
   type CreateBillingProductAndPriceParams,
 } from "./billing-catalog";

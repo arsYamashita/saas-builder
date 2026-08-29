@@ -3,6 +3,7 @@ import {
   assertNoConflictingActiveSubscription,
   reserveSubscriptionCheckoutSlot,
   releaseSubscriptionCheckoutSlot,
+  releaseSubscriptionCheckoutSlotForUser,
   SubscriptionConflictError,
   CONFLICTING_SUBSCRIPTION_STATUSES,
   DEFAULT_CHECKOUT_RESERVATION_TTL_SECONDS,
@@ -142,8 +143,24 @@ describe("reserveSubscriptionCheckoutSlot / releaseSubscriptionCheckoutSlot", ()
     expect(rpc).toHaveBeenCalledWith("reserve_subscription_checkout_slot", {
       p_tenant_id: "tenant-1",
       p_user_id: "user-1",
+      p_attempt_id: null,
       p_ttl_seconds: DEFAULT_CHECKOUT_RESERVATION_TTL_SECONDS,
     });
+  });
+
+  it("passes attemptId through as p_attempt_id when provided", async () => {
+    const { client, rpc } = makeRpcClient({ data: "reservation-1", error: null });
+
+    await reserveSubscriptionCheckoutSlot(client, {
+      tenantId: "tenant-1",
+      userId: "user-1",
+      attemptId: "attempt-abc",
+    });
+
+    expect(rpc).toHaveBeenCalledWith(
+      "reserve_subscription_checkout_slot",
+      expect.objectContaining({ p_attempt_id: "attempt-abc" })
+    );
   });
 
   it("passes a custom ttlSeconds through to the RPC", async () => {
@@ -205,5 +222,21 @@ describe("reserveSubscriptionCheckoutSlot / releaseSubscriptionCheckoutSlot", ()
     const result = await releaseSubscriptionCheckoutSlot(client, "reservation-1");
 
     expect(result).toEqual({ released: false, error: "timeout" });
+  });
+
+  it("releaseSubscriptionCheckoutSlotForUser calls the by-user release RPC (used by the webhook handler, which never has the reservation id)", async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: null, error: null });
+    const client = { rpc } as unknown as SubscriptionReservationClient;
+
+    const result = await releaseSubscriptionCheckoutSlotForUser(client, {
+      tenantId: "tenant-1",
+      userId: "user-1",
+    });
+
+    expect(result).toEqual({ released: true });
+    expect(rpc).toHaveBeenCalledWith("release_subscription_checkout_slot_for_user", {
+      p_tenant_id: "tenant-1",
+      p_user_id: "user-1",
+    });
   });
 });

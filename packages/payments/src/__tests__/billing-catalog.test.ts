@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import {
   createBillingProductAndPrice,
   BillingCatalogWriteError,
+  BillingCatalogIdempotentReplayError,
   type BillingCatalogStripeClient,
   type BillingCatalogClient,
 } from "../billing-catalog";
@@ -34,8 +35,14 @@ function makeStripe(overrides?: Partial<BillingCatalogStripeClient>): {
 }
 
 function makeSupabase(opts: {
-  productInsertResult?: { data: { id: string } | null; error: { message: string } | null };
-  priceInsertResult?: { data: { id: string } | null; error: { message: string } | null };
+  productInsertResult?: {
+    data: { id: string } | null;
+    error: { message: string; code?: string } | null;
+  };
+  priceInsertResult?: {
+    data: { id: string } | null;
+    error: { message: string; code?: string } | null;
+  };
 }) {
   const productInsertResult = opts.productInsertResult ?? {
     data: { id: "db-product-1" },
@@ -192,6 +199,52 @@ describe("createBillingProductAndPrice", () => {
     expect(productDeleteEq).toHaveBeenCalledWith("id", "db-product-1");
     expect(pricesUpdate).toHaveBeenCalledWith("price_123", { active: false });
     expect(productsUpdate).toHaveBeenCalledWith("prod_123", { active: false });
+  });
+
+  it("throws BillingCatalogIdempotentReplayError WITHOUT deactivating anything when billing_products insert hits a unique_violation on stripe_product_id (Stripe idempotency-key replay, Codex review round 2 finding)", async () => {
+    const { stripe, productsUpdate, pricesUpdate } = makeStripe();
+    const { supabase, priceInsert } = makeSupabase({
+      productInsertResult: {
+        data: null,
+        error: {
+          message:
+            'duplicate key value violates unique constraint "billing_products_stripe_product_id_key"',
+          code: "23505",
+        },
+      },
+    });
+
+    await expect(
+      createBillingProductAndPrice(stripe, supabase, baseParams)
+    ).rejects.toThrow(BillingCatalogIdempotentReplayError);
+
+    // The replayed Stripe objects are legitimate and already in use — must
+    // NOT be deactivated.
+    expect(productsUpdate).not.toHaveBeenCalled();
+    expect(pricesUpdate).not.toHaveBeenCalled();
+    expect(priceInsert).not.toHaveBeenCalled();
+  });
+
+  it("throws BillingCatalogIdempotentReplayError WITHOUT rolling back billing_products or deactivating anything when billing_prices insert hits a unique_violation on stripe_price_id", async () => {
+    const { stripe, productsUpdate, pricesUpdate } = makeStripe();
+    const { supabase, productDeleteEq } = makeSupabase({
+      priceInsertResult: {
+        data: null,
+        error: {
+          message:
+            'duplicate key value violates unique constraint "billing_prices_stripe_price_id_key"',
+          code: "23505",
+        },
+      },
+    });
+
+    await expect(
+      createBillingProductAndPrice(stripe, supabase, baseParams)
+    ).rejects.toThrow(BillingCatalogIdempotentReplayError);
+
+    expect(productDeleteEq).not.toHaveBeenCalled();
+    expect(productsUpdate).not.toHaveBeenCalled();
+    expect(pricesUpdate).not.toHaveBeenCalled();
   });
 
   it("still throws the ORIGINAL error even if the compensation call itself fails", async () => {

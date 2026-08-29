@@ -147,11 +147,20 @@ export const DEFAULT_CHECKOUT_RESERVATION_TTL_SECONDS = 1800;
 export interface SubscriptionReservationClient {
   rpc(
     fn: "reserve_subscription_checkout_slot",
-    args: { p_tenant_id: string; p_user_id: string; p_ttl_seconds: number }
+    args: {
+      p_tenant_id: string;
+      p_user_id: string;
+      p_attempt_id: string | null;
+      p_ttl_seconds: number;
+    }
   ): PromiseLike<{ data: string | null; error: { message: string } | null }>;
   rpc(
     fn: "release_subscription_checkout_slot",
     args: { p_reservation_id: string }
+  ): PromiseLike<{ data: unknown; error: { message: string } | null }>;
+  rpc(
+    fn: "release_subscription_checkout_slot_for_user",
+    args: { p_tenant_id: string; p_user_id: string }
   ): PromiseLike<{ data: unknown; error: { message: string } | null }>;
 }
 
@@ -170,17 +179,26 @@ function isConflictError(error: { message: string } | null): boolean {
  * after reserving (so the user isn't blocked for the full TTL).
  *
  * Throws `SubscriptionConflictError` if the user already has a
- * conflicting subscription OR another reservation is still in flight for
- * the same tenant+user (both cases the DB function raises as
+ * conflicting subscription OR a DIFFERENT reservation is still in flight
+ * for the same tenant+user (both cases the DB function raises as
  * `SUBSCRIPTION_CONFLICT`; this function can't and doesn't need to tell
  * them apart from the caller's side — either way, the correct response is
  * HTTP 409, don't start a new Checkout Session).
+ *
+ * Pass `attemptId` when the caller has one (see `buildIdempotencyKey`'s
+ * doc comment on what an attempt id is): a retry with the SAME attemptId
+ * as an in-flight reservation is treated as a retry, not a conflict, and
+ * returns the SAME reservation id — this is what lets Stripe's own
+ * idempotency-key replay work for a lost-response retry instead of this
+ * guard rejecting it with 409 before it ever reaches Stripe (Codex review
+ * round 2 finding on PR #60).
  */
 export async function reserveSubscriptionCheckoutSlot(
   supabase: SubscriptionReservationClient,
   params: {
     tenantId: string;
     userId: string;
+    attemptId?: string;
     ttlSeconds?: number;
   }
 ): Promise<{ reservationId: string }> {
@@ -189,6 +207,7 @@ export async function reserveSubscriptionCheckoutSlot(
     {
       p_tenant_id: params.tenantId,
       p_user_id: params.userId,
+      p_attempt_id: params.attemptId ?? null,
       p_ttl_seconds: params.ttlSeconds ?? DEFAULT_CHECKOUT_RESERVATION_TTL_SECONDS,
     }
   );
@@ -231,6 +250,33 @@ export async function releaseSubscriptionCheckoutSlot(
   const { error } = await supabase.rpc("release_subscription_checkout_slot", {
     p_reservation_id: reservationId,
   });
+
+  if (error) {
+    return { released: false, error: error.message };
+  }
+  return { released: true };
+}
+
+/**
+ * Releases a reservation by (tenantId, userId) instead of by reservation
+ * id — for the Stripe webhook handler, which knows the tenant/user from
+ * the subscription metadata but never received the reservation id (the
+ * checkout route and the webhook route are two separate, unrelated
+ * requests). Call this right after a `checkout.session.completed` event
+ * successfully records the subscription, to shrink the window during
+ * which the reservation's TTL (not webhook completion) is the only thing
+ * unblocking a legitimate next checkout. Best-effort, same as
+ * `releaseSubscriptionCheckoutSlot` — the reservation still self-expires
+ * via TTL if this fails.
+ */
+export async function releaseSubscriptionCheckoutSlotForUser(
+  supabase: SubscriptionReservationClient,
+  params: { tenantId: string; userId: string }
+): Promise<{ released: boolean; error?: string }> {
+  const { error } = await supabase.rpc(
+    "release_subscription_checkout_slot_for_user",
+    { p_tenant_id: params.tenantId, p_user_id: params.userId }
+  );
 
   if (error) {
     return { released: false, error: error.message };

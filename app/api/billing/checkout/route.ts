@@ -97,7 +97,10 @@ export async function POST(req: NextRequest) {
     try {
       const reservation = await reserveSubscriptionCheckoutSlot(
         reservationClient,
-        { tenantId, userId: user.id }
+        // attemptId: a retry of the SAME attempt (lost response, etc.)
+        // gets back the SAME reservation instead of a 409, so it can
+        // still reach Stripe's own idempotency-key replay below.
+        { tenantId, userId: user.id, attemptId }
       );
       reservationId = reservation.reservationId;
     } catch (conflictError) {
