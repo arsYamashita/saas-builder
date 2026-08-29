@@ -58,16 +58,24 @@ async function handlePost(req: Request) {
 
 export const POST = withRoute(handlePost, {
   store: idempotency.store,
-  // REQUIRED for any tenant-scoped route — see "Tenant isolation" below.
+  // Both REQUIRED, no default for either — see "Tenant isolation" below.
   getScope: async (req) => (await getTenantIdFromSession(req)) ?? "anonymous",
+  namespace: "orders.create",
 });
 ```
 
 - Missing `Idempotency-Key` header → `400` (pass `required: false` to make
   the header optional and skip the guard when absent).
 - Same key, prior call already completed → the **exact same** status +
-  JSON body is replayed, `handlePost` is **not** re-run.
+  body + content-type is replayed, `handlePost` is **not** re-run. (Other
+  headers — `Set-Cookie`, `Location`, caching headers, etc. — are NOT
+  replayed; a route that needs those preserved on replay can't rely on
+  `withRoute` alone for them.)
 - Same key, prior call still running → `409 { error: "request_in_progress" }`.
+- `handlePost` succeeded but the claim was lost mid-flight (see "At-most-once
+  is a lease, not a guarantee" below) → `500 { error: "idempotency_claim_lost" }`
+  — the response was already sent back to `handlePost`'s original caller in
+  that unlucky race, but a retry must not be assumed to just replay it.
 
 ## 2. Generic side-effect guard — `withIdempotency` / `withStripeCall`
 
@@ -96,7 +104,10 @@ const session = await idempotency.withStripeCall(key, (idempotencyKey) =>
 
 A `withIdempotency`/`withStripeCall` call whose `fn` throws **releases**
 the claim (not completes it) — a failed attempt must be retryable, not
-permanently stuck.
+permanently stuck. A call whose `fn` *succeeds* but loses the claim
+mid-flight throws `IdempotencyClaimLostError` instead of either silently
+returning the result or releasing — see "At-most-once is a lease, not a
+guarantee" below.
 
 ## 3. Distributed lock — `withLock`
 
@@ -114,13 +125,17 @@ const redis = new Redis({ url: ..., token: ... }); // structurally compatible, n
 
 await withLock(
   `stripe-connect-account:${userId}`,
-  async () => { /* ... call Stripe Connect create-account ... */ },
+  async (signal) => { /* ... call Stripe Connect create-account, ideally passing `signal` through (e.g. fetch(url, { signal })) ... */ },
   { redis, ttlMs: 120_000 } // >= p99 of the guarded call, per the KB above
 );
 ```
 
 Omit `redis` to use an in-process fallback for local dev without Redis
-configured (single-instance only — same caveat as `lib/step-lock.ts`).
+configured (single-instance only — same caveat as `lib/step-lock.ts`). If
+the heartbeat detects the lock was lost (reclaimed by someone else) while
+`fn` is still running, `fn`'s `AbortSignal` fires and `withLock` throws
+`LockLostError` once `fn` settles — see "At-most-once is a lease, not a
+guarantee" below.
 
 ## Tenant isolation
 
@@ -128,15 +143,77 @@ Every stored row is keyed by `(scope, key)`, and `scope` is a first-class,
 separate argument from `key` everywhere in this package's API — it is
 never folded into the key string. **Whenever the idempotency key itself is
 client- or caller-supplied**, `scope` MUST be derived from the
-authenticated tenant (or another value the caller cannot forge), never
-left at the default. Two different tenants independently choosing the same
-`Idempotency-Key` header value (a client picking `"retry-1"`, say) must
-land on two different rows — if they collided, tenant B could receive
-tenant A's replayed response (a cross-tenant data leak, not just a
-correctness bug). `withRoute`'s `getScope` option and
-`withIdempotency`/`withStripeCall`'s `opts.scope` exist specifically for
-this; `db/idempotency_keys` has `PRIMARY KEY (scope, key)`, so the
-partitioning is also enforced at the DB level, not just convention.
+authenticated tenant (or another value the caller cannot forge). Two
+different tenants independently choosing the same `Idempotency-Key`
+header value (a client picking `"retry-1"`, say) must land on two
+different rows — if they collided, tenant B could receive tenant A's
+replayed response (a cross-tenant data leak, not just a correctness bug).
+
+`withRoute` enforces this at the type level, not just by convention
+(Codex review gpt-5.6-sol, 2026-08-30 P1: an earlier revision silently
+defaulted `scope` to a single fixed value when the caller omitted
+`getScope`, which is exactly the "forgot to scope this route" mistake
+this section warns against): **`getScope` and `namespace` are both
+required, non-optional parameters** — there is no default to fall back
+to. `getScope` isolates tenants from each other; `namespace` (a static
+string per `withRoute` call site, e.g. `"orders.create"`) additionally
+isolates ROUTES from each other within the same tenant — without it, two
+different endpoints sharing one `getScope` and receiving the same
+client-chosen key would collide with each other, which `scope` alone
+does not prevent. The two are combined as the stored `scope` value
+(`` `${callerScope}:${namespace}` ``); a genuinely tenant-less route must
+say so explicitly (`getScope: () => "system"`) rather than relying on an
+implicit default.
+
+`withIdempotency`/`withStripeCall`'s `opts.scope` remains optional and
+defaults to a shared `"system"` scope — appropriate for call sites where
+the key is NOT client-supplied (e.g. `owner_digest:${communityId}:${date}`,
+already unique on its own) and there is no per-tenant collision risk to
+begin with; it is `withRoute` specifically, built around a short,
+client-supplied header value, where an implicit default is dangerous.
+
+`db/idempotency_keys` has `PRIMARY KEY (scope, key)`, so once `scope` is
+computed correctly the partitioning itself is enforced at the DB level,
+not just convention.
+
+## At-most-once is a lease, not a guarantee
+
+Be precise about what this package promises: the DB-level fencing token
+(`store.ts`) guarantees a stale claim can never *clobber* a newer one, and
+the heartbeat (`withIdempotency`, `withLock`) keeps a claim/lock alive for
+as long as `fn` is genuinely still running rather than betting everything
+on a single upfront TTL guess. Neither of those is the same as a hard
+"`fn` runs at most once, no matter what" guarantee (Codex review
+gpt-5.6-sol, 2026-08-30 High) — two residual gaps remain, both surfaced
+as distinct, documented errors rather than silently mishandled:
+
+1. **Claim/lock lost while `fn` is still running.** If the heartbeat
+   itself stalls badly enough (event-loop starvation, a Redis/DB outage
+   longer than `ttlMs`), another caller can legitimately reclaim the
+   (scope, key)/lock while the original `fn` is still executing —
+   `withIdempotency` cannot forcibly cancel a non-cooperative `fn`, so
+   both the original and the new caller's side effects may run. This
+   package cannot make that impossible; what it does do is *detect* it
+   (via the fencing token / compare-and-extend) and throw
+   `IdempotencyClaimLostError` / `LockLostError` instead of returning as
+   if nothing happened — treat either as "unknown outcome, investigate",
+   not as "safe to retry".
+2. **`fn` succeeds but `store.complete()` itself fails** (e.g. a DB outage
+   at exactly the wrong moment). The side effect already happened; this
+   package refuses to either (a) silently report success while secretly
+   unable to prevent a future duplicate run, or (b) release the claim
+   (which would let a genuine retry re-run `fn` and double the side
+   effect that already succeeded). Both cases throw
+   `IdempotencyClaimLostError` — its `.result` carries `fn`'s successful
+   return value when available, for callers that want to recover it
+   despite the bookkeeping failure.
+
+For a side effect where *true* exactly-once matters more than this
+package's best-effort lease (e.g. moving money), pair it with a real
+DB-level natural-key constraint (`docs/rules/08-db-rules.md`) as the
+actual source of truth, and treat this package's guard as a
+defense-in-depth layer that avoids most duplicate *attempts* rather than
+the sole line of defense against a duplicate *effect*.
 
 ## Retention
 

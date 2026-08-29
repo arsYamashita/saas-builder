@@ -1,4 +1,4 @@
-import { IdempotencyInProgressError } from "./types";
+import { IdempotencyClaimLostError, IdempotencyInProgressError } from "./types";
 import type { IdempotencyStore, RunIdempotentOptions } from "./types";
 
 export const DEFAULT_SCOPE = "system";
@@ -17,15 +17,33 @@ export interface IdempotencyDefaults {
 
 export interface Idempotency {
   /**
-   * Runs `fn()` at most once for a given (scope, key): a concurrent or
-   * retried call with the same key replays the first call's return value
-   * instead of re-running `fn`. Throws `IdempotencyInProgressError` if
-   * another call for the same (scope, key) is currently mid-flight
-   * (caller decides how to surface that — HTTP 409, log-and-skip, etc.).
+   * Runs `fn()` for a given (scope, key), replaying a completed prior
+   * call's return value instead of re-running `fn` for a retried request.
+   * Throws `IdempotencyInProgressError` if another call for the same
+   * (scope, key) is currently mid-flight (caller decides how to surface
+   * that — HTTP 409, log-and-skip, etc.).
+   *
+   * A heartbeat renews the claim's TTL (every `heartbeatIntervalMs`,
+   * default `ttlMs / 3`) for as long as `fn` is running, so a `ttlMs`
+   * guess that turns out too short does not silently let a second caller
+   * reclaim the key while `fn` is still genuinely in flight — see
+   * [[redis_nx_lock_ttl_too_short]].
    *
    * If `fn` throws, the claim is released (not completed) so a genuine
    * retry can attempt the side effect again — a failed attempt must never
    * permanently poison the key.
+   *
+   * If `fn` SUCCEEDS but this package cannot durably record that (the
+   * heartbeat detects the claim was reclaimed out from under it, or
+   * `store.complete()` itself fails, e.g. a DB outage), this throws
+   * `IdempotencyClaimLostError` instead of either silently returning the
+   * result (which would hide that a concurrent duplicate run may already
+   * be in flight) or releasing the claim (which would let a retry
+   * actually re-run `fn` and double the side effect it just ran) — see
+   * that error's doc for why both of those alternatives are wrong.
+   * `IdempotencyClaimLostError.result` carries `fn`'s successful result
+   * when available, for callers that want to recover it despite the
+   * bookkeeping failure.
    */
   withIdempotency<T>(
     key: string,
@@ -76,25 +94,81 @@ export function createIdempotency(
     }
     const scope = opts.scope ?? defaults.scope ?? DEFAULT_SCOPE;
     const ttlMs = opts.ttlMs ?? defaults.ttlMs ?? DEFAULT_TTL_MS;
+    const heartbeatIntervalMs =
+      opts.heartbeatIntervalMs ?? Math.max(1, Math.floor(ttlMs / 3));
 
-    const claim = await store.claim(scope, key, ttlMs);
+    const claimResult = await store.claim(scope, key, ttlMs);
 
-    if (claim.kind === "completed") {
-      return claim.body as T;
+    if (claimResult.kind === "completed") {
+      return claimResult.body as T;
     }
-    if (claim.kind === "in_progress") {
+    if (claimResult.kind === "in_progress") {
       throw new IdempotencyInProgressError(scope, key);
     }
 
-    // claim.kind === "own"
+    // claimResult.kind === "own"
+    const { token } = claimResult;
+
+    // Heartbeat: keep renewing the claim's TTL for as long as fn is
+    // running, mirroring lock.ts's withLock. `claimLost` is set the
+    // moment a renewal is confirmed to have failed (token no longer
+    // matches) — checked after fn settles, since we cannot forcibly
+    // cancel an already-running fn (same limitation documented in
+    // lock.ts).
+    let claimLost = false;
+    const heartbeat = setInterval(() => {
+      store.extend(scope, key, token, ttlMs).then(
+        (stillOwned) => {
+          if (!stillOwned) claimLost = true;
+        },
+        () => {
+          // A failed renewal attempt (e.g. transient DB error) is NOT
+          // itself proof of claim loss — unlike a confirmed `false`
+          // return, an error means "unknown", so it is deliberately not
+          // treated as `claimLost = true` here (that would produce false
+          // positives, throwing IdempotencyClaimLostError for successful
+          // runs on every transient hiccup). A genuinely lost claim will
+          // be caught by a subsequent heartbeat tick or by the final
+          // `store.complete()` check below.
+        }
+      );
+    }, heartbeatIntervalMs);
+    const maybeUnref = (heartbeat as unknown as { unref?: () => void }).unref;
+    if (typeof maybeUnref === "function") maybeUnref.call(heartbeat);
+
+    let result: T;
     try {
-      const result = await fn();
-      await store.complete(scope, key, 200, result, claim.token);
-      return result;
+      result = await fn();
     } catch (err) {
-      await store.release(scope, key, claim.token);
+      clearInterval(heartbeat);
+      // fn itself failed — nothing to protect, safe (and necessary) to
+      // release so a genuine retry can attempt the side effect again.
+      // Token-guarded, so a no-op if we'd already lost the claim.
+      await store.release(scope, key, token);
       throw err;
     }
+    clearInterval(heartbeat);
+
+    // fn succeeded. Record completion — but if the heartbeat already
+    // detected we'd lost the claim, don't bother; either way, a
+    // `complete()` that reports it didn't apply (or itself throws) means
+    // the same thing: this package cannot promise the result will be
+    // replayed rather than re-run, and must say so distinctly rather
+    // than silently returning success or releasing (which would invite a
+    // duplicate run of a side effect that already happened).
+    if (claimLost) {
+      throw new IdempotencyClaimLostError(scope, key, result);
+    }
+    let applied: boolean;
+    try {
+      applied = await store.complete(scope, key, 200, result, token);
+    } catch (completeErr) {
+      throw new IdempotencyClaimLostError(scope, key, result, { cause: completeErr });
+    }
+    if (!applied) {
+      throw new IdempotencyClaimLostError(scope, key, result);
+    }
+    return result;
   }
 
   async function withStripeCall<T>(

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { acquireLock, releaseLock, extendLock, withLock, LockContentionError } from "../lock";
+import { acquireLock, releaseLock, extendLock, withLock, LockContentionError, LockLostError } from "../lock";
 import type { RedisLike } from "../lock";
 
 /** A minimal in-memory RedisLike double, independent of the module's own
@@ -178,5 +178,63 @@ describe("withLock", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("throws LockLostError (not a silent success) when the heartbeat detects the lock was stolen mid-flight", async () => {
+    vi.useFakeTimers();
+    try {
+      const redis: RedisLike = {
+        set: async () => "OK", // acquireLock always "succeeds" once
+        eval: async () => 0, // every compare-and-extend / release reports "not owner" (lost)
+      };
+
+      const promise = withLock(
+        "job:1",
+        async () => {
+          await vi.advanceTimersByTimeAsync(400); // outlives the first heartbeat tick
+          return "finished";
+        },
+        { redis, ttlMs: 300 } // heartbeatIntervalMs defaults to 100
+      );
+
+      const err = await promise.catch((e) => e);
+      expect(err).toBeInstanceOf(LockLostError);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("fires fn's AbortSignal the moment the heartbeat detects lock loss", async () => {
+    vi.useFakeTimers();
+    try {
+      let sawAbort = false;
+      const redis: RedisLike = {
+        set: async () => "OK",
+        eval: async () => 0, // lock "lost" on the very first heartbeat tick
+      };
+
+      const promise = withLock(
+        "job:1",
+        async (signal) => {
+          signal.addEventListener("abort", () => {
+            sawAbort = true;
+          });
+          await vi.advanceTimersByTimeAsync(400);
+          return "finished";
+        },
+        { redis, ttlMs: 300 }
+      );
+
+      await promise.catch(() => {});
+      expect(sawAbort).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does NOT throw LockLostError when the lock is held for the whole run (no false positives)", async () => {
+    const redis = makeFakeRedis();
+    const result = await withLock("job:1", async () => "clean-run", { redis, ttlMs: 60_000 });
+    expect(result).toBe("clean-run");
   });
 });

@@ -127,6 +127,31 @@ export class LockContentionError extends Error {
   }
 }
 
+/**
+ * Thrown by `withLock()` when the heartbeat confirms the lock was lost
+ * (a compare-and-extend returned `false` — someone else's TTL-based
+ * reclaim won) while `fn` was still running (Codex review gpt-5.6-sol,
+ * 2026-08-30 High: an earlier revision silently discarded this signal
+ * and returned `fn`'s result as if the lock had been held the whole
+ * time). `fn` is passed an `AbortSignal` that this fires the instant loss
+ * is detected, so a cooperative `fn` (e.g. `fetch(url, { signal })`) can
+ * actually stop — but `withLock` cannot forcibly cancel a `fn` that
+ * doesn't check the signal, so this error means "the lock was lost;
+ * `fn`'s side effects may have completed anyway, may have been aborted
+ * partway, or may still be racing another holder" — treat it as unknown
+ * outcome requiring investigation, not as "safe to retry" or "definitely
+ * failed".
+ */
+export class LockLostError extends Error {
+  constructor(readonly key: string, options?: { cause?: unknown }) {
+    super(
+      `lock for key=${key} was lost (reclaimed by another caller) while fn() was still running`,
+      options
+    );
+    this.name = "LockLostError";
+  }
+}
+
 export interface WithLockOptions {
   /** Redis client. Omit to use an in-process, single-instance fallback
    * (local dev only — see module doc). */
@@ -146,11 +171,18 @@ export interface WithLockOptions {
  * (heartbeat) so a long-running `fn` never has its lock expire out from
  * under it just because the initial `ttlMs` guess was conservative, then
  * releases the lock. Throws `LockContentionError` if the lock is already
- * held by someone else.
+ * held by someone else, or `LockLostError` if the heartbeat detects the
+ * lock was reclaimed while `fn` was still running.
+ *
+ * `fn` receives an `AbortSignal` fired the moment lock loss is detected —
+ * a cooperative `fn` should check/pass it along (e.g. into `fetch`) so it
+ * can actually stop rather than keep running unprotected. `withLock`
+ * cannot force a non-cooperative `fn` to stop; see `LockLostError`'s doc
+ * for what the error does and does not tell you in that case.
  */
 export async function withLock<T>(
   key: string,
-  fn: () => Promise<T>,
+  fn: (signal: AbortSignal) => Promise<T>,
   opts: WithLockOptions
 ): Promise<T> {
   const redis = opts.redis ?? makeLocalRedis();
@@ -162,13 +194,26 @@ export async function withLock<T>(
     throw new LockContentionError(key);
   }
 
+  let lost = false;
+  const abortController = new AbortController();
+
   const heartbeat = setInterval(() => {
-    // Best-effort: a failed/missed extend just means the lock may expire
-    // early under extreme scheduling delay — logging is left to the host
-    // app (this package has no logger dependency). The compare-and-extend
-    // script guarantees we never renew a lock someone else has since
-    // legitimately acquired.
-    void extendLock(redis, key, token, ttlMs);
+    extendLock(redis, key, token, ttlMs).then(
+      (stillHeld) => {
+        if (!stillHeld) {
+          lost = true;
+          abortController.abort(new LockLostError(key));
+        }
+      },
+      () => {
+        // A failed/erroring renewal attempt (transient Redis error) is
+        // NOT itself proof of loss — unlike a confirmed `false` return —
+        // so it deliberately does not set `lost` (that would produce
+        // false-positive LockLostError throws on every transient
+        // hiccup). A genuine loss will be caught by a subsequent
+        // heartbeat tick.
+      }
+    );
   }, heartbeatIntervalMs);
   // Node-specific: don't let the heartbeat keep the process alive on its
   // own (no-op / unsupported in browser and Deno, guarded defensively).
@@ -177,10 +222,21 @@ export async function withLock<T>(
     maybeUnref.call(heartbeat);
   }
 
+  let result: T;
   try {
-    return await fn();
-  } finally {
+    result = await fn(abortController.signal);
+  } catch (err) {
     clearInterval(heartbeat);
     await releaseLock(redis, key, token);
+    if (lost) {
+      throw new LockLostError(key, { cause: err });
+    }
+    throw err;
   }
+  clearInterval(heartbeat);
+  await releaseLock(redis, key, token);
+  if (lost) {
+    throw new LockLostError(key);
+  }
+  return result;
 }

@@ -1,16 +1,22 @@
 import { describe, it, expect, vi } from "vitest";
 import { withRoute } from "../middleware";
 import { InMemoryIdempotencyStore } from "../store";
+import type { IdempotencyStore, ClaimOutcome } from "../types";
 
 function req(headers: Record<string, string> = {}): Request {
   return new Request("http://localhost/api/orders", { method: "POST", headers });
 }
 
+// Every test route needs SOME scope/namespace — both are required, no
+// default (Codex review gpt-5.6-sol, 2026-08-30 P1: see middleware.ts
+// doc). Tests that don't care about tenant scoping use this fixed pair.
+const UNSCOPED = { getScope: async () => "system", namespace: "test-route" };
+
 describe("withRoute", () => {
   it("400s a required Idempotency-Key that is missing", async () => {
     const store = new InMemoryIdempotencyStore();
     const handler = vi.fn(async () => Response.json({ ok: true }));
-    const wrapped = withRoute(handler, { store });
+    const wrapped = withRoute(handler, { store, ...UNSCOPED });
 
     const res = await wrapped(req(), undefined);
 
@@ -21,7 +27,7 @@ describe("withRoute", () => {
   it("passes requests through unguarded when required: false and header is absent", async () => {
     const store = new InMemoryIdempotencyStore();
     const handler = vi.fn(async () => Response.json({ ok: true }));
-    const wrapped = withRoute(handler, { store, required: false });
+    const wrapped = withRoute(handler, { store, required: false, ...UNSCOPED });
 
     const res = await wrapped(req(), undefined);
 
@@ -29,10 +35,21 @@ describe("withRoute", () => {
     expect(handler).toHaveBeenCalledTimes(1);
   });
 
+  it("throws constructing withRoute without a namespace", () => {
+    const store = new InMemoryIdempotencyStore();
+    expect(() =>
+      withRoute(async () => Response.json({}), {
+        store,
+        getScope: async () => "system",
+        namespace: "",
+      })
+    ).toThrow(/namespace/);
+  });
+
   it("runs the handler once and returns its response for a fresh key", async () => {
     const store = new InMemoryIdempotencyStore();
     const handler = vi.fn(async () => Response.json({ orderId: "order-1" }, { status: 201 }));
-    const wrapped = withRoute(handler, { store });
+    const wrapped = withRoute(handler, { store, ...UNSCOPED });
 
     const res = await wrapped(req({ "Idempotency-Key": "k1" }), undefined);
 
@@ -41,10 +58,10 @@ describe("withRoute", () => {
     expect(handler).toHaveBeenCalledTimes(1);
   });
 
-  it("replays the SAME response for a retried request with the same key, without re-running the handler", async () => {
+  it("replays the SAME status + body + content-type for a retried request, without re-running the handler", async () => {
     const store = new InMemoryIdempotencyStore();
     const handler = vi.fn(async () => Response.json({ orderId: "order-1" }, { status: 201 }));
-    const wrapped = withRoute(handler, { store });
+    const wrapped = withRoute(handler, { store, ...UNSCOPED });
 
     const first = await wrapped(req({ "Idempotency-Key": "k1" }), undefined);
     const second = await wrapped(req({ "Idempotency-Key": "k1" }), undefined);
@@ -52,7 +69,22 @@ describe("withRoute", () => {
     expect(handler).toHaveBeenCalledTimes(1);
     expect(second.status).toBe(first.status);
     expect(await second.json()).toEqual(await first.clone().json());
+    expect(second.headers.get("Content-Type")).toBe(first.headers.get("Content-Type"));
     expect(second.headers.get("Idempotency-Replayed")).toBe("true");
+  });
+
+  it("replays a non-JSON (plain text) body byte-for-byte, not double-JSON-encoded", async () => {
+    const store = new InMemoryIdempotencyStore();
+    const handler = vi.fn(
+      async () => new Response("hello", { status: 200, headers: { "Content-Type": "text/plain" } })
+    );
+    const wrapped = withRoute(handler, { store, ...UNSCOPED });
+
+    await wrapped(req({ "Idempotency-Key": "k1" }), undefined);
+    const replay = await wrapped(req({ "Idempotency-Key": "k1" }), undefined);
+
+    expect(await replay.text()).toBe("hello"); // NOT '"hello"'
+    expect(replay.headers.get("Content-Type")).toBe("text/plain");
   });
 
   it("returns 409 for a concurrent request with the same key still in flight", async () => {
@@ -65,7 +97,7 @@ describe("withRoute", () => {
       await gate;
       return Response.json({ ok: true });
     });
-    const wrapped = withRoute(handler, { store });
+    const wrapped = withRoute(handler, { store, ...UNSCOPED });
 
     const inFlight = wrapped(req({ "Idempotency-Key": "k1" }), undefined);
     await new Promise((r) => setTimeout(r, 0)); // let the first request claim
@@ -87,7 +119,7 @@ describe("withRoute", () => {
       if (attempt === 1) throw new Error("boom");
       return Response.json({ ok: true });
     });
-    const wrapped = withRoute(handler, { store });
+    const wrapped = withRoute(handler, { store, ...UNSCOPED });
 
     await expect(wrapped(req({ "Idempotency-Key": "k1" }), undefined)).rejects.toThrow("boom");
     const retry = await wrapped(req({ "Idempotency-Key": "k1" }), undefined);
@@ -104,6 +136,7 @@ describe("withRoute", () => {
     });
     const wrapped = withRoute(handler, {
       store,
+      namespace: "orders.create",
       getScope: async (r) => r.headers.get("x-tenant") ?? "unscoped",
     });
 
@@ -113,5 +146,50 @@ describe("withRoute", () => {
     expect(await resA.json()).toEqual({ processedFor: "tenant-a" });
     expect(await resB.json()).toEqual({ processedFor: "tenant-b" }); // NOT a replay of tenant-a's response
     expect(handler).toHaveBeenCalledTimes(2);
+  });
+
+  it("namespaces by route — same tenant + same key, different routes, do not collide", async () => {
+    const store = new InMemoryIdempotencyStore();
+    const ordersHandler = vi.fn(async () => Response.json({ from: "orders" }, { status: 201 }));
+    const refundsHandler = vi.fn(async () => Response.json({ from: "refunds" }, { status: 201 }));
+
+    const ordersRoute = withRoute(ordersHandler, {
+      store,
+      namespace: "orders.create",
+      getScope: async () => "tenant-a",
+    });
+    const refundsRoute = withRoute(refundsHandler, {
+      store,
+      namespace: "refunds.create",
+      getScope: async () => "tenant-a",
+    });
+
+    // Same tenant, same client-chosen Idempotency-Key, two different
+    // endpoints — without namespacing, refundsRoute would incorrectly
+    // replay ordersRoute's response instead of running at all.
+    const orderRes = await ordersRoute(req({ "Idempotency-Key": "retry-1" }), undefined);
+    const refundRes = await refundsRoute(req({ "Idempotency-Key": "retry-1" }), undefined);
+
+    expect(await orderRes.json()).toEqual({ from: "orders" });
+    expect(await refundRes.json()).toEqual({ from: "refunds" });
+    expect(ordersHandler).toHaveBeenCalledTimes(1);
+    expect(refundsHandler).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns 500 idempotency_claim_lost (not a silent 2xx) when the claim is reclaimed before complete() can record it", async () => {
+    const scriptedStore: IdempotencyStore = {
+      claim: async () => ({ kind: "own", token: "token-1" }) as ClaimOutcome,
+      complete: async () => false, // simulates "reclaimed while handler ran"
+      release: async () => {},
+      extend: async () => true,
+    };
+    const handler = vi.fn(async () => Response.json({ orderId: "order-1" }, { status: 201 }));
+    const wrapped = withRoute(handler, { store: scriptedStore, ...UNSCOPED });
+
+    const res = await wrapped(req({ "Idempotency-Key": "k1" }), undefined);
+
+    expect(res.status).toBe(500);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe("idempotency_claim_lost");
   });
 });

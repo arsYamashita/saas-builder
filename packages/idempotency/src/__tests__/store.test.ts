@@ -82,11 +82,54 @@ describe("InMemoryIdempotencyStore", () => {
 
     // The original (now-abandoned) caller finally finishes and tries to
     // complete with its stale token — must not overwrite the new owner's
-    // in-flight claim.
-    await store.complete("tenant-1", "k1", 200, { from: "stale-caller" }, staleToken);
+    // in-flight claim, and must report that via its return value so the
+    // caller (withIdempotency) can detect claim loss.
+    const applied = await store.complete("tenant-1", "k1", 200, { from: "stale-caller" }, staleToken);
+    expect(applied).toBe(false);
 
     const stillOwnedByNewClaimant = await store.claim("tenant-1", "k1", 60_000);
     expect(stillOwnedByNewClaimant.kind).toBe("in_progress");
+  });
+
+  it("complete() returns true when the token still matches", async () => {
+    const store = new InMemoryIdempotencyStore();
+    const claim = await store.claim("tenant-1", "k1", 60_000);
+    const applied = await store.complete("tenant-1", "k1", 200, { ok: true }, (claim as { token: string }).token);
+    expect(applied).toBe(true);
+  });
+
+  it("extend() renews the TTL only while the token still owns the claim", async () => {
+    const store = new InMemoryIdempotencyStore();
+    const claim = await store.claim("tenant-1", "k1", 1_000);
+    const token = (claim as { token: string }).token;
+
+    vi.advanceTimersByTime(900);
+    expect(await store.extend("tenant-1", "k1", token, 5_000)).toBe(true);
+
+    // Without the extension this would have expired at +1000ms.
+    vi.advanceTimersByTime(1_500); // total elapsed: 2400ms
+    const stillOwned = await store.claim("tenant-1", "k1", 60_000);
+    expect(stillOwned.kind).toBe("in_progress"); // still held, not reclaimable
+  });
+
+  it("extend() returns false for a stale token that no longer owns the claim", async () => {
+    const store = new InMemoryIdempotencyStore();
+    const claim = await store.claim("tenant-1", "k1", 1_000);
+    const staleToken = (claim as { token: string }).token;
+
+    vi.advanceTimersByTime(1_001);
+    await store.claim("tenant-1", "k1", 60_000); // someone else reclaims
+
+    expect(await store.extend("tenant-1", "k1", staleToken, 5_000)).toBe(false);
+  });
+
+  it("extend() returns false once the claim has been completed (nothing left to extend)", async () => {
+    const store = new InMemoryIdempotencyStore();
+    const claim = await store.claim("tenant-1", "k1", 60_000);
+    const token = (claim as { token: string }).token;
+    await store.complete("tenant-1", "k1", 200, { ok: true }, token);
+
+    expect(await store.extend("tenant-1", "k1", token, 5_000)).toBe(false);
   });
 });
 
@@ -235,5 +278,33 @@ describe("createSupabaseIdempotencyStore", () => {
 
     const retry = await store.claim("tenant-1", "k1", 60_000);
     expect(retry.kind).toBe("own");
+  });
+
+  it("complete() returns true when applied, false for a stale token", async () => {
+    const { client } = makeFakeSupabase();
+    const store = createSupabaseIdempotencyStore(client);
+    const claim = await store.claim("tenant-1", "k1", 60_000);
+    const token = (claim as { token: string }).token;
+
+    const appliedForStale = await store.complete("tenant-1", "k1", 200, { ok: true }, "wrong-token");
+    expect(appliedForStale).toBe(false);
+
+    const appliedForReal = await store.complete("tenant-1", "k1", 200, { ok: true }, token);
+    expect(appliedForReal).toBe(true);
+  });
+
+  it("extend() renews expires_at for the current token and rejects a stale one", async () => {
+    const { client, rows } = makeFakeSupabase();
+    const store = createSupabaseIdempotencyStore(client);
+    const claim = await store.claim("tenant-1", "k1", 60_000);
+    const token = (claim as { token: string }).token;
+    const originalExpiresAt = rows.get("tenant-1::k1")?.expires_at;
+
+    const extended = await store.extend("tenant-1", "k1", token, 999_999);
+    expect(extended).toBe(true);
+    expect(rows.get("tenant-1::k1")?.expires_at).not.toBe(originalExpiresAt);
+
+    const rejectedForStale = await store.extend("tenant-1", "k1", "wrong-token", 999_999);
+    expect(rejectedForStale).toBe(false);
   });
 });

@@ -15,7 +15,7 @@ export type {
   IdempotencyStore,
   RunIdempotentOptions,
 } from "./types";
-export { IdempotencyInProgressError } from "./types";
+export { IdempotencyInProgressError, IdempotencyClaimLostError } from "./types";
 
 export {
   InMemoryIdempotencyStore,
@@ -40,5 +40,6 @@ export {
   extendLock,
   withLock,
   LockContentionError,
+  LockLostError,
 } from "./lock";
 export type { RedisLike, WithLockOptions } from "./lock";

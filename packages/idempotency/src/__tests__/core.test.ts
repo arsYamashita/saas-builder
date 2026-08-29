@@ -1,7 +1,21 @@
 import { describe, it, expect, vi } from "vitest";
 import { createIdempotency } from "../core";
 import { InMemoryIdempotencyStore } from "../store";
-import { IdempotencyInProgressError } from "../types";
+import { IdempotencyClaimLostError, IdempotencyInProgressError } from "../types";
+import type { ClaimOutcome, IdempotencyStore } from "../types";
+
+/** A fully-scriptable fake `IdempotencyStore` for exercising the
+ * claim-loss paths (heartbeat-detected loss, `complete()` returning
+ * false, `complete()` throwing) that are awkward to trigger through
+ * `InMemoryIdempotencyStore`'s real timing. */
+function makeScriptedStore(overrides: Partial<IdempotencyStore> = {}): IdempotencyStore {
+  return {
+    claim: overrides.claim ?? (async () => ({ kind: "own", token: "token-1" }) as ClaimOutcome),
+    complete: overrides.complete ?? (async () => true),
+    release: overrides.release ?? (async () => {}),
+    extend: overrides.extend ?? (async () => true),
+  };
+}
 
 describe("withIdempotency", () => {
   it("runs fn exactly once for repeated calls with the same key", async () => {
@@ -74,6 +88,78 @@ describe("withIdempotency", () => {
     expect(b).toBe("tenant-b-result");
     expect(fnA).toHaveBeenCalledTimes(1);
     expect(fnB).toHaveBeenCalledTimes(1);
+  });
+
+  describe("claim loss (fn succeeded but ownership could not be durably recorded)", () => {
+    it("throws IdempotencyClaimLostError (not a silent success, not a release) when complete() reports it did not apply", async () => {
+      const store = makeScriptedStore({ complete: async () => false });
+      const idempotency = createIdempotency(store);
+
+      const err = await idempotency
+        .withIdempotency("key-1", async () => ({ orderId: "order-1" }))
+        .catch((e) => e);
+
+      expect(err).toBeInstanceOf(IdempotencyClaimLostError);
+      expect((err as IdempotencyClaimLostError).result).toEqual({ orderId: "order-1" });
+    });
+
+    it("throws IdempotencyClaimLostError (with the DB error as .cause) when complete() itself throws", async () => {
+      const dbError = new Error("connection reset");
+      const store = makeScriptedStore({
+        complete: async () => {
+          throw dbError;
+        },
+      });
+      const idempotency = createIdempotency(store);
+
+      const err = await idempotency
+        .withIdempotency("key-1", async () => "the-result")
+        .catch((e) => e);
+
+      expect(err).toBeInstanceOf(IdempotencyClaimLostError);
+      expect((err as IdempotencyClaimLostError).result).toBe("the-result");
+      expect((err as Error).cause).toBe(dbError);
+    });
+
+    it("does NOT release the claim when complete() fails (a retry must not re-run the already-succeeded fn)", async () => {
+      const release = vi.fn(async () => {});
+      const store = makeScriptedStore({ complete: async () => false, release });
+      const idempotency = createIdempotency(store);
+
+      await idempotency.withIdempotency("key-1", async () => "result").catch(() => {});
+
+      expect(release).not.toHaveBeenCalled();
+    });
+
+    it("throws IdempotencyClaimLostError when the heartbeat detects the claim was reclaimed mid-flight, even though complete() itself would report success", async () => {
+      vi.useFakeTimers();
+      try {
+        let extendCalls = 0;
+        const store = makeScriptedStore({
+          extend: async () => {
+            extendCalls += 1;
+            return false; // every heartbeat tick reports loss
+          },
+          complete: async () => true, // would otherwise look like a clean success
+        });
+        const idempotency = createIdempotency(store);
+
+        const promise = idempotency.withIdempotency(
+          "key-1",
+          async () => {
+            await vi.advanceTimersByTimeAsync(400); // outlives one heartbeat tick
+            return "result";
+          },
+          { ttlMs: 300 } // heartbeatIntervalMs defaults to 100
+        );
+
+        const err = await promise.catch((e) => e);
+        expect(err).toBeInstanceOf(IdempotencyClaimLostError);
+        expect(extendCalls).toBeGreaterThan(0);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 });
 
