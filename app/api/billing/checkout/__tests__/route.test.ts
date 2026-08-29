@@ -61,20 +61,33 @@ function makeRequest(body: Record<string, unknown>) {
 }
 
 /**
- * Builds a fake admin client that routes `.from(table)` to the right
- * fake chain: `membership_plans` (plan lookup, `.select().eq().eq().single()`)
- * and `subscriptions` (conflict guard, `.select().eq().eq().in().maybeSingle()`).
- * See [[stripe_recurring_subscription_missing_conflict_guard]].
+ * Builds a fake admin client that routes `.from(table)` to the plan-lookup
+ * chain (`membership_plans`, `.select().eq().eq().single()`) and `.rpc(fn)`
+ * to the atomic checkout-slot reservation/release functions. See
+ * [[stripe_recurring_subscription_missing_conflict_guard]] and
+ * supabase/migrations/0019_subscription_checkout_reservations.sql.
  */
 function makeAdminClient(opts?: {
   plan?: { data: unknown; error: unknown };
-  conflictingSubscription?: { id: string; status: string } | null;
+  hasConflict?: boolean;
 }) {
   const plan = opts?.plan ?? {
     data: { id: "plan-1", price_id: "price_123" },
     error: null,
   };
-  const conflictingSubscription = opts?.conflictingSubscription ?? null;
+  const hasConflict = opts?.hasConflict ?? false;
+
+  const rpc = vi.fn(async (fn: string) => {
+    if (fn === "reserve_subscription_checkout_slot") {
+      return hasConflict
+        ? { data: null, error: { message: "SUBSCRIPTION_CONFLICT" } }
+        : { data: "reservation-1", error: null };
+    }
+    if (fn === "release_subscription_checkout_slot") {
+      return { data: null, error: null };
+    }
+    throw new Error(`unexpected rpc in test: ${fn}`);
+  });
 
   return {
     from: (table: string) => {
@@ -89,24 +102,9 @@ function makeAdminClient(opts?: {
           }),
         };
       }
-      if (table === "subscriptions") {
-        return {
-          select: () => ({
-            eq: () => ({
-              eq: () => ({
-                in: () => ({
-                  maybeSingle: async () => ({
-                    data: conflictingSubscription,
-                    error: null,
-                  }),
-                }),
-              }),
-            }),
-          }),
-        };
-      }
       throw new Error(`unexpected table in test: ${table}`);
     },
+    rpc,
   } as any;
 }
 
@@ -132,12 +130,8 @@ describe("POST /api/billing/checkout", () => {
     mockSessionsCreate.mockResolvedValue({ url: "https://stripe.test/session" });
   });
 
-  it("returns 409 without calling Stripe when the user already has an active subscription for the tenant (conflict guard)", async () => {
-    mockCreateAdminClient.mockReturnValue(
-      makeAdminClient({
-        conflictingSubscription: { id: "sub-row-1", status: "active" },
-      })
-    );
+  it("returns 409 without calling Stripe when the reservation RPC reports a conflict (existing subscription OR a concurrent in-flight reservation)", async () => {
+    mockCreateAdminClient.mockReturnValue(makeAdminClient({ hasConflict: true }));
 
     const res = await POST(
       makeRequest({ membership_plan_id: "plan-1", attempt_id: "attempt-abc" })
@@ -147,17 +141,31 @@ describe("POST /api/billing/checkout", () => {
     expect(mockSessionsCreate).not.toHaveBeenCalled();
   });
 
-  it("returns 409 without calling Stripe when the user already has a trialing subscription for the tenant", async () => {
-    mockCreateAdminClient.mockReturnValue(
-      makeAdminClient({
-        conflictingSubscription: { id: "sub-row-2", status: "trialing" },
-      })
+  it("reserves the checkout slot via the atomic RPC before calling Stripe (closes the TOCTOU race a plain SELECT check has)", async () => {
+    const client = makeAdminClient();
+    mockCreateAdminClient.mockReturnValue(client);
+
+    await POST(makeRequest({ membership_plan_id: "plan-1", attempt_id: "attempt-abc" }));
+
+    expect(client.rpc).toHaveBeenCalledWith(
+      "reserve_subscription_checkout_slot",
+      expect.objectContaining({ p_tenant_id: "tenant-1", p_user_id: "user-1" })
+    );
+  });
+
+  it("releases the reservation when Stripe Checkout Session creation fails, instead of blocking the user for the full TTL", async () => {
+    const client = makeAdminClient();
+    mockCreateAdminClient.mockReturnValue(client);
+    mockSessionsCreate.mockRejectedValue(new Error("stripe down"));
+
+    const res = await POST(
+      makeRequest({ membership_plan_id: "plan-1", attempt_id: "attempt-abc" })
     );
 
-    const res = await POST(makeRequest({ membership_plan_id: "plan-1" }));
-
-    expect(res.status).toBe(409);
-    expect(mockSessionsCreate).not.toHaveBeenCalled();
+    expect(res.status).toBe(500);
+    expect(client.rpc).toHaveBeenCalledWith("release_subscription_checkout_slot", {
+      p_reservation_id: "reservation-1",
+    });
   });
 
   it("passes an idempotencyKey scoped to user + plan + attempt_id", async () => {

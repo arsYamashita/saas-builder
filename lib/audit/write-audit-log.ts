@@ -64,6 +64,26 @@ function extractErrorMessage(error: unknown): string {
 }
 
 /**
+ * Runs a Supabase insert and normalizes BOTH failure shapes into one
+ * `{ error }` result: a resolved `{ error }` (the normal Supabase failure
+ * shape) AND a thrown exception (network failure, client-side exception,
+ * etc. — Supabase-js does throw in some failure modes, not just resolve
+ * with `{ error }`). Without this, a thrown insert bypasses every
+ * fail-recorded/fail-closed branch below entirely (Codex review finding,
+ * instruction 084 second round) — the whole point of this file is that
+ * NO failure shape of the write is allowed to escape unhandled.
+ */
+async function safeInsert(
+  insert: () => PromiseLike<{ error: { message: string } | null }>
+): Promise<{ error: { message: string } | null }> {
+  try {
+    return await insert();
+  } catch (thrown) {
+    return { error: { message: extractErrorMessage(thrown) } };
+  }
+}
+
+/**
  * Writes a row to `audit_logs`. On failure, the behavior depends on
  * `options.onFailure` (default `"fail-recorded"`):
  *
@@ -96,14 +116,36 @@ function extractErrorMessage(error: unknown): string {
  * |----------------------------------------------------|---------------|-----|
  * | membership-plans POST (create)                     | fail-recorded | Non-destructive create; blocking plan creation on an audit hiccup is a worse outage than a delayed trail. |
  * | membership-plans/[planId] PATCH (update)            | fail-recorded | Same — non-destructive, reversible via another update. |
- * | membership-plans/[planId] DELETE                    | fail-closed   | Destructive/irreversible — "deleted with no audit trail" is unacceptable; the delete itself must fail. |
+ * | membership-plans/[planId] DELETE                    | fail-recorded | See "Why deletes are fail-recorded, not fail-closed" below. |
  * | content POST (create)                               | fail-recorded | Non-destructive create. |
  * | content/[contentId] PATCH (update)                  | fail-recorded | Non-destructive, reversible. |
- * | content/[contentId] DELETE                          | fail-closed   | Destructive/irreversible, same reasoning as plan delete. |
+ * | content/[contentId] DELETE                          | fail-recorded | Same reasoning as plan delete, below. |
+ *
+ * ### Why deletes are fail-recorded, not fail-closed (Codex review finding,
+ * instruction 084 second round)
+ *
+ * Both DELETE routes commit the row deletion to the DB BEFORE calling
+ * `writeAuditLog()` — this app has no atomic delete+audit RPC (tracked
+ * separately as follow-up work, see the KB note below). Given that
+ * ordering, fail-closed buys nothing here: the destructive action has
+ * ALREADY happened by the time the audit write runs, so throwing doesn't
+ * prevent it — it just turns a successful delete into a 500 response
+ * while ALSO skipping the dead-letter insert (fail-closed intentionally
+ * makes no dead-letter attempt). That is strictly worse than
+ * fail-recorded, which captures the deleted row's `beforeJson` in
+ * `audit_log_failures` even when the primary audit_logs write fails — the
+ * one case where a durable trail is more valuable than ever, since the
+ * data itself is already gone. Fail-closed is reserved for operations
+ * where audit failure can still be made to block the effect (e.g. a
+ * future atomic delete+audit RPC, or a pre-commit permission/billing
+ * check) — not for "the effect already committed" cases like these.
+ * See 30_Knowledge/errors/audit_log_write_best_effort_silent_loss.md.
  *
  * If a future call site performs a billing charge or a permission/role
- * change, classify it as fail-closed too (see the instruction's own
- * default: destructive / billing / permission-changing operations).
+ * change BEFORE any external side effect commits, classify it as
+ * fail-closed (the instruction's own default for destructive / billing /
+ * permission-changing operations) — the distinction above is specifically
+ * about ordering relative to the irreversible action, not operation type.
  */
 export async function writeAuditLog(
   args: WriteAuditLogArgs,
@@ -124,7 +166,7 @@ export async function writeAuditLog(
     user_agent: args.userAgent ?? null,
   };
 
-  const { error } = await supabase.from("audit_logs").insert(row);
+  const { error } = await safeInsert(() => supabase.from("audit_logs").insert(row));
 
   if (!error) {
     return;
@@ -154,16 +196,16 @@ export async function writeAuditLog(
   // console.error-only.
   incrementAuditLogFailure("fail-recorded");
 
-  const { error: deadLetterError } = await supabase
-    .from("audit_log_failures")
-    .insert({
+  const { error: deadLetterError } = await safeInsert(() =>
+    supabase.from("audit_log_failures").insert({
       tenant_id: args.tenantId,
       action: args.action,
       resource_type: args.resourceType,
       resource_id: args.resourceId,
       payload_json: row,
       error_message: errorMessage,
-    });
+    })
+  );
 
   if (deadLetterError) {
     // Double failure: the primary write AND the dead-letter write both

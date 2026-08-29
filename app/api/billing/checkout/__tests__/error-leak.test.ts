@@ -114,21 +114,16 @@ describe("POST /api/billing/checkout — error-leak wiring", () => {
             }),
           };
         }
-        if (table === "subscriptions") {
-          return {
-            select: () => ({
-              eq: () => ({
-                eq: () => ({
-                  in: () => ({
-                    maybeSingle: () =>
-                      Promise.resolve({ data: null, error: null }),
-                  }),
-                }),
-              }),
-            }),
-          };
-        }
         throw new Error(`unexpected table in test: ${table}`);
+      },
+      rpc: (fn: string) => {
+        if (fn === "reserve_subscription_checkout_slot") {
+          return Promise.resolve({ data: "reservation-1", error: null });
+        }
+        if (fn === "release_subscription_checkout_slot") {
+          return Promise.resolve({ data: null, error: null });
+        }
+        throw new Error(`unexpected rpc in test: ${fn}`);
       },
     } as any);
 

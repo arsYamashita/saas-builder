@@ -161,24 +161,22 @@ export async function DELETE(_req: NextRequest, { params }: Props) {
       );
     }
 
-    // Destructive/irreversible operation: fail-closed. See the
-    // classification table in lib/audit/write-audit-log.ts. Note the
-    // delete has already committed above, so a failure here still
-    // surfaces as a 500 after the fact rather than blocking the delete
-    // itself — the atomicity fix (same transaction/RPC) is tracked
-    // separately per 30_Knowledge/errors/audit_log_write_best_effort_silent_loss.md.
-    await writeAuditLog(
-      {
-        tenantId: membership.tenant_id,
-        actorUserId: user.id,
-        action: "membership_plan.delete",
-        resourceType: "membership_plan",
-        resourceId: planId,
-        beforeJson: before,
-        afterJson: null,
-      },
-      { onFailure: "fail-closed" }
-    );
+    // fail-recorded (default), NOT fail-closed: the delete already
+    // committed above, so fail-closed would only turn a successful delete
+    // into a 500 while skipping the dead-letter insert — fail-recorded
+    // instead preserves `before` in audit_log_failures, which matters more
+    // here since the row itself is now gone. See the classification table
+    // ("Why deletes are fail-recorded, not fail-closed") in
+    // lib/audit/write-audit-log.ts.
+    await writeAuditLog({
+      tenantId: membership.tenant_id,
+      actorUserId: user.id,
+      action: "membership_plan.delete",
+      resourceType: "membership_plan",
+      resourceId: planId,
+      beforeJson: before,
+      afterJson: null,
+    });
 
     return NextResponse.json({ ok: true, deletedId: planId });
   } catch (error) {

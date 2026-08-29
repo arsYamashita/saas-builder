@@ -83,6 +83,7 @@ const baseParams = {
   productName: "Pro Plan",
   productType: "membership",
   amount: 5000,
+  idempotencyKey: "billing-catalog:tenant-1:pro-plan:attempt-1",
 };
 
 describe("createBillingProductAndPrice", () => {
@@ -99,7 +100,13 @@ describe("createBillingProductAndPrice", () => {
       dbPriceRowId: "db-price-1",
     });
     expect(productsCreate).toHaveBeenCalledTimes(1);
+    expect(productsCreate).toHaveBeenCalledWith(expect.anything(), {
+      idempotencyKey: "billing-catalog:tenant-1:pro-plan:attempt-1:product",
+    });
     expect(pricesCreate).toHaveBeenCalledTimes(1);
+    expect(pricesCreate).toHaveBeenCalledWith(expect.anything(), {
+      idempotencyKey: "billing-catalog:tenant-1:pro-plan:attempt-1:price",
+    });
     expect(productInsert).toHaveBeenCalledTimes(1);
     expect(priceInsert).toHaveBeenCalledTimes(1);
     // No compensation on the happy path.
@@ -150,6 +157,37 @@ describe("createBillingProductAndPrice", () => {
     await expect(
       createBillingProductAndPrice(stripe, supabase, baseParams)
     ).rejects.toThrow(BillingCatalogWriteError);
+
+    expect(productDeleteEq).toHaveBeenCalledWith("id", "db-product-1");
+    expect(pricesUpdate).toHaveBeenCalledWith("price_123", { active: false });
+    expect(productsUpdate).toHaveBeenCalledWith("prod_123", { active: false });
+  });
+
+  it("throws and never calls Stripe when idempotencyKey is empty (mirrors createCheckoutSession's guard)", async () => {
+    const { stripe, productsCreate } = makeStripe();
+    const { supabase } = makeSupabase({});
+
+    await expect(
+      createBillingProductAndPrice(stripe, supabase, {
+        ...baseParams,
+        idempotencyKey: "",
+      })
+    ).rejects.toThrow(/idempotencyKey/i);
+    expect(productsCreate).not.toHaveBeenCalled();
+  });
+
+  it("marks the error message as an ORPHAN DB ROW when the billing_products rollback itself fails (Codex review finding: a resolved { error } must not be swallowed by a bare .catch)", async () => {
+    const { stripe, productsUpdate, pricesUpdate } = makeStripe();
+    const { supabase, productDeleteEq } = makeSupabase({
+      priceInsertResult: { data: null, error: { message: "fk violation" } },
+    });
+    // billing_products.delete().eq() resolves with an error instead of
+    // throwing — the realistic Supabase failure shape.
+    productDeleteEq.mockResolvedValue({ error: { message: "delete blocked by trigger" } });
+
+    await expect(
+      createBillingProductAndPrice(stripe, supabase, baseParams)
+    ).rejects.toThrow(/ORPHAN DB ROW/);
 
     expect(productDeleteEq).toHaveBeenCalledWith("id", "db-product-1");
     expect(pricesUpdate).toHaveBeenCalledWith("price_123", { active: false });

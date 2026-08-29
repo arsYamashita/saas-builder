@@ -31,15 +31,17 @@ const baseArgs = {
  * resolves per `deadLetterResult` (defaults to success).
  */
 function buildClient(opts: {
-  auditLogsResult: { error: { message: string } | null };
+  auditLogsResult?: { error: { message: string } | null };
+  auditLogsThrows?: Error;
   deadLetterResult?: { error: { message: string } | null };
+  deadLetterThrows?: Error;
 }) {
-  const auditLogsInsert = vi
-    .fn()
-    .mockResolvedValue({ error: opts.auditLogsResult.error });
-  const deadLetterInsert = vi
-    .fn()
-    .mockResolvedValue({ error: opts.deadLetterResult?.error ?? null });
+  const auditLogsInsert = opts.auditLogsThrows
+    ? vi.fn().mockRejectedValue(opts.auditLogsThrows)
+    : vi.fn().mockResolvedValue({ error: opts.auditLogsResult?.error ?? null });
+  const deadLetterInsert = opts.deadLetterThrows
+    ? vi.fn().mockRejectedValue(opts.deadLetterThrows)
+    : vi.fn().mockResolvedValue({ error: opts.deadLetterResult?.error ?? null });
 
   const from = vi.fn((table: string) => {
     if (table === "audit_logs") return { insert: auditLogsInsert };
@@ -113,6 +115,54 @@ describe("writeAuditLog", () => {
       await expect(writeAuditLog(baseArgs)).rejects.toThrow(AuditLogWriteError);
       expect(getAuditLogFailureMetrics()["fail-recorded-double-failure"]).toBe(1);
       expect(consoleSpy).toHaveBeenCalled();
+
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe("primary insert THROWS instead of resolving with { error } (Codex review finding)", () => {
+    it("still dead-letters and increments the metric when audit_logs.insert() throws (fail-recorded)", async () => {
+      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const { client, deadLetterInsert } = buildClient({
+        auditLogsThrows: new Error("fetch failed: network error"),
+      });
+      mockCreateAdminClient.mockReturnValue(client as any);
+
+      await expect(writeAuditLog(baseArgs)).resolves.toBeUndefined();
+
+      expect(deadLetterInsert).toHaveBeenCalledTimes(1);
+      const deadLetterRow = deadLetterInsert.mock.calls[0][0];
+      expect(deadLetterRow.error_message).toContain("network error");
+      expect(getAuditLogFailureMetrics()["fail-recorded"]).toBe(1);
+
+      consoleSpy.mockRestore();
+    });
+
+    it("still throws AuditLogWriteError immediately when audit_logs.insert() throws under fail-closed", async () => {
+      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const { client, deadLetterInsert } = buildClient({
+        auditLogsThrows: new Error("fetch failed: network error"),
+      });
+      mockCreateAdminClient.mockReturnValue(client as any);
+
+      await expect(
+        writeAuditLog(baseArgs, { onFailure: "fail-closed" })
+      ).rejects.toThrow(AuditLogWriteError);
+      expect(deadLetterInsert).not.toHaveBeenCalled();
+
+      consoleSpy.mockRestore();
+    });
+
+    it("counts a double failure when the dead-letter insert ALSO throws (not just resolves with an error)", async () => {
+      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const { client } = buildClient({
+        auditLogsThrows: new Error("network error"),
+        deadLetterThrows: new Error("dead-letter table unreachable"),
+      });
+      mockCreateAdminClient.mockReturnValue(client as any);
+
+      await expect(writeAuditLog(baseArgs)).rejects.toThrow(AuditLogWriteError);
+      expect(getAuditLogFailureMetrics()["fail-recorded-double-failure"]).toBe(1);
 
       consoleSpy.mockRestore();
     });

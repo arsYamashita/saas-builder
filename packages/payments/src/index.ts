@@ -13,9 +13,13 @@ export { verifyWebhookSignature } from "./webhook";
 export { MissingWebhookMetadataError } from "./errors";
 export {
   assertNoConflictingActiveSubscription,
+  reserveSubscriptionCheckoutSlot,
+  releaseSubscriptionCheckoutSlot,
   SubscriptionConflictError,
   CONFLICTING_SUBSCRIPTION_STATUSES,
+  DEFAULT_CHECKOUT_RESERVATION_TTL_SECONDS,
   type SubscriptionConflictCheckClient,
+  type SubscriptionReservationClient,
 } from "./subscription-guard";
 export {
   createBillingProductAndPrice,

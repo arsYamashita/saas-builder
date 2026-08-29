@@ -42,14 +42,23 @@ interface StripePriceLike {
 
 /** Minimal Stripe surface this function needs — kept decoupled from the
  * `stripe` package's own types so this module can be unit-tested with a
- * lightweight fake. */
+ * lightweight fake. `create()` takes Stripe's `requestOptions` second
+ * argument (idempotency key) — `update()` doesn't need one: setting
+ * `active: false` twice has the same effect either way, so a retried
+ * compensation call is naturally idempotent without one. */
 export interface BillingCatalogStripeClient {
   products: {
-    create(params: Record<string, unknown>): Promise<StripeProductLike>;
+    create(
+      params: Record<string, unknown>,
+      requestOptions?: { idempotencyKey?: string }
+    ): Promise<StripeProductLike>;
     update(id: string, params: Record<string, unknown>): Promise<unknown>;
   };
   prices: {
-    create(params: Record<string, unknown>): Promise<StripePriceLike>;
+    create(
+      params: Record<string, unknown>,
+      requestOptions?: { idempotencyKey?: string }
+    ): Promise<StripePriceLike>;
     update(id: string, params: Record<string, unknown>): Promise<unknown>;
   };
 }
@@ -81,6 +90,19 @@ export interface CreateBillingProductAndPriceParams {
   interval?: string;
   intervalCount?: number;
   trialDays?: number;
+  /**
+   * REQUIRED, stable per-attempt idempotency key (e.g. from
+   * `buildIdempotencyKey`) — without it, a client-side retry or network
+   * timeout on this call can create a second Stripe Product+Price pair
+   * even though the first attempt actually succeeded server-side. This
+   * function derives two distinct Stripe idempotency keys from it
+   * (`${idempotencyKey}:product` / `${idempotencyKey}:price`) — reusing
+   * the exact same key for both calls would make Stripe treat the price
+   * creation as a replay of the product creation and return the wrong
+   * object. See [[stripe_checkout_idempotency_key_missing]] (the same
+   * class of bug, applied to plan/price creation instead of checkout).
+   */
+  idempotencyKey: string;
 }
 
 async function deactivateStripeObjects(
@@ -110,31 +132,45 @@ export async function createBillingProductAndPrice(
   supabase: BillingCatalogClient,
   params: CreateBillingProductAndPriceParams
 ): Promise<{ productId: string; priceId: string; dbProductRowId: string; dbPriceRowId: string }> {
+  if (!params.idempotencyKey || !params.idempotencyKey.trim()) {
+    throw new Error(
+      "createBillingProductAndPrice requires a non-empty idempotencyKey — " +
+        "see buildIdempotencyKey."
+    );
+  }
+
   const currency = params.currency ?? "jpy";
   let stripeProduct: StripeProductLike | null = null;
   let stripePrice: StripePriceLike | null = null;
   let dbProductRowId: string | null = null;
+  let dbRollbackFailed = false;
 
   try {
-    stripeProduct = await stripe.products.create({
-      name: params.productName,
-      metadata: { tenant_id: params.tenantId },
-    });
+    stripeProduct = await stripe.products.create(
+      {
+        name: params.productName,
+        metadata: { tenant_id: params.tenantId },
+      },
+      { idempotencyKey: `${params.idempotencyKey}:product` }
+    );
 
-    stripePrice = await stripe.prices.create({
-      product: stripeProduct.id,
-      unit_amount: params.amount,
-      currency,
-      ...(params.interval
-        ? {
-            recurring: {
-              interval: params.interval,
-              interval_count: params.intervalCount ?? 1,
-              ...(params.trialDays ? { trial_period_days: params.trialDays } : {}),
-            },
-          }
-        : {}),
-    });
+    stripePrice = await stripe.prices.create(
+      {
+        product: stripeProduct.id,
+        unit_amount: params.amount,
+        currency,
+        ...(params.interval
+          ? {
+              recurring: {
+                interval: params.interval,
+                interval_count: params.intervalCount ?? 1,
+                ...(params.trialDays ? { trial_period_days: params.trialDays } : {}),
+              },
+            }
+          : {}),
+      },
+      { idempotencyKey: `${params.idempotencyKey}:price` }
+    );
 
     const { data: productRow, error: productError } = await supabase
       .from("billing_products")
@@ -181,11 +217,26 @@ export async function createBillingProductAndPrice(
       // Partial DB failure: billing_products committed but billing_prices
       // didn't. Roll back the orphaned product row rather than leaving a
       // product-with-no-price row behind.
-      await supabase
+      //
+      // Supabase's delete resolves with `{ error }` on failure — it does
+      // NOT normally reject the promise — so a bare `.catch(() => {})`
+      // silently ignores a real rollback failure and the outer catch
+      // below would then claim "rolled back" when it wasn't (Codex review
+      // finding). Check the returned `error` explicitly; also still catch
+      // a thrown rejection (network failure) for the same reason
+      // `lib/audit/write-audit-log.ts`'s `safeInsert` does.
+      const rollbackResult = await supabase
         .from("billing_products")
         .delete()
         .eq("id", productRow.id)
-        .catch(() => {});
+        .catch((thrown) => ({
+          error: {
+            message: thrown instanceof Error ? thrown.message : String(thrown),
+          },
+        }));
+      if (rollbackResult.error) {
+        dbRollbackFailed = true;
+      }
       throw priceInsertErr;
     }
 
@@ -201,10 +252,17 @@ export async function createBillingProductAndPrice(
       priceId: stripePrice?.id,
     });
 
+    const dbRowNote = dbProductRowId
+      ? dbRollbackFailed
+        ? `, FAILED to roll back billing_products row=${dbProductRowId} ` +
+          `(ORPHAN DB ROW — requires manual cleanup, check billing_products.id=${dbProductRowId})`
+        : `, rolled back billing_products row=${dbProductRowId}`
+      : "";
+
     const compensationNote = stripeProduct
       ? ` (compensated: deactivated stripe product=${stripeProduct.id}` +
         (stripePrice ? `, price=${stripePrice.id}` : "") +
-        (dbProductRowId ? `, rolled back billing_products row=${dbProductRowId}` : "") +
+        dbRowNote +
         `)`
       : "";
 

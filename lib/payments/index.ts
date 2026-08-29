@@ -25,6 +25,8 @@ export {
   verifyWebhookSignature,
   MissingWebhookMetadataError,
   assertNoConflictingActiveSubscription,
+  reserveSubscriptionCheckoutSlot,
+  releaseSubscriptionCheckoutSlot,
   SubscriptionConflictError,
   createBillingProductAndPrice,
   BillingCatalogWriteError,

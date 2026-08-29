@@ -1,9 +1,13 @@
 import { describe, it, expect, vi } from "vitest";
 import {
   assertNoConflictingActiveSubscription,
+  reserveSubscriptionCheckoutSlot,
+  releaseSubscriptionCheckoutSlot,
   SubscriptionConflictError,
   CONFLICTING_SUBSCRIPTION_STATUSES,
+  DEFAULT_CHECKOUT_RESERVATION_TTL_SECONDS,
   type SubscriptionConflictCheckClient,
+  type SubscriptionReservationClient,
 } from "../subscription-guard";
 
 // See [[stripe_recurring_subscription_missing_conflict_guard]].
@@ -114,5 +118,92 @@ describe("assertNoConflictingActiveSubscription", () => {
         userId: "user-1",
       })
     ).rejects.not.toBeInstanceOf(SubscriptionConflictError);
+  });
+});
+
+// See the 2026-08-30 Codex review of PR #60 (instruction 095): a plain
+// SELECT-then-create check has a TOCTOU race between concurrent callers.
+// These two functions close it with a DB-level atomic reservation instead.
+describe("reserveSubscriptionCheckoutSlot / releaseSubscriptionCheckoutSlot", () => {
+  function makeRpcClient(result: { data: string | null; error: { message: string } | null }) {
+    const rpc = vi.fn().mockResolvedValue(result);
+    return { client: { rpc } as unknown as SubscriptionReservationClient, rpc };
+  }
+
+  it("returns the reservation id on success, using the default TTL", async () => {
+    const { client, rpc } = makeRpcClient({ data: "reservation-1", error: null });
+
+    const result = await reserveSubscriptionCheckoutSlot(client, {
+      tenantId: "tenant-1",
+      userId: "user-1",
+    });
+
+    expect(result).toEqual({ reservationId: "reservation-1" });
+    expect(rpc).toHaveBeenCalledWith("reserve_subscription_checkout_slot", {
+      p_tenant_id: "tenant-1",
+      p_user_id: "user-1",
+      p_ttl_seconds: DEFAULT_CHECKOUT_RESERVATION_TTL_SECONDS,
+    });
+  });
+
+  it("passes a custom ttlSeconds through to the RPC", async () => {
+    const { client, rpc } = makeRpcClient({ data: "reservation-1", error: null });
+
+    await reserveSubscriptionCheckoutSlot(client, {
+      tenantId: "tenant-1",
+      userId: "user-1",
+      ttlSeconds: 60,
+    });
+
+    expect(rpc).toHaveBeenCalledWith(
+      "reserve_subscription_checkout_slot",
+      expect.objectContaining({ p_ttl_seconds: 60 })
+    );
+  });
+
+  it("throws SubscriptionConflictError when the DB function raises SUBSCRIPTION_CONFLICT (existing subscription OR a concurrent in-flight reservation)", async () => {
+    const { client } = makeRpcClient({
+      data: null,
+      error: { message: 'SUBSCRIPTION_CONFLICT' },
+    });
+
+    await expect(
+      reserveSubscriptionCheckoutSlot(client, { tenantId: "tenant-1", userId: "user-1" })
+    ).rejects.toThrow(SubscriptionConflictError);
+  });
+
+  it("throws a plain Error (not SubscriptionConflictError) for any other RPC failure", async () => {
+    const { client } = makeRpcClient({
+      data: null,
+      error: { message: "connection reset" },
+    });
+
+    await expect(
+      reserveSubscriptionCheckoutSlot(client, { tenantId: "tenant-1", userId: "user-1" })
+    ).rejects.toThrow(/connection reset/);
+    await expect(
+      reserveSubscriptionCheckoutSlot(client, { tenantId: "tenant-1", userId: "user-1" })
+    ).rejects.not.toBeInstanceOf(SubscriptionConflictError);
+  });
+
+  it("releaseSubscriptionCheckoutSlot calls the release RPC with the reservation id", async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: null, error: null });
+    const client = { rpc } as unknown as SubscriptionReservationClient;
+
+    const result = await releaseSubscriptionCheckoutSlot(client, "reservation-1");
+
+    expect(result).toEqual({ released: true });
+    expect(rpc).toHaveBeenCalledWith("release_subscription_checkout_slot", {
+      p_reservation_id: "reservation-1",
+    });
+  });
+
+  it("releaseSubscriptionCheckoutSlot reports failure without throwing (best-effort — TTL is the fallback)", async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: null, error: { message: "timeout" } });
+    const client = { rpc } as unknown as SubscriptionReservationClient;
+
+    const result = await releaseSubscriptionCheckoutSlot(client, "reservation-1");
+
+    expect(result).toEqual({ released: false, error: "timeout" });
   });
 });

@@ -94,13 +94,21 @@ export interface SubscriptionConflictCheckClient {
  * active/trialing/past_due subscription for the given tenant. Resolves
  * silently otherwise.
  *
- * Call this BEFORE creating a new Stripe Checkout Session — it is a
- * best-effort, pre-flight business check (not itself an atomicity
- * guarantee against a race between two concurrent checkout requests; that
- * class of problem is a DB-level unique-constraint/lock concern, already
- * covered here by `stripe_subscription_id` being UNIQUE on the
- * `subscriptions` table so a genuine race still can't produce two rows for
- * the same Stripe subscription).
+ * ⚠️ This is a plain SELECT — it is NOT atomic against a race between two
+ * concurrent callers (both can read "no conflict" before either writes
+ * anything). `stripe_subscription_id` being UNIQUE on `subscriptions`
+ * does NOT close that race either: it only prevents the SAME Stripe
+ * subscription id from producing two rows, not two DIFFERENT Stripe
+ * subscriptions being created for one user (Codex review finding on PR
+ * #60, instruction 095 second round — the original version of this
+ * comment claimed otherwise; that was wrong).
+ *
+ * For any flow that goes on to create a Stripe object (Checkout Session,
+ * etc.) — i.e. anywhere this matters for real — use
+ * `reserveSubscriptionCheckoutSlot` instead, which IS atomic (backed by a
+ * DB unique constraint checked inside a single function call). Keep using
+ * this plain check only for non-money-moving reads, e.g. showing a "you
+ * already have a subscription" banner in a UI.
  */
 export async function assertNoConflictingActiveSubscription(
   supabase: SubscriptionConflictCheckClient,
@@ -129,4 +137,103 @@ export async function assertNoConflictingActiveSubscription(
       existingStatus: data.status,
     });
   }
+}
+
+/** Default reservation TTL: 30 minutes — see the trade-off note in
+ * `supabase/migrations/0019_subscription_checkout_reservations.sql`. */
+export const DEFAULT_CHECKOUT_RESERVATION_TTL_SECONDS = 1800;
+
+/** Minimal shape of the Supabase RPC surface these functions need. */
+export interface SubscriptionReservationClient {
+  rpc(
+    fn: "reserve_subscription_checkout_slot",
+    args: { p_tenant_id: string; p_user_id: string; p_ttl_seconds: number }
+  ): PromiseLike<{ data: string | null; error: { message: string } | null }>;
+  rpc(
+    fn: "release_subscription_checkout_slot",
+    args: { p_reservation_id: string }
+  ): PromiseLike<{ data: unknown; error: { message: string } | null }>;
+}
+
+function isConflictError(error: { message: string } | null): boolean {
+  return Boolean(error && error.message.includes("SUBSCRIPTION_CONFLICT"));
+}
+
+/**
+ * Atomically reserves a checkout slot for (tenantId, userId) via the
+ * `reserve_subscription_checkout_slot` Postgres function — a single RPC
+ * call is a single implicit transaction, so the function's own
+ * exists-check + insert-with-UNIQUE-constraint closes the TOCTOU race that
+ * `assertNoConflictingActiveSubscription` alone cannot (see its doc
+ * comment). Returns the reservation id on success; call
+ * `releaseSubscriptionCheckoutSlot` with it if the checkout attempt fails
+ * after reserving (so the user isn't blocked for the full TTL).
+ *
+ * Throws `SubscriptionConflictError` if the user already has a
+ * conflicting subscription OR another reservation is still in flight for
+ * the same tenant+user (both cases the DB function raises as
+ * `SUBSCRIPTION_CONFLICT`; this function can't and doesn't need to tell
+ * them apart from the caller's side — either way, the correct response is
+ * HTTP 409, don't start a new Checkout Session).
+ */
+export async function reserveSubscriptionCheckoutSlot(
+  supabase: SubscriptionReservationClient,
+  params: {
+    tenantId: string;
+    userId: string;
+    ttlSeconds?: number;
+  }
+): Promise<{ reservationId: string }> {
+  const { data, error } = await supabase.rpc(
+    "reserve_subscription_checkout_slot",
+    {
+      p_tenant_id: params.tenantId,
+      p_user_id: params.userId,
+      p_ttl_seconds: params.ttlSeconds ?? DEFAULT_CHECKOUT_RESERVATION_TTL_SECONDS,
+    }
+  );
+
+  if (error) {
+    if (isConflictError(error)) {
+      throw new SubscriptionConflictError({
+        tenantId: params.tenantId,
+        userId: params.userId,
+        existingSubscriptionId: "unknown", // the DB function doesn't return which row conflicted
+        existingStatus: "unknown",
+      });
+    }
+    throw new Error(
+      `Failed to reserve a checkout slot (tenant=${params.tenantId}, ` +
+        `user=${params.userId}): ${error.message}`
+    );
+  }
+
+  if (!data) {
+    throw new Error(
+      `reserve_subscription_checkout_slot returned no reservation id ` +
+        `(tenant=${params.tenantId}, user=${params.userId})`
+    );
+  }
+
+  return { reservationId: data };
+}
+
+/**
+ * Releases a reservation early. Best-effort: failures are swallowed
+ * (logged by the caller if desired) since the reservation will also
+ * self-expire via its TTL — a failed release just means the user waits
+ * out the TTL instead of being able to retry immediately.
+ */
+export async function releaseSubscriptionCheckoutSlot(
+  supabase: SubscriptionReservationClient,
+  reservationId: string
+): Promise<{ released: boolean; error?: string }> {
+  const { error } = await supabase.rpc("release_subscription_checkout_slot", {
+    p_reservation_id: reservationId,
+  });
+
+  if (error) {
+    return { released: false, error: error.message };
+  }
+  return { released: true };
 }
