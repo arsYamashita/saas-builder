@@ -192,4 +192,74 @@ describe("withRoute", () => {
     const body = (await res.json()) as { error: string };
     expect(body.error).toBe("idempotency_claim_lost");
   });
+
+  it("does NOT release the claim when complete() throws after handler succeeded (a retry must not re-run handler)", async () => {
+    const release = vi.fn(async () => {});
+    const scriptedStore: IdempotencyStore = {
+      claim: async () => ({ kind: "own", token: "token-1" }) as ClaimOutcome,
+      complete: async () => {
+        throw new Error("DB outage");
+      },
+      release,
+      extend: async () => true,
+    };
+    const handler = vi.fn(async () => Response.json({ orderId: "order-1" }, { status: 201 }));
+    const wrapped = withRoute(handler, { store: scriptedStore, ...UNSCOPED });
+
+    const res = await wrapped(req({ "Idempotency-Key": "k1" }), undefined);
+
+    expect(res.status).toBe(500);
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(release).not.toHaveBeenCalled();
+  });
+
+  it("heartbeats the claim while a slow handler runs, so a concurrent retry sees in_progress instead of reclaiming mid-flight", async () => {
+    vi.useFakeTimers();
+    try {
+      const store = new InMemoryIdempotencyStore();
+      let concurrentStatus: number | undefined;
+      let wrapped!: ReturnType<typeof withRoute>;
+      const handler = vi.fn(async () => {
+        // Outlives the original ttlMs (300ms) — without a working
+        // heartbeat this claim would be reclaimable by the time this
+        // concurrent request runs.
+        await vi.advanceTimersByTimeAsync(400);
+        const concurrent = await wrapped(req({ "Idempotency-Key": "k1" }), undefined);
+        concurrentStatus = concurrent.status;
+        return Response.json({ ok: true });
+      });
+      wrapped = withRoute(handler, {
+        store,
+        getScope: async () => "system",
+        namespace: "slow-route",
+        ttlMs: 300,
+      });
+
+      await wrapped(req({ "Idempotency-Key": "k1" }), undefined);
+
+      expect(concurrentStatus).toBe(409);
+      expect(handler).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("encodes scope+namespace collision-resistantly — a ':'-containing tenant scope does not collide with a different namespace split", async () => {
+    const store = new InMemoryIdempotencyStore();
+    const handlerA = vi.fn(async () => Response.json({ from: "A" }, { status: 201 }));
+    const handlerB = vi.fn(async () => Response.json({ from: "B" }, { status: 201 }));
+
+    // callerScope="a:b", namespace="c"  vs  callerScope="a", namespace="b:c"
+    // — a naive `${scope}:${namespace}` template produces "a:b:c" for BOTH.
+    const routeA = withRoute(handlerA, { store, getScope: async () => "a:b", namespace: "c" });
+    const routeB = withRoute(handlerB, { store, getScope: async () => "a", namespace: "b:c" });
+
+    const resA = await routeA(req({ "Idempotency-Key": "k1" }), undefined);
+    const resB = await routeB(req({ "Idempotency-Key": "k1" }), undefined);
+
+    expect(await resA.json()).toEqual({ from: "A" });
+    expect(await resB.json()).toEqual({ from: "B" }); // NOT a replay of routeA's response
+    expect(handlerA).toHaveBeenCalledTimes(1);
+    expect(handlerB).toHaveBeenCalledTimes(1);
+  });
 });

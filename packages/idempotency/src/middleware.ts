@@ -1,5 +1,6 @@
 import type { IdempotencyStore } from "./types";
 import { DEFAULT_TTL_MS } from "./core";
+import { startHeartbeat } from "./heartbeat";
 
 /** App Router Route Handler shape: `(req, ctx?) => Promise<Response>`. */
 export type RouteHandler<Ctx = unknown> = (
@@ -41,6 +42,9 @@ export interface WithRouteOptions<Ctx = unknown> {
   namespace: string;
   /** Claim TTL — see `RunIdempotentOptions.ttlMs`. Default 5 minutes. */
   ttlMs?: number;
+  /** How often the heartbeat renews the claim while `handler` runs.
+   * Default: `ttlMs / 3`. */
+  heartbeatIntervalMs?: number;
   /** When `false`, requests without the header are passed straight
    * through to `handler` unguarded (useful for routes where idempotency
    * is opt-in). Default `true`: a missing header is rejected with 400,
@@ -79,6 +83,22 @@ interface StoredResponse {
 }
 
 /**
+ * Combines `callerScope` and `namespace` into one stored `scope` value
+ * unambiguously (Codex review gpt-5.6-sol, 2026-08-30 round 2 Medium): a
+ * plain `` `${callerScope}:${namespace}` `` template can collide —
+ * `callerScope="a:b", namespace="c"` and `callerScope="a", namespace="b:c"`
+ * both produce `"a:b:c"` — if either value happens to contain the `:`
+ * separator (a tenant slug is not guaranteed not to). Length-prefixing
+ * `callerScope` (a netstring-style encoding) fixes the boundary
+ * unambiguously regardless of either value's content: the prefix says
+ * exactly how many characters belong to `callerScope`, so `namespace`
+ * can never be misread as extending it (or vice versa).
+ */
+function encodeScopeNamespace(callerScope: string, namespace: string): string {
+  return `${callerScope.length}:${callerScope}:${namespace}`;
+}
+
+/**
  * Wraps a Next.js App Router Route Handler with Idempotency-Key semantics:
  *
  *   - Missing key: 400 (unless `required: false`).
@@ -102,10 +122,30 @@ export function withRoute<Ctx = unknown>(
   const headerName = opts.headerName ?? "Idempotency-Key";
   const required = opts.required ?? true;
   const ttlMs = opts.ttlMs ?? DEFAULT_TTL_MS;
+  const heartbeatIntervalMs = opts.heartbeatIntervalMs ?? Math.max(1, Math.floor(ttlMs / 3));
   const { store, namespace } = opts;
 
   if (!namespace || !namespace.trim()) {
     throw new Error("withRoute requires a non-empty `namespace`");
+  }
+
+  function claimLostResponse(): Response {
+    // Handler DID already run (its side effects, and possibly its
+    // response, may already be visible to the world) but this package
+    // can no longer promise a retry will replay it instead of running
+    // `handler` again. Surface that distinctly rather than silently
+    // returning as if everything is now safely recorded — see
+    // IdempotencyClaimLostError's rationale in core.ts (mirrored here
+    // since withRoute doesn't go through withIdempotency directly).
+    return jsonResponse(
+      {
+        error: "idempotency_claim_lost",
+        message:
+          "The request completed, but its result could not be durably recorded for replay " +
+          "(the idempotency claim was lost while processing). Do not blindly retry.",
+      },
+      500
+    );
   }
 
   return async (req: Request, ctx: Ctx): Promise<Response> => {
@@ -128,7 +168,7 @@ export function withRoute<Ctx = unknown>(
     // scope isolates tenants from each other, namespace isolates routes
     // from each other WITHIN a tenant (see WithRouteOptions doc on both).
     const callerScope = await opts.getScope(req, ctx);
-    const scope = `${callerScope}:${namespace}`;
+    const scope = encodeScopeNamespace(callerScope, namespace);
 
     const claim = await store.claim(scope, key, ttlMs);
 
@@ -154,38 +194,63 @@ export function withRoute<Ctx = unknown>(
     }
 
     // claim.kind === "own"
+    const { token } = claim;
+
+    // Heartbeat: renew the claim's TTL for as long as `handler` is
+    // running (mirrors withIdempotency/withLock — see [[redis_nx_lock_ttl_too_short]]).
+    // An earlier revision had no heartbeat at all here, so a `handler`
+    // that ran longer than `ttlMs` could have its claim reclaimed by a
+    // concurrent retry mid-flight with nothing detecting it (Codex review
+    // gpt-5.6-sol, 2026-08-30 round 2 High).
+    let claimLost = false;
+    const heartbeat = startHeartbeat(heartbeatIntervalMs, async () => {
+      const stillOwned = await store.extend(scope, key, token, ttlMs);
+      if (!stillOwned) claimLost = true;
+    });
+
+    let response: Response;
     try {
-      const response = await handler(req, ctx);
-      const snapshot = response.clone();
-      const bodyText = await snapshot.text();
-      const stored: StoredResponse = {
-        bodyText,
-        contentType: response.headers.get("Content-Type"),
-      };
-      const applied = await store.complete(scope, key, response.status, stored, claim.token);
-      if (!applied) {
-        // Our claim was reclaimed while `handler` was running (TTL
-        // lapsed under us) — `handler` DID already run and its response
-        // is about to be returned to THIS caller, but this package can
-        // no longer promise a retry will replay it instead of running
-        // `handler` again. Surface that distinctly rather than silently
-        // returning as if everything is now safely recorded — see
-        // IdempotencyClaimLostError's rationale in core.ts (mirrored here
-        // since withRoute doesn't go through withIdempotency directly).
-        return jsonResponse(
-          {
-            error: "idempotency_claim_lost",
-            message:
-              "The request completed, but its result could not be durably recorded for replay " +
-              "(the idempotency claim was reclaimed while processing). Do not blindly retry.",
-          },
-          500
-        );
-      }
-      return response;
+      response = await handler(req, ctx);
     } catch (err) {
-      await store.release(scope, key, claim.token);
+      // `handler` itself failed — nothing it did needs protecting from a
+      // retry, so release (token-guarded — a no-op if we'd already lost
+      // the claim) so a genuine retry isn't stuck behind a dead claim
+      // until TTL expiry.
+      await heartbeat.stop();
+      await store.release(scope, key, token);
       throw err;
     }
+    await heartbeat.stop();
+
+    // `handler` SUCCEEDED. Everything from here on must NEVER release the
+    // claim (Codex review gpt-5.6-sol, 2026-08-30 round 2 High: an
+    // earlier revision wrapped this whole block in the same try/catch as
+    // `handler` itself, so a failure snapshotting the response or in
+    // `store.complete()` — after `handler` had already run — incorrectly
+    // released the claim and let a retry re-run `handler`, doubling
+    // whatever it just did). A failure here can only ever be reported as
+    // "claim lost", never as "safe to retry from scratch".
+    let stored: StoredResponse;
+    try {
+      const snapshot = response.clone();
+      stored = { bodyText: await snapshot.text(), contentType: response.headers.get("Content-Type") };
+    } catch {
+      return claimLostResponse();
+    }
+
+    if (claimLost) {
+      return claimLostResponse();
+    }
+
+    let applied: boolean;
+    try {
+      applied = await store.complete(scope, key, response.status, stored, token);
+    } catch {
+      return claimLostResponse();
+    }
+    if (!applied) {
+      return claimLostResponse();
+    }
+    return response;
   };
 }

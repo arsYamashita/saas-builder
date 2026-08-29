@@ -1,5 +1,6 @@
 import { IdempotencyClaimLostError, IdempotencyInProgressError } from "./types";
 import type { IdempotencyStore, RunIdempotentOptions } from "./types";
+import { startHeartbeat } from "./heartbeat";
 
 export const DEFAULT_SCOPE = "system";
 /** Default claim TTL: how long a claim is considered "still legitimately
@@ -112,42 +113,43 @@ export function createIdempotency(
     // Heartbeat: keep renewing the claim's TTL for as long as fn is
     // running, mirroring lock.ts's withLock. `claimLost` is set the
     // moment a renewal is confirmed to have failed (token no longer
-    // matches) — checked after fn settles, since we cannot forcibly
-    // cancel an already-running fn (same limitation documented in
-    // lock.ts).
+    // matches). `store.complete()` below (token-guarded) is the actual
+    // final ownership fence regardless of what the heartbeat observed —
+    // `claimLost` only lets us skip straight to `IdempotencyClaimLostError`
+    // without bothering to call `complete()` at all when we already know
+    // it would report `false`. `heartbeat.stop()` (not a bare
+    // `clearInterval`) waits for any in-flight renewal to settle before
+    // this function reads `claimLost`, closing the race Codex review
+    // gpt-5.6-sol (2026-08-30 round 2) found in the sibling `withLock`
+    // implementation this mirrors: `clearInterval` alone only stops
+    // FUTURE ticks, not one already in flight, so a lagging renewal could
+    // otherwise resolve `false` moments after we'd already decided
+    // `claimLost` was still `false`.
     let claimLost = false;
-    const heartbeat = setInterval(() => {
-      store.extend(scope, key, token, ttlMs).then(
-        (stillOwned) => {
-          if (!stillOwned) claimLost = true;
-        },
-        () => {
-          // A failed renewal attempt (e.g. transient DB error) is NOT
-          // itself proof of claim loss — unlike a confirmed `false`
-          // return, an error means "unknown", so it is deliberately not
-          // treated as `claimLost = true` here (that would produce false
-          // positives, throwing IdempotencyClaimLostError for successful
-          // runs on every transient hiccup). A genuinely lost claim will
-          // be caught by a subsequent heartbeat tick or by the final
-          // `store.complete()` check below.
-        }
-      );
-    }, heartbeatIntervalMs);
-    const maybeUnref = (heartbeat as unknown as { unref?: () => void }).unref;
-    if (typeof maybeUnref === "function") maybeUnref.call(heartbeat);
+    const heartbeat = startHeartbeat(heartbeatIntervalMs, async () => {
+      const stillOwned = await store.extend(scope, key, token, ttlMs);
+      if (!stillOwned) claimLost = true;
+      // A rejected extend() call (e.g. transient DB error) is NOT itself
+      // proof of claim loss — an error means "unknown", so it is
+      // deliberately not treated as `claimLost = true` here (that would
+      // produce false positives, throwing IdempotencyClaimLostError for
+      // successful runs on every transient hiccup). A genuinely lost
+      // claim will be caught by a subsequent heartbeat tick or by the
+      // final `store.complete()` check below.
+    });
 
     let result: T;
     try {
       result = await fn();
     } catch (err) {
-      clearInterval(heartbeat);
+      await heartbeat.stop();
       // fn itself failed — nothing to protect, safe (and necessary) to
       // release so a genuine retry can attempt the side effect again.
       // Token-guarded, so a no-op if we'd already lost the claim.
       await store.release(scope, key, token);
       throw err;
     }
-    clearInterval(heartbeat);
+    await heartbeat.stop();
 
     // fn succeeded. Record completion — but if the heartbeat already
     // detected we'd lost the claim, don't bother; either way, a

@@ -19,6 +19,8 @@
  * still detected and reclaimed within a bounded time rather than never.
  */
 
+import { startHeartbeat } from "./heartbeat";
+
 export interface RedisLike {
   set(
     key: string,
@@ -197,43 +199,36 @@ export async function withLock<T>(
   let lost = false;
   const abortController = new AbortController();
 
-  const heartbeat = setInterval(() => {
-    extendLock(redis, key, token, ttlMs).then(
-      (stillHeld) => {
-        if (!stillHeld) {
-          lost = true;
-          abortController.abort(new LockLostError(key));
-        }
-      },
-      () => {
-        // A failed/erroring renewal attempt (transient Redis error) is
-        // NOT itself proof of loss — unlike a confirmed `false` return —
-        // so it deliberately does not set `lost` (that would produce
-        // false-positive LockLostError throws on every transient
-        // hiccup). A genuine loss will be caught by a subsequent
-        // heartbeat tick.
-      }
-    );
-  }, heartbeatIntervalMs);
-  // Node-specific: don't let the heartbeat keep the process alive on its
-  // own (no-op / unsupported in browser and Deno, guarded defensively).
-  const maybeUnref = (heartbeat as unknown as { unref?: () => void }).unref;
-  if (typeof maybeUnref === "function") {
-    maybeUnref.call(heartbeat);
-  }
+  const heartbeat = startHeartbeat(heartbeatIntervalMs, async () => {
+    const stillHeld = await extendLock(redis, key, token, ttlMs);
+    if (!stillHeld) {
+      lost = true;
+      abortController.abort(new LockLostError(key));
+    }
+    // A rejected extendLock() call (transient Redis error) is NOT itself
+    // proof of loss — unlike a confirmed `false` return — so it
+    // deliberately does not set `lost` here (that would produce
+    // false-positive LockLostError throws on every transient hiccup); a
+    // genuine loss will be caught by a subsequent heartbeat tick.
+  });
 
   let result: T;
   try {
     result = await fn(abortController.signal);
   } catch (err) {
-    clearInterval(heartbeat);
+    // `heartbeat.stop()` awaits any tick already in flight before this
+    // point checks `lost` — without that, a tick that started before
+    // `fn` settled but resolves after could set `lost = true` too late
+    // for anyone to observe (Codex review gpt-5.6-sol, 2026-08-30 round 2
+    // High).
+    await heartbeat.stop();
     await releaseLock(redis, key, token);
     if (lost) {
       throw new LockLostError(key, { cause: err });
     }
     throw err;
   }
-  clearInterval(heartbeat);
+  await heartbeat.stop();
   await releaseLock(redis, key, token);
   if (lost) {
     throw new LockLostError(key);
