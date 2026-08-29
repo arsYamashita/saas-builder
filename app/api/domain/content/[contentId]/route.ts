@@ -165,15 +165,24 @@ export async function DELETE(_req: NextRequest, { params }: Props) {
       );
     }
 
-    await writeAuditLog({
-      tenantId: membership.tenant_id,
-      actorUserId: user.id,
-      action: "content.delete",
-      resourceType: "content",
-      resourceId: contentId,
-      beforeJson: before,
-      afterJson: null,
-    });
+    // Destructive/irreversible operation: fail-closed. See the
+    // classification table in lib/audit/write-audit-log.ts. Note the
+    // delete has already committed above, so a failure here still
+    // surfaces as a 500 after the fact rather than blocking the delete
+    // itself — the atomicity fix (same transaction/RPC) is tracked
+    // separately per 30_Knowledge/errors/audit_log_write_best_effort_silent_loss.md.
+    await writeAuditLog(
+      {
+        tenantId: membership.tenant_id,
+        actorUserId: user.id,
+        action: "content.delete",
+        resourceType: "content",
+        resourceId: contentId,
+        beforeJson: before,
+        afterJson: null,
+      },
+      { onFailure: "fail-closed" }
+    );
 
     return NextResponse.json({ ok: true, deletedId: contentId });
   } catch (error) {

@@ -60,6 +60,56 @@ function makeRequest(body: Record<string, unknown>) {
   });
 }
 
+/**
+ * Builds a fake admin client that routes `.from(table)` to the right
+ * fake chain: `membership_plans` (plan lookup, `.select().eq().eq().single()`)
+ * and `subscriptions` (conflict guard, `.select().eq().eq().in().maybeSingle()`).
+ * See [[stripe_recurring_subscription_missing_conflict_guard]].
+ */
+function makeAdminClient(opts?: {
+  plan?: { data: unknown; error: unknown };
+  conflictingSubscription?: { id: string; status: string } | null;
+}) {
+  const plan = opts?.plan ?? {
+    data: { id: "plan-1", price_id: "price_123" },
+    error: null,
+  };
+  const conflictingSubscription = opts?.conflictingSubscription ?? null;
+
+  return {
+    from: (table: string) => {
+      if (table === "membership_plans") {
+        return {
+          select: () => ({
+            eq: () => ({
+              eq: () => ({
+                single: async () => plan,
+              }),
+            }),
+          }),
+        };
+      }
+      if (table === "subscriptions") {
+        return {
+          select: () => ({
+            eq: () => ({
+              eq: () => ({
+                in: () => ({
+                  maybeSingle: async () => ({
+                    data: conflictingSubscription,
+                    error: null,
+                  }),
+                }),
+              }),
+            }),
+          }),
+        };
+      }
+      throw new Error(`unexpected table in test: ${table}`);
+    },
+  } as any;
+}
+
 describe("POST /api/billing/checkout", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -77,22 +127,37 @@ describe("POST /api/billing/checkout", () => {
       visitorToken: null,
     });
 
-    mockCreateAdminClient.mockReturnValue({
-      from: () => ({
-        select: () => ({
-          eq: () => ({
-            eq: () => ({
-              single: async () => ({
-                data: { id: "plan-1", price_id: "price_123" },
-                error: null,
-              }),
-            }),
-          }),
-        }),
-      }),
-    } as any);
+    mockCreateAdminClient.mockReturnValue(makeAdminClient());
 
     mockSessionsCreate.mockResolvedValue({ url: "https://stripe.test/session" });
+  });
+
+  it("returns 409 without calling Stripe when the user already has an active subscription for the tenant (conflict guard)", async () => {
+    mockCreateAdminClient.mockReturnValue(
+      makeAdminClient({
+        conflictingSubscription: { id: "sub-row-1", status: "active" },
+      })
+    );
+
+    const res = await POST(
+      makeRequest({ membership_plan_id: "plan-1", attempt_id: "attempt-abc" })
+    );
+
+    expect(res.status).toBe(409);
+    expect(mockSessionsCreate).not.toHaveBeenCalled();
+  });
+
+  it("returns 409 without calling Stripe when the user already has a trialing subscription for the tenant", async () => {
+    mockCreateAdminClient.mockReturnValue(
+      makeAdminClient({
+        conflictingSubscription: { id: "sub-row-2", status: "trialing" },
+      })
+    );
+
+    const res = await POST(makeRequest({ membership_plan_id: "plan-1" }));
+
+    expect(res.status).toBe(409);
+    expect(mockSessionsCreate).not.toHaveBeenCalled();
   });
 
   it("passes an idempotencyKey scoped to user + plan + attempt_id", async () => {

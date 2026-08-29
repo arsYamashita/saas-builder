@@ -3,6 +3,8 @@ import {
   getStripeClient,
   buildIdempotencyKey,
   createCheckoutSession,
+  assertNoConflictingActiveSubscription,
+  SubscriptionConflictError,
 } from "@/lib/payments";
 import { createAdminClient } from "@/lib/db/supabase/admin";
 import { requireCurrentUser } from "@/lib/auth/current-user";
@@ -67,6 +69,38 @@ export async function POST(req: NextRequest) {
         { error: "price_id is not set on the plan" },
         { status: 400 }
       );
+    }
+
+    // Conflict guard: refuse to start a second Checkout Session while the
+    // user already has an active/trialing/past_due subscription for this
+    // tenant. The `stripe_subscription_id` UNIQUE constraint only dedupes
+    // an identical Stripe subscription id arriving twice (e.g. a webhook
+    // retry) — it does nothing to stop two genuinely different Stripe
+    // subscriptions being created for the same user.
+    // See [[stripe_recurring_subscription_missing_conflict_guard]].
+    try {
+      // Cast: the real SupabaseClient type is far more general (and more
+      // deeply generic) than the narrow duck-typed interface this helper
+      // needs — see the PromiseLike note in subscription-guard.ts.
+      await assertNoConflictingActiveSubscription(
+        supabase as unknown as Parameters<
+          typeof assertNoConflictingActiveSubscription
+        >[0],
+        { tenantId, userId: user.id }
+      );
+    } catch (conflictError) {
+      if (conflictError instanceof SubscriptionConflictError) {
+        return NextResponse.json(
+          {
+            error: "An active subscription already exists for this account",
+            code: "SUBSCRIPTION_CONFLICT",
+          },
+          { status: 409 }
+        );
+      }
+      return serverErrorResponse("billing/checkout", conflictError, {
+        message: "Failed to verify existing subscription status",
+      });
     }
 
     const { affiliateCode, visitorToken } = await getAffiliateTracking();
