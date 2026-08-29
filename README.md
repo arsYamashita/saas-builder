@@ -34,3 +34,7 @@ owner / admin / staff / member / affiliate_manager
 ## First Template
 
 `membership_content_affiliate` — 会員サイト / コンテンツ販売 / 月額課金 / 紹介制度
+
+## Production Deploy
+
+`vercel.json` の `git.deploymentEnabled.main: false`（PR #55, 2026-08-29〜）により、`main` への push では本番デプロイが自動起動しなくなった（Preview デプロイと CI は従来どおり自動実行される）。本番へ反映するには、マージ後に手動で以下のいずれかを実行する: (1) Vercel CLI がログイン済みの環境で `vercel --prod` を実行、または (2) Vercel ダッシュボード（`saas-builder` プロジェクト）の Deployments から対象コミットを選び "Promote to Production"。本番URL: https://saas-builder-cyan.vercel.app
