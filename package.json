@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "prebuild": "tsx scripts/prebuild-gate.ts",
     "start": "next start",
     "lint": "next lint",
     "test": "playwright test",

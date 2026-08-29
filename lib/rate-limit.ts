@@ -9,6 +9,26 @@ function nonEmpty(value: string | undefined): boolean {
   return Boolean(value && value.trim() !== "");
 }
 
+// Throttle noisy error/warn logs to at most once per this window per
+// distinct message, so an unauthenticated attacker hammering login/signup
+// during an Upstash outage cannot use our own error logging as a log-volume
+// (and CPU-for-stack-trace) amplification vector. Every denied request is
+// still enforced correctly; only the *logging* of "why" is throttled.
+const LOG_THROTTLE_MS = 30_000;
+const lastLoggedAt = new Map<string, number>();
+
+function throttledLog(
+  level: "error" | "warn",
+  dedupeKey: string,
+  ...args: unknown[]
+): void {
+  const now = Date.now();
+  const last = lastLoggedAt.get(dedupeKey);
+  if (last !== undefined && now - last < LOG_THROTTLE_MS) return;
+  lastLoggedAt.set(dedupeKey, now);
+  console[level](...args);
+}
+
 function hasUpstashConfigured(): boolean {
   return (
     nonEmpty(process.env.UPSTASH_REDIS_REST_URL) &&
@@ -159,18 +179,51 @@ export async function rateLimit(
 
   if (limiter) {
     try {
-      const { success } = await limiter.limit(key);
-      return success;
+      const result = await limiter.limit(key);
+
+      // @upstash/ratelimit's default `timeout` (5s) does NOT reject/throw on
+      // a slow/unresponsive Upstash backend — it resolves with
+      // `{ success: true, reason: "timeout" }` (fail-OPEN by the SDK's own
+      // design, since Ratelimit assumes callers want availability over
+      // strictness). That is the opposite of this module's contract: a
+      // dark/unreachable Upstash must deny in production, not silently
+      // allow every request through after a delay. Treat "timeout" (and any
+      // other soft-denied reason surfaced by the SDK, e.g. "cacheBlock")
+      // the same as an outright failure below.
+      if (result.reason === "timeout") {
+        if (isProduction()) {
+          throttledLog(
+            "error",
+            `timeout:${prefix}`,
+            `[rate-limit] Upstash rate limit check timed out for prefix "${prefix}"; failing closed ` +
+              "(denying request) instead of the SDK's default fail-open timeout behavior."
+          );
+          return false;
+        }
+        throttledLog(
+          "warn",
+          `timeout-dev:${prefix}`,
+          `[rate-limit] Upstash rate limit check timed out for prefix "${prefix}" in development; ` +
+            "falling back to in-memory."
+        );
+        return localRateLimit(key, limit, windowMs);
+      }
+
+      return result.success;
     } catch (err) {
       if (isProduction()) {
-        console.error(
-          `[rate-limit] Upstash rate limit check failed for key "${key}"; failing closed (denying request).`,
+        throttledLog(
+          "error",
+          `error:${prefix}`,
+          `[rate-limit] Upstash rate limit check failed for prefix "${prefix}"; failing closed (denying request).`,
           err
         );
         return false;
       }
-      console.warn(
-        `[rate-limit] Upstash rate limit check failed for key "${key}" in development; falling back to in-memory.`,
+      throttledLog(
+        "warn",
+        `error-dev:${prefix}`,
+        `[rate-limit] Upstash rate limit check failed for prefix "${prefix}" in development; falling back to in-memory.`,
         err
       );
       return localRateLimit(key, limit, windowMs);
@@ -178,8 +231,10 @@ export async function rateLimit(
   }
 
   if (isProduction()) {
-    console.error(
-      `[rate-limit] No Upstash-backed limiter available for key "${key}" (Upstash unset, misconfigured, or ` +
+    throttledLog(
+      "error",
+      `unavailable:${prefix}`,
+      `[rate-limit] No Upstash-backed limiter available for prefix "${prefix}" (Upstash unset, misconfigured, or ` +
         `prefix not "login"/"signup"/"generate"/"generate-template") in production; failing closed (denying ` +
         "request). Configure UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN — see scripts/preflight-env.ts."
     );
@@ -187,8 +242,10 @@ export async function rateLimit(
   }
 
   // Fallback: in-memory (dev/test only)
-  console.warn(
-    `[rate-limit] in-memory fallback (dev only, NOT for production) used for key "${key}". ` +
+  throttledLog(
+    "warn",
+    `fallback-dev:${prefix}`,
+    `[rate-limit] in-memory fallback (dev only, NOT for production) used for prefix "${prefix}". ` +
       "Configure UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN for persistent, serverless-safe rate limiting."
   );
   return localRateLimit(key, limit, windowMs);

@@ -157,6 +157,51 @@ describe("lib/rate-limit — production fail-closed", () => {
     expect(redisCtorMock).not.toHaveBeenCalled();
   });
 
+  it("denies (returns false) in production when the Upstash SDK's own timeout kicks in " +
+    "(reason: \"timeout\", success: true — the SDK's fail-OPEN default)", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("UPSTASH_REDIS_REST_URL", "https://example.upstash.io");
+    vi.stubEnv("UPSTASH_REDIS_REST_TOKEN", "token-123");
+    // This mirrors @upstash/ratelimit's actual behavior when its internal
+    // `timeout` (default 5s) elapses: it resolves (does not reject) with
+    // success: true and reason: "timeout", NOT an exception. A naive
+    // try/catch-only fail-closed implementation would treat this as a
+    // successful allow.
+    limitMock.mockResolvedValue({
+      success: true,
+      limit: 5,
+      remaining: 5,
+      reset: Date.now() + 60_000,
+      reason: "timeout",
+    });
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const { rateLimit } = await import("../rate-limit");
+
+    await expect(rateLimit("login:1.2.3.4", 5, 60_000)).resolves.toBe(false);
+    expect(errorSpy).toHaveBeenCalled();
+  });
+
+  it("falls back to in-memory in development when the Upstash SDK's own timeout kicks in", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("UPSTASH_REDIS_REST_URL", "https://example.upstash.io");
+    vi.stubEnv("UPSTASH_REDIS_REST_TOKEN", "token-123");
+    limitMock.mockResolvedValue({
+      success: true,
+      limit: 5,
+      remaining: 5,
+      reset: Date.now() + 60_000,
+      reason: "timeout",
+    });
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const { rateLimit } = await import("../rate-limit");
+    const allowed = await rateLimit("login:1.2.3.4", 5, 60_000);
+
+    expect(allowed).toBe(true);
+    expect(warnSpy).toHaveBeenCalled();
+  });
+
   it("uses the Upstash-backed limiter (not in-memory) when configured", async () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("UPSTASH_REDIS_REST_URL", "https://example.upstash.io");
@@ -229,6 +274,26 @@ describe("lib/rate-limit — production fail-closed", () => {
 
     expect(allowed).toBe(true);
     expect(warnSpy).toHaveBeenCalled();
+  });
+
+  it("throttles repeated error logs for the same failure within the throttle window " +
+    "(log-amplification-DoS guard)", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("UPSTASH_REDIS_REST_URL", undefined);
+    vi.stubEnv("UPSTASH_REDIS_REST_TOKEN", undefined);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const { rateLimit } = await import("../rate-limit");
+
+    // An unauthenticated attacker can call login/signup as fast as the
+    // network allows; during an Upstash outage this must not turn into an
+    // unbounded console.error (and stack trace) per request.
+    for (let i = 0; i < 20; i++) {
+      // eslint-disable-next-line no-await-in-loop
+      await expect(rateLimit(`login:1.2.3.${i}`, 5, 60_000)).resolves.toBe(false);
+    }
+
+    expect(errorSpy).toHaveBeenCalledTimes(1);
   });
 
   it("in-memory fallback still enforces the limit in development", async () => {
