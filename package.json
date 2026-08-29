@@ -38,6 +38,7 @@
   },
   "dependencies": {
     "@saas/auth": "*",
+    "@saas/idempotency": "*",
     "@saas/llm-guard": "*",
     "@saas/payments": "*",
     "@saas/secret-guard": "*",
