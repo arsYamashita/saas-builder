@@ -45,7 +45,15 @@ const baseEnvSchema = z.object({
   CLAUDE_API_KEY: z.string().min(1).optional(),
   OPENAI_API_KEY: z.string().min(1).optional(),
 
-  // Rate limiting — optional (in-memory fallback for local dev).
+  // Rate limiting — optional (in-memory fallback for local dev). This stays
+  // `.optional()` here on purpose: this module is imported at module-init
+  // time, and making these required would throw and crash the build/every
+  // route when unset — the same `startup_env_validation_prod_outage`
+  // failure mode this file is designed to avoid. Enforcement instead
+  // happens at (1) deploy time via scripts/preflight-env.ts (not wired into
+  // `next build`), and (2) runtime via lib/rate-limit.ts, which fails
+  // closed (denies requests) in production when Upstash is unset rather
+  // than silently allowing every request through.
   UPSTASH_REDIS_REST_URL: z.string().url().optional(),
   UPSTASH_REDIS_REST_TOKEN: z.string().min(1).optional(),
 
