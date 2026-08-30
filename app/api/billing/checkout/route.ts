@@ -197,7 +197,12 @@ export async function POST(req: NextRequest) {
       await releaseSubscriptionCheckoutSlot(
         supabase as unknown as Parameters<typeof releaseSubscriptionCheckoutSlot>[0],
         reservationId
-      ).catch(() => {});
+      ).catch((releaseError) => {
+        console.error(
+          "[billing/checkout] failed to release checkout reservation:",
+          releaseError
+        );
+      });
       throw error;
     }
   } catch (error) {

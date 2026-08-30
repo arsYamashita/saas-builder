@@ -86,7 +86,12 @@ async function upsertSubscriptionFromStripeSubscription(
       typeof releaseSubscriptionCheckoutSlotForUser
     >[0],
     { tenantId, userId }
-  ).catch(() => {});
+  ).catch((releaseError) => {
+    console.error(
+      "[stripe-webhook] failed to release checkout reservation:",
+      releaseError
+    );
+  });
 
   if (
     referralId &&

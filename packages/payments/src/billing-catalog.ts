@@ -163,10 +163,14 @@ async function deactivateStripeObjects(
   // doesn't matter to Stripe, but we run both and swallow individual
   // failures so one compensation failure doesn't block the other.
   if (ids.priceId) {
-    await stripe.prices.update(ids.priceId, { active: false }).catch(() => {});
+    await stripe.prices.update(ids.priceId, { active: false }).catch((err) => {
+      console.error("[billing-catalog] failed to deactivate price:", err);
+    });
   }
   if (ids.productId) {
-    await stripe.products.update(ids.productId, { active: false }).catch(() => {});
+    await stripe.products.update(ids.productId, { active: false }).catch((err) => {
+      console.error("[billing-catalog] failed to deactivate product:", err);
+    });
   }
 }
 
