@@ -11,4 +11,22 @@ export { buildIdempotencyKey } from "./idempotency";
 export { createCheckoutSession } from "./checkout";
 export { verifyWebhookSignature } from "./webhook";
 export { MissingWebhookMetadataError } from "./errors";
+export {
+  assertNoConflictingActiveSubscription,
+  reserveSubscriptionCheckoutSlot,
+  releaseSubscriptionCheckoutSlot,
+  releaseSubscriptionCheckoutSlotForUser,
+  SubscriptionConflictError,
+  CONFLICTING_SUBSCRIPTION_STATUSES,
+  DEFAULT_CHECKOUT_RESERVATION_TTL_SECONDS,
+  type SubscriptionConflictCheckClient,
+  type SubscriptionReservationClient,
+} from "./subscription-guard";
+export {
+  createBillingProductAndPrice,
+  BillingCatalogWriteError,
+  BillingCatalogIdempotentReplayError,
+  type BillingCatalogClient,
+  type CreateBillingProductAndPriceParams,
+} from "./billing-catalog";
 export type { default as Stripe } from "stripe";
