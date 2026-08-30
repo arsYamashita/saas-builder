@@ -310,3 +310,53 @@ describe("lib/rate-limit — production fail-closed", () => {
     expect(await rateLimit(key, 2, 60_000)).toBe(false);
   });
 });
+
+describe("RATE_LIMIT_EMERGENCY_DEGRADE (2026-08-31 Upstash quota outage)", () => {
+  // Upstash 自体が quota 制限で全滅した実障害の緊急縮退モード:
+  // 明示 opt-in (env=1) の時だけ、本番でも deny ではなく per-instance の
+  // in-memory limiter に降格する。フラグ無しの fail-closed 契約は不変。
+  beforeEach(() => {
+    vi.resetModules();
+    limitMock.mockReset();
+    redisCtorMock.mockReset();
+    redisCtorMock.mockImplementation(() => ({}));
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("UPSTASH_REDIS_REST_URL", "https://example.upstash.io");
+    vi.stubEnv("UPSTASH_REDIS_REST_TOKEN", "token-123");
+    limitMock.mockRejectedValue(new Error("upstash database is rate-limited"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  it("without the flag, production still fails closed on Upstash error", async () => {
+    vi.stubEnv("RATE_LIMIT_EMERGENCY_DEGRADE", undefined);
+    const { rateLimit } = await import("../rate-limit");
+    expect(await rateLimit("login:1.2.3.4", 5, 60_000)).toBe(false);
+  });
+
+  it("with the flag, production degrades to in-memory instead of denying", async () => {
+    vi.stubEnv("RATE_LIMIT_EMERGENCY_DEGRADE", "1");
+    const { rateLimit } = await import("../rate-limit");
+    expect(await rateLimit("login:1.2.3.4", 5, 60_000)).toBe(true);
+  });
+
+  it("with the flag, the in-memory limiter still enforces the window", async () => {
+    vi.stubEnv("RATE_LIMIT_EMERGENCY_DEGRADE", "1");
+    const { rateLimit } = await import("../rate-limit");
+    for (let i = 0; i < 5; i++) {
+      await rateLimit("login:9.9.9.9", 5, 60_000);
+    }
+    expect(await rateLimit("login:9.9.9.9", 5, 60_000)).toBe(false);
+  });
+
+  it("with the flag, the Upstash timeout soft-failure also degrades instead of denying", async () => {
+    vi.stubEnv("RATE_LIMIT_EMERGENCY_DEGRADE", "1");
+    limitMock.mockResolvedValue({ success: true, reason: "timeout" });
+    const { rateLimit } = await import("../rate-limit");
+    expect(await rateLimit("login:5.6.7.8", 5, 60_000)).toBe(true);
+  });
+});

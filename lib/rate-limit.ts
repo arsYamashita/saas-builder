@@ -167,6 +167,23 @@ function getLimiters(): Limiters | null {
  * handled: in production it fails closed (deny + console.error) rather
  * than letting the exception propagate into a 500.
  */
+
+/**
+ * EMERGENCY DEGRADED MODE (explicit opt-in only).
+ *
+ * When Upstash itself is down/quota-limited (e.g. the 2026-08-31 incident:
+ * the free-tier database was rate-limited by Upstash, so EVERY limiter call
+ * failed and production fail-closed denied ALL logins/signups), strict
+ * fail-closed means total auth outage. Setting RATE_LIMIT_EMERGENCY_DEGRADE=1
+ * in the environment makes production fall back to the per-instance in-memory
+ * limiter INSTEAD of denying, with a loud error log on every window.
+ * This is weaker (per-instance, not global) but preserves availability.
+ * Remove the env var as soon as Upstash is healthy to restore fail-closed.
+ */
+function emergencyDegradeEnabled(): boolean {
+  return process.env.RATE_LIMIT_EMERGENCY_DEGRADE === "1";
+}
+
 export async function rateLimit(
   key: string,
   limit: number,
@@ -192,6 +209,16 @@ export async function rateLimit(
       // the same as an outright failure below.
       if (result.reason === "timeout") {
         if (isProduction()) {
+          if (emergencyDegradeEnabled()) {
+            throttledLog(
+              "error",
+              `degraded-timeout:${prefix}`,
+              `[rate-limit] EMERGENCY DEGRADED MODE: Upstash timed out for prefix "${prefix}"; ` +
+                "falling back to per-instance in-memory limiting (RATE_LIMIT_EMERGENCY_DEGRADE=1). " +
+                "Remove the env var once Upstash is healthy."
+            );
+            return localRateLimit(key, limit, windowMs);
+          }
           throttledLog(
             "error",
             `timeout:${prefix}`,
@@ -212,6 +239,17 @@ export async function rateLimit(
       return result.success;
     } catch (err) {
       if (isProduction()) {
+        if (emergencyDegradeEnabled()) {
+          throttledLog(
+            "error",
+            `degraded-error:${prefix}`,
+            `[rate-limit] EMERGENCY DEGRADED MODE: Upstash check failed for prefix "${prefix}"; ` +
+              "falling back to per-instance in-memory limiting (RATE_LIMIT_EMERGENCY_DEGRADE=1). " +
+              "Remove the env var once Upstash is healthy.",
+            err
+          );
+          return localRateLimit(key, limit, windowMs);
+        }
         throttledLog(
           "error",
           `error:${prefix}`,
