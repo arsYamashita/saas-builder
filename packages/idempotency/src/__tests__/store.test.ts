@@ -171,12 +171,12 @@ function makeFilterChain(
       return chain;
     },
     async select() {
-      const matching = [...rows.values()].filter(matches);
+      const matching = Array.from(rows.values()).filter(matches);
       const result = resolve(matching);
       return { data: result, error: null };
     },
     async maybeSingle() {
-      const matching = [...rows.values()].filter(matches);
+      const matching = Array.from(rows.values()).filter(matches);
       const result = resolve(matching);
       return { data: result[0] ?? null, error: null };
     },
