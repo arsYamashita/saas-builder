@@ -67,6 +67,18 @@ describe("scaffold generators", () => {
       const config = getScaffoldNextConfig();
       expect(typeof config).toBe("string");
     });
+
+    it("omits transpilePackages by default (export-files route callers copy no @saas/* packages)", () => {
+      const config = getScaffoldNextConfig();
+      expect(config).not.toContain("transpilePackages");
+    });
+
+    it("adds transpilePackages for @saas/* workspace packages passed in (create-app.ts callers) — see [[saas_builder_scaffold_missing_saas_packages]]", () => {
+      const config = getScaffoldNextConfig(["@saas/auth", "@saas/payments"]);
+      expect(config).toContain("transpilePackages");
+      expect(config).toContain("@saas/auth");
+      expect(config).toContain("@saas/payments");
+    });
   });
 
   describe("gitignore", () => {
