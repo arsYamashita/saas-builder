@@ -30,6 +30,7 @@ import {
   resolveSubmitLabel,
   summarizeIssues,
 } from "@/lib/forms/errors";
+import { MAX_LLM_BRIEF_FIELD_CHARS } from "@/lib/validation/llm-input-limits";
 import { z } from "zod";
 
 /**
@@ -43,10 +44,13 @@ import { z } from "zod";
  * canonical schema's `min(5)` is meant for the *post-fallback* value
  * `buildPayload` computes (template default / "一般ユーザー"), not the raw
  * "任意" field on step 2, which must accept blank. But it must still reject
- * a short *non-blank* value here (not merely allow anything) — the wizard's
- * only opportunity to show a field-level error is step 2; by step 3 (where
- * submit happens) this field isn't rendered, so if an invalid value slipped
- * through to the final `projectFormSchema.safeParse` in `onSubmit`, that
+ * a short *non-blank* value here (not merely allow anything), and it must
+ * keep the canonical schema's `max(MAX_LLM_BRIEF_FIELD_CHARS)` (dropping it
+ * would both re-open the unbounded-text-into-LLM-prompt guard the canonical
+ * schema exists for, and strand the user: the wizard's only opportunity to
+ * show a field-level error is step 2; by step 3 (where submit happens) this
+ * field isn't rendered, so if an invalid value slipped through to the final
+ * `projectFormSchema.safeParse` in `onSubmit`, that
  * failure would have nowhere visible to surface (see 2026-07-11 codex
  * review, gpt-5.6-terra).
  */
@@ -55,6 +59,10 @@ export const projectBasicInfoSchema = projectFormSchema
   .extend({
     targetUsers: z
       .string()
+      .max(
+        MAX_LLM_BRIEF_FIELD_CHARS,
+        `ターゲットユーザーが長すぎます（最大 ${MAX_LLM_BRIEF_FIELD_CHARS} 文字）`
+      )
       .optional()
       .default("")
       .refine((value) => value.length === 0 || value.length >= 5, {

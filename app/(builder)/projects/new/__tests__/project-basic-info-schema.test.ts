@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { projectFormSchema } from "@/lib/validation/project-form";
+import { MAX_LLM_BRIEF_FIELD_CHARS } from "@/lib/validation/llm-input-limits";
 import { buildProjectPayload, projectBasicInfoSchema } from "../page";
 
 /**
@@ -95,6 +96,41 @@ describe("projectBasicInfoSchema", () => {
         "5文字以上で入力するか、空欄のままにしてください"
       );
     }
+  });
+
+  it("rejects a targetUsers value beyond the canonical LLM-input length cap (2026-08-30 codex review)", () => {
+    // The re-declared `targetUsers` schema above must keep the canonical
+    // schema's `max(MAX_LLM_BRIEF_FIELD_CHARS)` — dropping it would both
+    // reopen the unbounded-text-into-LLM-prompt guard the cap exists for
+    // (see lib/validation/project-form.ts) and strand the user: step 2's
+    // own trigger() would let an over-long value through, and the failure
+    // would only surface on the final canonical safeParse in onSubmit,
+    // where targetUsers isn't rendered (same invisible-failure class as
+    // round 2/3 above).
+    const tooLong = "あ".repeat(MAX_LLM_BRIEF_FIELD_CHARS + 1);
+    const result = projectBasicInfoSchema.safeParse({
+      name: "マイCRM",
+      summary: "中小企業向けの顧客管理システムです。",
+      targetUsers: tooLong,
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0]?.message).toContain(
+        `最大 ${MAX_LLM_BRIEF_FIELD_CHARS} 文字`
+      );
+    }
+  });
+
+  it("accepts exactly MAX_LLM_BRIEF_FIELD_CHARS characters", () => {
+    const atLimit = "あ".repeat(MAX_LLM_BRIEF_FIELD_CHARS);
+    const result = projectBasicInfoSchema.safeParse({
+      name: "マイCRM",
+      summary: "中小企業向けの顧客管理システムです。",
+      targetUsers: atLimit,
+    });
+
+    expect(result.success).toBe(true);
   });
 
   it("accepts exactly 5 characters", () => {
