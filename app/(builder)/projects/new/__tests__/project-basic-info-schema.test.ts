@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { projectFormSchema } from "@/lib/validation/project-form";
 import { MAX_LLM_BRIEF_FIELD_CHARS } from "@/lib/validation/llm-input-limits";
-import { buildProjectPayload, projectBasicInfoSchema } from "../page";
+import { buildProjectPayload, projectBasicInfoSchema } from "../basic-info";
 
 /**
  * Regression coverage for three bugs caught across three rounds of codex
