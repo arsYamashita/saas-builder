@@ -5,9 +5,8 @@ import {
   completeGenerationRun,
   failGenerationRun,
 } from "@/lib/db/generation-runs";
-import { createAdminClient } from "@/lib/db/supabase/admin";
 import type { GenerationStepMeta } from "@/types/generation-run";
-import { requireCurrentUser } from "@/lib/auth/current-user";
+import { requireProjectAccess } from "@/lib/auth/current-user";
 import { rateLimit } from "@/lib/rate-limit";
 import { serverErrorResponse } from "@/lib/api/errors";
 import {
@@ -58,11 +57,29 @@ async function postInternal(path: string): Promise<{
 }
 
 export async function POST(_req: NextRequest, { params }: Props) {
+  const { projectId } = await params;
+
+  // Tenant-scoped auth + project lookup in one call — prevents IDOR by
+  // ensuring the project belongs to the caller's active tenant. Previously
+  // this route only called requireCurrentUser() (authentication, no
+  // authorization) and then fetched the project via the ADMIN client
+  // filtered solely by `.eq("id", projectId)`, so any authenticated user
+  // could pass another tenant's projectId and cause a generation_runs row
+  // to be created against it (cross-tenant write + info disclosure). See
+  // [[gateway_no_auth_tenant_id_conversation_read_idor]] and the sibling
+  // generate-blueprint / generate-implementation / generate-schema /
+  // generate-api-design routes, which already use requireProjectAccess.
   let currentUserId: string;
+  let project: { template_key: string } & Record<string, unknown>;
   try {
-    const user = await requireCurrentUser();
-    currentUserId = user.id;
-  } catch {
+    const result = await requireProjectAccess(projectId);
+    currentUserId = result.user.id;
+    project = result.project;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unauthorized";
+    if (message === "Not found") {
+      return NextResponse.json({ error: "Project not found" }, { status: 404 });
+    }
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -85,32 +102,11 @@ export async function POST(_req: NextRequest, { params }: Props) {
     );
   }
 
-  const { projectId } = await params;
   let generationRunId = "";
   const baseUrl =
     process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
   try {
-    const supabase = createAdminClient();
-
-    const { data: project, error: projectError } = await supabase
-      .from("projects")
-      .select("*")
-      .eq("id", projectId)
-      .single();
-
-    if (projectError || !project) {
-      // Never return the raw DB error message to the client — see
-      // [[api_error_message_internal_leak]].
-      if (projectError) {
-        return serverErrorResponse("projects/generate-template", projectError, {
-          status: 404,
-          message: "Project not found",
-        });
-      }
-      return NextResponse.json({ error: "Project not found" }, { status: 404 });
-    }
-
     const generationRun = await createGenerationRun(
       projectId,
       project.template_key
