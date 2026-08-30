@@ -34,6 +34,8 @@
     "kb:resolve": "tsx scripts/kb-resolve.ts",
     "kb:reconcile": "tsx scripts/kb-reconcile.ts",
     "security:gate": "tsx scripts/security-gate-check.ts",
+    "schema:drift:gate": "tsx scripts/schema-drift-gate-check.ts",
+    "firestore:drift:gate": "tsx scripts/firestore-drift-gate-check.ts",
     "security:baseline": "tsx scripts/security-baseline-check.ts"
   },
   "dependencies": {

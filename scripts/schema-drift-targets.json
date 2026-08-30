@@ -1,0 +1,11 @@
+[
+  {
+    "$comment": "Registry of schema-drift-gate targets. To onboard a new Supabase-based template: add supabase gen types typescript output as <template>/src/types/database.generated.ts, a schema-drift.config.json mapping hand types to table names, then add an entry here — both CI jobs (structural gate + regen-check) pick it up automatically, no other wiring needed.",
+    "name": "community_membership_saas",
+    "migrationsDir": "templates/community_membership_saas/supabase/migrations",
+    "generatedTypesFile": "templates/community_membership_saas/src/types/database.generated.ts",
+    "handTypesFile": "templates/community_membership_saas/src/types/database.ts",
+    "mappingFile": "templates/community_membership_saas/src/types/schema-drift.config.json",
+    "mode": "hard"
+  }
+]

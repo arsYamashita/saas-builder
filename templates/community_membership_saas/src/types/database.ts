@@ -67,6 +67,7 @@ export type Membership = {
   user_id: string;
   role: AppRole;
   status: MembershipStatus;
+  invited_by: string | null;
   joined_at: string;
 };
 
