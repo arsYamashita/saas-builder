@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "prebuild": "tsx scripts/prebuild-gate.ts",
     "start": "next start",
     "lint": "next lint",
     "test": "playwright test",
@@ -18,6 +19,7 @@
     "test:e2e:all": "playwright test",
     "test:ui": "playwright test --ui",
     "test:cleanup": "tsx scripts/cleanup-e2e-data.ts",
+    "preflight:env": "tsx scripts/preflight-env.ts",
     "regression:mca": "bash scripts/run-mca-regression.sh",
     "regression:rsv": "bash scripts/run-rsv-regression.sh",
     "regression:crm": "bash scripts/run-crm-regression.sh",
@@ -33,10 +35,12 @@
     "kb:reconcile": "tsx scripts/kb-reconcile.ts",
     "security:gate": "tsx scripts/security-gate-check.ts",
     "schema:drift:gate": "tsx scripts/schema-drift-gate-check.ts",
-    "firestore:drift:gate": "tsx scripts/firestore-drift-gate-check.ts"
+    "firestore:drift:gate": "tsx scripts/firestore-drift-gate-check.ts",
+    "security:baseline": "tsx scripts/security-baseline-check.ts"
   },
   "dependencies": {
     "@saas/auth": "*",
+    "@saas/idempotency": "*",
     "@saas/llm-guard": "*",
     "@saas/payments": "*",
     "@saas/secret-guard": "*",

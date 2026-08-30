@@ -112,6 +112,19 @@ construct a webhook event without signature verification).
   across retries) and include it in the key — see
   `app/api/billing/checkout/route.ts` for the reference implementation.
   See [[stripe_checkout_idempotency_key_missing]].
+- Any endpoint that creates a Checkout Session for a RECURRING plan MUST
+  call `assertNoConflictingActiveSubscription()` from `@/lib/payments`
+  first and map a thrown `SubscriptionConflictError` to HTTP 409 — a DB
+  UNIQUE constraint on `stripe_subscription_id` does not stop two
+  DIFFERENT Stripe subscriptions being created for the same user. See
+  [[stripe_recurring_subscription_missing_conflict_guard]].
+- Any code that creates a Stripe Product+Price pair (a billing plan
+  management feature, etc.) MUST go through
+  `createBillingProductAndPrice()` from `@/lib/payments`, never a bare
+  `stripe.products.create()`/`stripe.prices.create()` followed by a DB
+  insert — a DB failure after the Stripe calls otherwise leaves the
+  Stripe objects permanently orphaned. See
+  [[stripe_plan_product_price_no_rollback_on_db_fail]].
 
 ## Rate Limiting (mandatory for auth + paid-API endpoints)
 Any endpoint that is (a) unauthenticated auth (login/signup) or (b) calls

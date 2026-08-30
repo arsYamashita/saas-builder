@@ -5,7 +5,10 @@ import { createAdminClient } from "@/lib/db/supabase/admin";
 import { markReferralConverted } from "@/lib/affiliate/mark-referral-converted";
 import { createCommission } from "@/lib/affiliate/commission";
 import { MissingWebhookMetadataError } from "@/lib/billing/webhook-errors";
-import { verifyWebhookSignature } from "@/lib/payments";
+import {
+  verifyWebhookSignature,
+  releaseSubscriptionCheckoutSlotForUser,
+} from "@/lib/payments";
 
 function getWebhookSecret() {
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -70,6 +73,25 @@ async function upsertSubscriptionFromStripeSubscription(
   if (error) {
     throw new Error(`Failed to upsert subscription: ${error.message}`);
   }
+
+  // Proactively release the checkout reservation now that the
+  // subscription is actually recorded, instead of relying solely on the
+  // reservation's TTL to unblock the user's next legitimate checkout —
+  // shrinks the residual exposure window documented in
+  // supabase/migrations/0019_subscription_checkout_reservations.sql.
+  // Best-effort: a release failure here must never fail the webhook, the
+  // subscription itself is already safely recorded above.
+  await releaseSubscriptionCheckoutSlotForUser(
+    supabase as unknown as Parameters<
+      typeof releaseSubscriptionCheckoutSlotForUser
+    >[0],
+    { tenantId, userId }
+  ).catch((releaseError) => {
+    console.error(
+      "[stripe-webhook] failed to release checkout reservation:",
+      releaseError
+    );
+  });
 
   if (
     referralId &&
