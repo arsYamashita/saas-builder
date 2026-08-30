@@ -3,6 +3,9 @@ import {
   getStripeClient,
   buildIdempotencyKey,
   createCheckoutSession,
+  reserveSubscriptionCheckoutSlot,
+  releaseSubscriptionCheckoutSlot,
+  SubscriptionConflictError,
 } from "@/lib/payments";
 import { createAdminClient } from "@/lib/db/supabase/admin";
 import { requireCurrentUser } from "@/lib/auth/current-user";
@@ -69,76 +72,139 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { affiliateCode, visitorToken } = await getAffiliateTracking();
+    // Conflict guard: ATOMICALLY reserve a checkout slot for this
+    // tenant+user before creating anything in Stripe. A plain
+    // SELECT-then-create check has a TOCTOU race — two concurrent
+    // requests from the same user can both read "no conflict" before
+    // either writes anything, and both go on to create a separate Stripe
+    // subscription. `stripe_subscription_id` being UNIQUE on
+    // `subscriptions` does NOT close that race (it only dedupes the SAME
+    // Stripe subscription id arriving twice, e.g. a webhook retry — not
+    // two DIFFERENT Stripe subscriptions for one user). The reservation
+    // (backed by a DB unique constraint checked inside a single RPC call —
+    // see supabase/migrations/0019_subscription_checkout_reservations.sql)
+    // closes that race instead. See
+    // [[stripe_recurring_subscription_missing_conflict_guard]].
+    //
+    // Cast: the real SupabaseClient type is far more general (and more
+    // deeply generic) than the narrow duck-typed interfaces these helpers
+    // need — see the PromiseLike note in subscription-guard.ts.
+    const reservationClient = supabase as unknown as Parameters<
+      typeof reserveSubscriptionCheckoutSlot
+    >[0];
 
-    let referralId: string | null = null;
-    let affiliateId: string | null = null;
-
-    if (affiliateCode) {
-      const affiliate = await findAffiliateByCode(tenantId, affiliateCode);
-
-      if (affiliate) {
-        affiliateId = affiliate.id;
-
-        const referral = await findOrCreateReferral({
-          tenantId,
-          affiliateId: affiliate.id,
-          visitorToken,
-          referredUserId: user.id,
-        });
-
-        referralId = referral.id;
+    let reservationId: string;
+    try {
+      const reservation = await reserveSubscriptionCheckoutSlot(
+        reservationClient,
+        // attemptId: a retry of the SAME attempt (lost response, etc.)
+        // gets back the SAME reservation instead of a 409, so it can
+        // still reach Stripe's own idempotency-key replay below.
+        { tenantId, userId: user.id, attemptId }
+      );
+      reservationId = reservation.reservationId;
+    } catch (conflictError) {
+      if (conflictError instanceof SubscriptionConflictError) {
+        return NextResponse.json(
+          {
+            error: "An active subscription already exists for this account",
+            code: "SUBSCRIPTION_CONFLICT",
+          },
+          { status: 409 }
+        );
       }
+      return serverErrorResponse("billing/checkout", conflictError, {
+        message: "Failed to verify existing subscription status",
+      });
     }
 
-    // Idempotency key: without it, a client-side retry or network timeout
-    // on this endpoint creates a second Checkout Session (and, once paid, a
-    // second subscription) for the same purchase attempt.
-    // See [[stripe_checkout_idempotency_key_missing]].
-    //
-    // The key is built ONLY from stable parts — no time component. The
-    // client sends attempt_id (a UUID minted once per page mount and reused
-    // across retries of that attempt), so retries map to the same key no
-    // matter how much time passes, while a fresh visit to the billing page
-    // starts a new attempt. Stripe keys stay valid for 24h. If an older
-    // client omits attempt_id, the key degrades to user+plan: retries are
-    // still deduplicated, and a genuine repeat purchase of the same plan is
-    // deduplicated within Stripe's 24h key window (acceptable for
-    // subscription checkout, where an immediate same-plan re-purchase is
-    // itself almost always a duplicate).
-    const idempotencyKey = buildIdempotencyKey([
-      "checkout",
-      user.id,
-      membershipPlanId,
-      attemptId ?? "",
-    ]);
+    try {
+      const { affiliateCode, visitorToken } = await getAffiliateTracking();
 
-    const session = await createCheckoutSession(
-      stripe,
-      {
-        mode: "subscription",
-        line_items: [
-          {
-            price: plan.price_id,
-            quantity: 1,
+      let referralId: string | null = null;
+      let affiliateId: string | null = null;
+
+      if (affiliateCode) {
+        const affiliate = await findAffiliateByCode(tenantId, affiliateCode);
+
+        if (affiliate) {
+          affiliateId = affiliate.id;
+
+          const referral = await findOrCreateReferral({
+            tenantId,
+            affiliateId: affiliate.id,
+            visitorToken,
+            referredUserId: user.id,
+          });
+
+          referralId = referral.id;
+        }
+      }
+
+      // Idempotency key: without it, a client-side retry or network timeout
+      // on this endpoint creates a second Checkout Session (and, once paid, a
+      // second subscription) for the same purchase attempt.
+      // See [[stripe_checkout_idempotency_key_missing]].
+      //
+      // The key is built ONLY from stable parts — no time component. The
+      // client sends attempt_id (a UUID minted once per page mount and reused
+      // across retries of that attempt), so retries map to the same key no
+      // matter how much time passes, while a fresh visit to the billing page
+      // starts a new attempt. Stripe keys stay valid for 24h. If an older
+      // client omits attempt_id, the key degrades to user+plan: retries are
+      // still deduplicated, and a genuine repeat purchase of the same plan is
+      // deduplicated within Stripe's 24h key window (acceptable for
+      // subscription checkout, where an immediate same-plan re-purchase is
+      // itself almost always a duplicate).
+      const idempotencyKey = buildIdempotencyKey([
+        "checkout",
+        user.id,
+        membershipPlanId,
+        attemptId ?? "",
+      ]);
+
+      const session = await createCheckoutSession(
+        stripe,
+        {
+          mode: "subscription",
+          line_items: [
+            {
+              price: plan.price_id,
+              quantity: 1,
+            },
+          ],
+          success_url: `${process.env.NEXT_PUBLIC_APP_URL}/billing?checkout=success`,
+          cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/billing?checkout=cancel`,
+          client_reference_id: user.id,
+          customer_email: user.email,
+          metadata: {
+            tenant_id: tenantId,
+            app_user_id: user.id,
+            membership_plan_id: membershipPlanId,
+            referral_id: referralId ?? "",
+            affiliate_id: affiliateId ?? "",
           },
-        ],
-        success_url: `${process.env.NEXT_PUBLIC_APP_URL}/billing?checkout=success`,
-        cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/billing?checkout=cancel`,
-        client_reference_id: user.id,
-        customer_email: user.email,
-        metadata: {
-          tenant_id: tenantId,
-          app_user_id: user.id,
-          membership_plan_id: membershipPlanId,
-          referral_id: referralId ?? "",
-          affiliate_id: affiliateId ?? "",
         },
-      },
-      idempotencyKey
-    );
+        idempotencyKey
+      );
 
-    return NextResponse.json({ url: session.url }, { status: 200 });
+      return NextResponse.json({ url: session.url }, { status: 200 });
+    } catch (error) {
+      // The reservation is only useful up to a successful Checkout Session
+      // creation — on any failure past that point, release it immediately
+      // instead of making the user wait out the full TTL to retry.
+      // Best-effort: a release failure just falls back to the TTL expiry.
+      await releaseSubscriptionCheckoutSlot(
+        supabase as unknown as Parameters<typeof releaseSubscriptionCheckoutSlot>[0],
+        reservationId
+      ).catch((releaseError) => {
+        console.error(
+          "[billing/checkout] failed to release checkout reservation:",
+          releaseError
+        );
+      });
+      throw error;
+    }
   } catch (error) {
     return serverErrorResponse("billing/checkout", error, {
       message: "Failed to create checkout session",

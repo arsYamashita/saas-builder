@@ -1,0 +1,47 @@
+name: security-gate
+
+# Template security baseline gate for saas-builder (M5 指示書114, 2026-07-18;
+# integrated from two independently-staged partial implementations
+# 2026-07-20 — see scripts/security-baseline-core.ts's header "Provenance"
+# note). Deliberately a separate workflow file from ci.yml (not appended as
+# a job there), same rationale as secret-guard.yml: this check's own logic
+# (scripts/security-baseline-core.ts / security-baseline-check.ts) is
+# self-contained and shouldn't have to touch the shared ci.yml file to
+# evolve. See SECURITY_CHECKLIST.md (repo root) for the full checklist this
+# gate mechanically enforces a subset of, and
+# `~/Documents/my-vault/30_Knowledge/errors/saas_builder_security_debt_inheritance.md`
+# for why this exists: saas-builder is a TEMPLATE — a security gap here
+# silently propagates into every project derived via
+# `scripts/create-app.ts` or a manual copy.
+#
+# This is intentionally distinct from ci.yml's "Security Regression Gate"
+# job (`npm run security:gate` / scripts/security-gate-check.ts, 指示書034):
+# that job only re-checks NEW diffs for a handful of already-fixed
+# anti-patterns (silent error swallowing, direct Stripe SDK bypass,
+# missing `security_invoker` on new views). This gate instead re-verifies
+# FOUR baseline invariants against the WHOLE tree on every run — Stripe
+# webhook signature verification (call-chain-traced, not just text
+# presence), RLS + non-permissive-policy coverage on every table (not just
+# new migrations), AI endpoint rate-limit wiring, and Storage bucket policy
+# coverage — so a template regression is caught even outside the PR that
+# introduced it. All four run as one command (`npm run security:baseline`,
+# scripts/security-baseline-check.ts) — no per-check job split.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  security-baseline:
+    name: Template Security Baseline
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run security:baseline

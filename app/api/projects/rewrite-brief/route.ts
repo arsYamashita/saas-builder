@@ -5,12 +5,7 @@ import { extractJsonFromText } from "@/lib/providers/result-normalizer";
 import { requireCurrentUser } from "@/lib/auth/current-user";
 import { rateLimit } from "@/lib/rate-limit";
 import { parseJsonBody } from "@/lib/api/errors";
-
-interface RewriteInput {
-  summary: string;
-  problemToSolve: string;
-  targetUsers: string;
-}
+import { rewriteBriefRequestSchema } from "@/lib/validation/rewrite-brief";
 
 interface RewriteOutput {
   rewrittenSummary: string;
@@ -30,9 +25,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const parsedBody = await parseJsonBody<Partial<RewriteInput>>(req);
+    const parsedBody = await parseJsonBody(req);
     if (!parsedBody.ok) return parsedBody.response;
-    const body = parsedBody.data;
+
+    const parsedRequest = rewriteBriefRequestSchema.safeParse(parsedBody.data);
+    if (!parsedRequest.success) {
+      return NextResponse.json(
+        { error: "Invalid request", details: parsedRequest.error.flatten() },
+        { status: 400 }
+      );
+    }
+    const body = parsedRequest.data;
 
     const summary = body.summary?.trim() ?? "";
     const problemToSolve = body.problemToSolve?.trim() ?? "";

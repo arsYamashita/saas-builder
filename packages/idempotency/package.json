@@ -1,0 +1,19 @@
+{
+  "name": "@saas/idempotency",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared idempotency guard for saas-builder and generated templates: an Idempotency-Key HTTP middleware (Supabase-backed, replay-safe, 409 on concurrent in-flight retries), a generic withIdempotency(key, fn) side-effect wrapper (Stripe-call-aware), and a distributed Redis SET NX + TTL lock with heartbeat extension. Consolidates the recurring 'retry/concurrent execution double-runs a money or externally-visible side effect' pattern (see error KB: stripe_recurring_subscription_missing_conflict_guard, cron_owner_digest_no_idempotency, affiliate_commission_idempotency_missing, redis_nx_lock_ttl_too_short) into one reviewed, tested package instead of re-solving it per call site.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "peerDependencies": {
+    "@supabase/supabase-js": "*",
+    "@upstash/redis": "*"
+  },
+  "peerDependenciesMeta": {
+    "@supabase/supabase-js": { "optional": true },
+    "@upstash/redis": { "optional": true }
+  }
+}
