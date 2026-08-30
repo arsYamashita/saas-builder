@@ -165,6 +165,13 @@ export async function DELETE(_req: NextRequest, { params }: Props) {
       );
     }
 
+    // fail-recorded (default), NOT fail-closed: the delete already
+    // committed above, so fail-closed would only turn a successful delete
+    // into a 500 while skipping the dead-letter insert — fail-recorded
+    // instead preserves `before` in audit_log_failures, which matters more
+    // here since the row itself is now gone. See the classification table
+    // ("Why deletes are fail-recorded, not fail-closed") in
+    // lib/audit/write-audit-log.ts.
     await writeAuditLog({
       tenantId: membership.tenant_id,
       actorUserId: user.id,

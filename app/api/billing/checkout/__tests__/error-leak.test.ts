@@ -65,15 +65,20 @@ describe("POST /api/billing/checkout — error-leak wiring", () => {
       code: "42501",
     });
     mockCreateAdminClient.mockReturnValue({
-      from: () => ({
-        select: () => ({
-          eq: () => ({
-            eq: () => ({
-              single: () => Promise.resolve({ data: null, error: dbError }),
+      from: (table: string) => {
+        if (table === "membership_plans") {
+          return {
+            select: () => ({
+              eq: () => ({
+                eq: () => ({
+                  single: () => Promise.resolve({ data: null, error: dbError }),
+                }),
+              }),
             }),
-          }),
-        }),
-      }),
+          };
+        }
+        throw new Error(`unexpected table in test: ${table}`);
+      },
     } as any);
 
     const res = await POST(
@@ -93,19 +98,33 @@ describe("POST /api/billing/checkout — error-leak wiring", () => {
 
   it("does not leak an unexpected thrown error (e.g. Stripe session-create failure)", async () => {
     mockCreateAdminClient.mockReturnValue({
-      from: () => ({
-        select: () => ({
-          eq: () => ({
-            eq: () => ({
-              single: () =>
-                Promise.resolve({
-                  data: { id: "plan-1", price_id: "price_123" },
-                  error: null,
+      from: (table: string) => {
+        if (table === "membership_plans") {
+          return {
+            select: () => ({
+              eq: () => ({
+                eq: () => ({
+                  single: () =>
+                    Promise.resolve({
+                      data: { id: "plan-1", price_id: "price_123" },
+                      error: null,
+                    }),
                 }),
+              }),
             }),
-          }),
-        }),
-      }),
+          };
+        }
+        throw new Error(`unexpected table in test: ${table}`);
+      },
+      rpc: (fn: string) => {
+        if (fn === "reserve_subscription_checkout_slot") {
+          return Promise.resolve({ data: "reservation-1", error: null });
+        }
+        if (fn === "release_subscription_checkout_slot") {
+          return Promise.resolve({ data: null, error: null });
+        }
+        throw new Error(`unexpected rpc in test: ${fn}`);
+      },
     } as any);
 
     vi.spyOn(
