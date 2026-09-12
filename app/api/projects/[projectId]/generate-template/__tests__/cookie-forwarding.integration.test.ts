@@ -203,6 +203,26 @@ describe("generate-template orchestrator — internal Cookie forwarding (instruc
       expect(call.status).toBe(200);
     }
 
+    // All seven authenticated internal hops must actually fire, in order, and
+    // each must carry the forwarded cookie (status 200). Asserting the exact
+    // route set + order guards against a regression that silently drops one
+    // step's cookie forwarding or removes a call entirely (e.g. the
+    // fire-and-forget run-quality-gate hop) while the loop above stays green.
+    const expectedRoutes = [
+      "generate-blueprint",
+      "generate-implementation",
+      "generate-schema",
+      "generate-api-design",
+      "split-run-to-files",
+      "export-files",
+      "run-quality-gate",
+    ];
+    expect(childCalls.length).toBe(expectedRoutes.length);
+    expectedRoutes.forEach((route, i) => {
+      expect(childCalls[i].url).toContain(route);
+      expect(childCalls[i].status).toBe(200);
+    });
+
     // The whole pipeline completes end to end.
     expect(res.status).toBe(200);
     expect(body.ok).toBe(true);
