@@ -3,8 +3,8 @@ import { MODELS, assertValidModel, resolveModelFromEnv, UnknownModelError } from
 
 describe("MODELS — 共通モデルID定数 (指示書2026-07-06_031)", () => {
   it("現行世代の3モデルを定義する", () => {
-    expect(MODELS.opus).toBe("claude-opus-4-8");
-    expect(MODELS.sonnet).toBe("claude-sonnet-5");
+    expect(MODELS.opus).toBe("claude-opus-5-5");
+    expect(MODELS.sonnet).toBe("claude-sonnet-5-5");
     expect(MODELS.haiku).toBe("claude-haiku-4-5-20251001");
   });
 });
@@ -14,6 +14,11 @@ describe("assertValidModel — サイレント劣化ガード", () => {
     expect(() => assertValidModel(MODELS.opus)).not.toThrow();
     expect(() => assertValidModel(MODELS.sonnet)).not.toThrow();
     expect(() => assertValidModel(MODELS.haiku)).not.toThrow();
+  });
+
+  it("ネガティブテスト: 更新前の値 (claude-opus-4-8 / claude-sonnet-5) は明示エラーになる (指示書148)", () => {
+    expect(() => assertValidModel("claude-opus-4-8")).toThrow(UnknownModelError);
+    expect(() => assertValidModel("claude-sonnet-5")).toThrow(UnknownModelError);
   });
 
   it("ネガティブテスト: 旧世代モデルID (claude-sonnet-4-5) は明示エラーになる", () => {
