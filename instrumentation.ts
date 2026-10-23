@@ -7,8 +7,7 @@
  * failing at the first checkout/webhook request in production.
  * See [[missing_env_validation_startup]] / [[stripe_env_optional_in_zod]].
  *
- * Requires `experimental.instrumentationHook: true` in next.config.js
- * (Next.js 14; this becomes the default in Next.js 15+).
+ * Enabled by default in Next.js 15 (no next.config.js flag needed).
  */
 export async function register() {
   // Only validate in the Node.js runtime (not edge / middleware runtime),

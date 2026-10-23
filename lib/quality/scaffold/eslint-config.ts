@@ -29,8 +29,19 @@ export default [
       "@typescript-eslint": tsPlugin,
     },
     rules: {
+      // TypeScript already checks undefined names; core no-undef flags
+      // type-only globals such as NodeJS and imported class types.
+      "no-undef": "off",
       "no-unused-vars": "off",
       "@typescript-eslint/no-unused-vars": "off",
+    },
+  },
+  {
+    files: ["**/*.{js,cjs,mjs}"],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+      },
     },
   },
 ];
