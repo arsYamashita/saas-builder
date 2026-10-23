@@ -13,6 +13,7 @@
     "jsx": "preserve",
     "incremental": true,
     "plugins": [{ "name": "next" }],
+    "target": "ES2017",
     "paths": {
       "@/*": ["./*"]
     }

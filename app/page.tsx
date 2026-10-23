@@ -25,8 +25,8 @@ import { ScrollReveal } from "@/components/ui/scroll-reveal";
 
 /* ---------- auth gate ---------- */
 
-function isAuthenticated(): boolean {
-  const cookieStore = cookies();
+async function isAuthenticated(): Promise<boolean> {
+  const cookieStore = await cookies();
   const all = cookieStore.getAll();
   return all.some(
     (c) => c.name.startsWith("sb-") && c.name.includes("auth-token"),
@@ -150,8 +150,8 @@ const techStack = ["Next.js", "Supabase", "Stripe", "Vercel", "TypeScript"];
 
 /* ---------- page ---------- */
 
-export default function HomePage() {
-  if (isAuthenticated()) {
+export default async function HomePage() {
+  if (await isAuthenticated()) {
     redirect("/projects");
   }
 
