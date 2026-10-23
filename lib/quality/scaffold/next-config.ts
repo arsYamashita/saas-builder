@@ -1,5 +1,5 @@
 export function getScaffoldNextConfig(transpilePackages: string[] = []) {
-  // Plain CommonJS next.config.js — matches the pinned Next 14.2.x
+  // Plain CommonJS next.config.js — matches the pinned Next 15.5.x
   // dependency (see package-json.ts). "next.config.ts" support (and the
   // "import type" / ESM syntax previously used here) requires Next 15+;
   // on Next 14 `next build` fails immediately with "Configuring Next.js
@@ -20,13 +20,9 @@ export function getScaffoldNextConfig(transpilePackages: string[] = []) {
   return `/** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: false,
-  experimental: {
-    // Enables instrumentation.ts's register() hook (Next 14; default in
-    // Next 15+). Only has an effect if an instrumentation.ts file is
-    // present — harmless no-op otherwise. See lib/env.ts for the
-    // startup env validation it's meant to wire up.
-    instrumentationHook: true,
-  },${transpileBlock}
+  // instrumentation.ts's register() hook is enabled by default in Next 15,
+  // so no experimental flag is needed. See lib/env.ts for the startup env
+  // validation it wires up.${transpileBlock}
 };
 
 module.exports = nextConfig;

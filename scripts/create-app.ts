@@ -206,7 +206,7 @@ async function main() {
   //       Security Baseline". ──
   copyFile(path.join(REPO_ROOT, "lib/env.ts"), path.join(outDir, "lib/env.ts"));
   // Wires lib/env.ts's validateEnv() into server startup (register() hook,
-  // enabled by next.config.js's experimental.instrumentationHook). Without
+  // enabled by default in Next 15). Without
   // this, lib/env.ts is dead code — copying the validator alone does not
   // make it run. See [[missing_env_validation_startup]].
   copyFile(path.join(REPO_ROOT, "instrumentation.ts"), path.join(outDir, "instrumentation.ts"));

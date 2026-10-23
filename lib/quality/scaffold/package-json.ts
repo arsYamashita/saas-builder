@@ -19,9 +19,9 @@ export function getScaffoldPackageJson() {
       // saas-builder codebase (and every generated-file type signature) is
       // actually written and tested against. This scaffold previously
       // pinned next@^15 / react@^19 while every AI-generated route and
-      // component targets Next 14 / React 18 APIs — a version drift a
+      // component targets Next 15 / React 18 APIs — a version drift a
       // generated app would only discover at `npm install` / build time.
-      next: "^14.2.35",
+      next: "15.5.28",
       react: "^18.3.0",
       "react-dom": "^18.3.0",
       "@supabase/ssr": "^0.5.0",

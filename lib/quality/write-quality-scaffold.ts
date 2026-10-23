@@ -22,7 +22,7 @@ export async function writeQualityScaffold(projectDir: string) {
         lint: "eslint . --ext .ts,.tsx",
       },
       dependencies: {
-        next: "^14",
+        next: "15.5.28",
         react: "^18",
         "react-dom": "^18",
         "@supabase/supabase-js": "^2",
@@ -36,7 +36,7 @@ export async function writeQualityScaffold(projectDir: string) {
         "@types/react": "^18",
         "@types/react-dom": "^18",
         eslint: "^8",
-        "eslint-config-next": "^14",
+        "eslint-config-next": "15.5.28",
         "@playwright/test": "^1",
       },
     };

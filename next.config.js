@@ -5,10 +5,8 @@ const nextConfig = {
   transpilePackages: ['@saas/payments', '@saas/auth', '@saas/secret-guard', '@saas/idempotency'],
   experimental: {
     optimizePackageImports: ['lucide-react'],
-    // Enables instrumentation.ts's register() hook, used to validate
-    // required env vars (Stripe keys etc.) at server startup.
-    // See [[missing_env_validation_startup]] / [[stripe_env_optional_in_zod]].
-    instrumentationHook: true,
+    // instrumentation.ts's register() hook (env validation at startup) is
+    // enabled by default in Next 15; see [[missing_env_validation_startup]].
   },
   async headers() {
     return [
