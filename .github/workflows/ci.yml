@@ -14,8 +14,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: '22.23.4'
           cache: npm
+
+      - name: Verify Node.js >= 22.23.4
+        run: |
+          node -e "const [a,b,c]=process.versions.node.split('.').map(Number); if(a!==22||b<23||(b===23&&c<4)){console.error('Node.js 22.23.4 以上が必要です: '+process.version); process.exit(1)}"
       - run: npm ci
       - run: npx tsc --noEmit 2>&1 | grep -v "^exports/" | tee /dev/stderr | (! grep "error TS")
 
@@ -26,8 +30,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: '22.23.4'
           cache: npm
+
+      - name: Verify Node.js >= 22.23.4
+        run: |
+          node -e "const [a,b,c]=process.versions.node.split('.').map(Number); if(a!==22||b<23||(b===23&&c<4)){console.error('Node.js 22.23.4 以上が必要です: '+process.version); process.exit(1)}"
       - run: npm ci
       - run: npm run test:unit
 
@@ -44,8 +52,12 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: '22.23.4'
           cache: npm
+
+      - name: Verify Node.js >= 22.23.4
+        run: |
+          node -e "const [a,b,c]=process.versions.node.split('.').map(Number); if(a!==22||b<23||(b===23&&c<4)){console.error('Node.js 22.23.4 以上が必要です: '+process.version); process.exit(1)}"
       - run: npm ci
       # Pull requests: GITHUB_BASE_REF is set by GitHub Actions, so
       # security-gate-check.ts diffs against origin/<base-branch>. Push
@@ -64,8 +76,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: '22.23.4'
           cache: npm
+
+      - name: Verify Node.js >= 22.23.4
+        run: |
+          node -e "const [a,b,c]=process.versions.node.split('.').map(Number); if(a!==22||b<23||(b===23&&c<4)){console.error('Node.js 22.23.4 以上が必要です: '+process.version); process.exit(1)}"
       - run: npm ci
       - run: npm run schema:drift:gate
 
@@ -97,8 +113,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: '22.23.4'
           cache: npm
+
+      - name: Verify Node.js >= 22.23.4
+        run: |
+          node -e "const [a,b,c]=process.versions.node.split('.').map(Number); if(a!==22||b<23||(b===23&&c<4)){console.error('Node.js 22.23.4 以上が必要です: '+process.version); process.exit(1)}"
       - run: npm ci
       - name: Install jq + postgresql-client (psql)
         run: sudo apt-get update && sudo apt-get install -y jq postgresql-client
@@ -132,8 +152,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: '22.23.4'
           cache: npm
+
+      - name: Verify Node.js >= 22.23.4
+        run: |
+          node -e "const [a,b,c]=process.versions.node.split('.').map(Number); if(a!==22||b<23||(b===23&&c<4)){console.error('Node.js 22.23.4 以上が必要です: '+process.version); process.exit(1)}"
       - run: npm ci
       # webkit is required since playwright.config.ts gained the webkit /
       # logged-in-webkit projects (m5/webkit-e2e) — `npx playwright test`
