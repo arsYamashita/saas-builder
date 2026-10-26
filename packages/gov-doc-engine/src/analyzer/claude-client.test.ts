@@ -9,6 +9,7 @@ import {
   type ClaudeMessagesClient,
   type ClaudeMessageResponse,
 } from "./claude-client";
+import { MODELS } from "@saas/llm-guard";
 import { InMemoryTenantUsageGuard } from "./usage-guard";
 import { FailureThresholdTracker, InMemoryAlertSink } from "./alerts";
 import type { DiffAnalysisRequest } from "./schema";
@@ -149,7 +150,7 @@ describe("analyzeDiff", () => {
     await analyzeDiff(makeRequest(), deps);
 
     expect(client.messages.create).toHaveBeenCalledWith(
-      expect.objectContaining({ model: "claude-opus-4-8" }),
+      expect.objectContaining({ model: MODELS.opus }),
     );
   });
 
@@ -159,11 +160,11 @@ describe("analyzeDiff", () => {
       content: [{ type: "text", text: JSON.stringify(VALID_EXTRACTION) }],
       usage: { input_tokens: 100, output_tokens: 10 },
     });
-    const deps = { ...makeDeps(client), model: "claude-sonnet-5" };
+    const deps = { ...makeDeps(client), model: MODELS.sonnet };
 
     await analyzeDiff(makeRequest(), deps);
 
-    expect(client.messages.create).toHaveBeenCalledWith(expect.objectContaining({ model: "claude-sonnet-5" }));
+    expect(client.messages.create).toHaveBeenCalledWith(expect.objectContaining({ model: MODELS.sonnet }));
   });
 });
 

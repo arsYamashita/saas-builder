@@ -48,7 +48,7 @@ createClaudeClientFromEnv(): ClaudeMessagesClient | null   // ANTHROPIC_API_KEY 
 resolveClaudeModel(): string                                // config/models.ts 経由でモデルIDを解決
 ```
 
-モデル ID は `src/config/models.ts` で一元管理し、呼び出し箇所に直書きしない（2026-07-06 の aria-app 「deprecated型番8ファイル直書き」事件を踏まえた設計）。既定値は `claude-opus-4-8`（`~/.claude/skills/claude-api/SKILL.md` の現行推奨に準拠）。環境変数 `GOV_DOC_ENGINE_CLAUDE_MODEL` で上書き可能。
+モデル ID は `src/config/models.ts` で一元管理し、呼び出し箇所に直書きしない（2026-07-06 の aria-app 「deprecated型番8ファイル直書き」事件を踏まえた設計）。既定値は `claude-opus-5-5`（`MODELS.opus`。`~/.claude/skills/claude-api/SKILL.md` キャッシュ 2026-09-25 の現行推奨に準拠。指示書148で更新）。上書き値は `@saas/llm-guard` の MODELS のいずれかでなければ `UnknownModelError`。環境変数 `GOV_DOC_ENGINE_CLAUDE_MODEL` で上書き可能。
 
 ### 適用層 (`src/application/`)
 

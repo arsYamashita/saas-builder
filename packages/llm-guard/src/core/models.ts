@@ -10,19 +10,20 @@
  * 残っていた。再発防止のため、モデル ID は必ずこのモジュール経由で解決し、
  * 呼び出し側は `MODELS.opus` 等の定数のみを参照する。
  *
- * 値の根拠: ~/.claude/skills/claude-api/SKILL.md（キャッシュ日時 2026-06-24）
- * の Current Models 表 + shared/models.md の Programmatic Model Discovery
- * セクションで確認したエイリアス。
- * - opus:   claude-opus-4-8   (Current — 明示指定がない限り既定でこれを使う)
- * - sonnet: claude-sonnet-5   (Current)
+ * 値の根拠: claude-api skill のキャッシュ（2026-09-25）の Current Models 表
+ * + Models API での実在確認日（2026-10-09: API キー無しのため未実施。
+ *   skill 表のみを根拠とした。実在確認はマージ前に client.models.retrieve で行うこと）。
+ * 2026-10-09 指示書 148: opus/sonnet を現行世代へ更新（旧: opus-4-8 / sonnet-5）。
+ * - opus:   claude-opus-5-5   (Current — 明示指定がない限り既定でこれを使う)
+ * - sonnet: claude-sonnet-5-5 (Current)
  * - haiku:  claude-haiku-4-5-20251001 (Current。alias は claude-haiku-4-5
  *   だが、複数リポジトリの既存コードが日付付きフル ID を使っていたため
  *   （aria-for-salon-app, ai-business-navigator）フル ID を採用して統一)
  */
 
 export const MODELS = {
-  opus: "claude-opus-4-8",
-  sonnet: "claude-sonnet-5",
+  opus: "claude-opus-5-5",
+  sonnet: "claude-sonnet-5-5",
   haiku: "claude-haiku-4-5-20251001",
 } as const;
 
