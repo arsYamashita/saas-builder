@@ -9,6 +9,30 @@ that adopts this package):
    `git config core.hooksPath packages/secret-guard/ci`, Git looks up hooks
    in that directory *by hook name*, so any other filename never fires).
    Scans what's *committed*.
+
+   **Artifact check** (`ci/artifact-check.sh` + `ci/forbidden-names.txt`):
+   gitleaks scans text diffs and does **not** look inside archives. A
+   `terraform plan -out=tfplan` file is a zip that embeds
+   `terraform.tfstate` (resolved secrets included) and passes gitleaks
+   untouched; a `.env` zipped into an extension-less file does too. The
+   artifact check fails on (a) forbidden file names and (b) zip-format
+   files (detected by the `PK\x03\x04` magic, not the extension) whose
+   inner entry names match a forbidden rule or contain `tfstate` /
+   `credentials`. Archives are detected by probing with `unzip` as well
+   (so a zip with prepended data is still inspected), and nested archives
+   are rejected ("nested archive not allowed") rather than recursed into;
+   an encrypted inner archive named like a plain file is a known residual
+   gap. File or entry names containing a line break are rejected. In the
+   hook (`--staged`) the staged blob is inspected, not the working tree. It prints only the file name and the matched rule, never
+   contents, and fails closed (a missing `unzip` is an error). It runs as a
+   separate step in the PR gate and in `ci/pre-commit` (even when gitleaks
+   is not installed). Run it by hand over the whole repo with
+   `bash packages/secret-guard/ci/artifact-check.sh`.
+
+   To change the rules, edit `ci/forbidden-names.txt`: one extended regex
+   per line, `#` for comments, and a leading `!` marks an allowlist regex
+   (e.g. `.env.example`) that is never flagged. Keep allowlist lines as
+   narrow as possible. Tests: `src/__tests__/artifact-check.test.ts`.
 2. **Runtime layer** — a `mask()` API (TypeScript in `src/`, Dart in
    `dart/`) that sanitizes secret-shaped substrings out of any string
    *before it leaves the process* — a log line, an HTTP response body, a

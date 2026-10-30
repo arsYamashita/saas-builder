@@ -14,6 +14,8 @@
 # other shared hooks, move this script's body into that shared hook
 # instead of fighting over hooksPath. Not needed yet.)
 #
+# Also runs ci/artifact-check.sh on staged files (needs `unzip`; fail-closed).
+#
 # Requires the `gitleaks` binary (brew install gitleaks / see
 # https://github.com/gitleaks/gitleaks#installing). Fails OPEN (warns, does
 # not block the commit) if gitleaks isn't installed, so a missing local
@@ -25,6 +27,20 @@ set -euo pipefail
 
 HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG="$HOOK_DIR/gitleaks.toml"
+
+# Artifact check (forbidden names + zip-inner entries). Runs BEFORE and
+# independently of gitleaks, so a missing gitleaks binary does not disable it
+# (gitleaks never looks inside archives). Fail-closed: a violation, or any
+# failure to enumerate/read the index, blocks the commit. --staged makes the
+# script read names from `git diff --cached` and content from the STAGED BLOB
+# (`git cat-file blob :path`), never from the working tree, so swapping or
+# deleting the file after `git add` cannot hide a staged archive.
+if ! bash "$HOOK_DIR/artifact-check.sh" --staged; then
+  echo "" >&2
+  echo "ERROR: artifact-check blocked this commit (see above)." >&2
+  echo "False positive? Edit packages/secret-guard/ci/forbidden-names.txt." >&2
+  exit 1
+fi
 
 if ! command -v gitleaks >/dev/null 2>&1; then
   echo "WARNING: gitleaks not installed — skipping local secret scan for this commit." >&2

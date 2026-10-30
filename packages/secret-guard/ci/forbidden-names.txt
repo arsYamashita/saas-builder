@@ -1,0 +1,35 @@
+# secret-guard: forbidden artifact names (consumed by artifact-check.sh)
+#
+# One extended regex (grep -E) per line. '#' starts a comment; blank lines
+# are ignored. Each regex is matched against the full repo-relative path of
+# a file AND against every entry name inside a zip-format file.
+#
+# A line starting with '!' is an ALLOWLIST regex: a path matching any
+# allow line is never flagged by the forbidden rules below.
+#
+# Zip-format files are also inspected by entry name. Entries that look like
+# archives themselves (.zip .jar .war .tgz .tar.gz .tar .gz .7z .rar, or a
+# zip header) are rejected as "nested archive not allowed": the check does
+# not recurse. Names containing a line break are rejected outright.
+#
+# To add a rule: append a regex line. To exempt a safe template file:
+# append a '!' line, as narrowly as you can.
+
+# --- allowlist (never flagged) ---
+!(^|/)\.env\.(example|sample|template)$
+
+# --- forbidden ---
+# dotenv files
+(^|/)\.env(\..+)?$
+# terraform plan / state (a plan file is a zip that embeds the state)
+(^|/)tfplan$
+\.tfplan$
+\.tfstate(\..+)?$
+(^|/)plan\.out$
+# key stores
+\.pem$
+\.p12$
+\.jks$
+# GCP service-account keys
+service-account.*\.json$
+-[0-9a-f]{12}\.json$
