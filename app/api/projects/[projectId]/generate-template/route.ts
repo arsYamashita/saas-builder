@@ -18,7 +18,10 @@ type Props = {
   params: Promise<{ projectId: string }>;
 };
 
-async function postInternal(path: string): Promise<{
+async function postInternal(
+  path: string,
+  cookieHeader: string | null
+): Promise<{
   data: Record<string, unknown>;
   meta: GenerationStepMeta | undefined;
 }> {
@@ -35,6 +38,17 @@ async function postInternal(path: string): Promise<{
   const internalToken = getInternalPipelineToken();
   if (internalToken) {
     headers[INTERNAL_PIPELINE_HEADER] = internalToken;
+  }
+  // Next.js does NOT propagate the inbound request's Cookie header across an
+  // internal self-fetch. Each child step (generate-blueprint/-implementation/
+  // -schema/-api-design/split-run-to-files/export-files) resolves the caller
+  // via requireProjectAccess() -> ... -> getAuthSession(), which reads the
+  // session cookie via next/headers cookies(). Without forwarding it here,
+  // every child call 401s and the whole pipeline dies on step 1 even for a
+  // legitimately authenticated caller. See
+  // [[internal_fetch_drops_session_cookie_orchestrator_route_dead]].
+  if (cookieHeader) {
+    headers["Cookie"] = cookieHeader;
   }
 
   const res = await fetch(`${baseUrl}${path}`, {
@@ -56,8 +70,11 @@ async function postInternal(path: string): Promise<{
   return { data: json, meta };
 }
 
-export async function POST(_req: NextRequest, { params }: Props) {
+export async function POST(req: NextRequest, { params }: Props) {
   const { projectId } = await params;
+  // Captured once and threaded through every internal step call — see
+  // postInternal() above for why this is required.
+  const cookieHeader = req.headers.get("cookie");
 
   // Tenant-scoped auth + project lookup in one call — prevents IDOR by
   // ensuring the project belongs to the caller's active tenant. Previously
@@ -116,41 +133,46 @@ export async function POST(_req: NextRequest, { params }: Props) {
     // Step 1: Blueprint
     await updateGenerationStep(generationRunId, "blueprint", "running");
     const blueprintRes = await postInternal(
-      `/api/projects/${projectId}/generate-blueprint`
+      `/api/projects/${projectId}/generate-blueprint`,
+      cookieHeader
     );
     await updateGenerationStep(generationRunId, "blueprint", "completed", blueprintRes.meta);
 
     // Step 2: Implementation
     await updateGenerationStep(generationRunId, "implementation", "running");
     const implRes = await postInternal(
-      `/api/projects/${projectId}/generate-implementation`
+      `/api/projects/${projectId}/generate-implementation`,
+      cookieHeader
     );
     await updateGenerationStep(generationRunId, "implementation", "completed", implRes.meta);
 
     // Step 3: Schema
     await updateGenerationStep(generationRunId, "schema", "running");
     const schemaRes = await postInternal(
-      `/api/projects/${projectId}/generate-schema`
+      `/api/projects/${projectId}/generate-schema`,
+      cookieHeader
     );
     await updateGenerationStep(generationRunId, "schema", "completed", schemaRes.meta);
 
     // Step 4: API Design
     await updateGenerationStep(generationRunId, "api_design", "running");
     const apiRes = await postInternal(
-      `/api/projects/${projectId}/generate-api-design`
+      `/api/projects/${projectId}/generate-api-design`,
+      cookieHeader
     );
     await updateGenerationStep(generationRunId, "api_design", "completed", apiRes.meta);
 
     // Step 5: Split Files
     await updateGenerationStep(generationRunId, "split_files", "running");
     const splitRes = await postInternal(
-      `/api/projects/${projectId}/split-run-to-files`
+      `/api/projects/${projectId}/split-run-to-files`,
+      cookieHeader
     );
     await updateGenerationStep(generationRunId, "split_files", "completed", splitRes.meta);
 
     // Step 6: Export Files (no AI — no _meta)
     await updateGenerationStep(generationRunId, "export_files", "running");
-    await postInternal(`/api/projects/${projectId}/export-files`);
+    await postInternal(`/api/projects/${projectId}/export-files`, cookieHeader);
     await updateGenerationStep(generationRunId, "export_files", "completed");
 
     await completeGenerationRun(generationRunId);
@@ -162,7 +184,14 @@ export async function POST(_req: NextRequest, { params }: Props) {
         `${baseUrl}/api/projects/${projectId}/run-quality-gate`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            // Same internal-fetch Cookie-drop issue as postInternal() above:
+            // run-quality-gate also requires an authenticated session via
+            // requireProjectAccess(). Without this it always 401s and the
+            // quality gate silently never runs (swallowed by the catch below).
+            ...(cookieHeader ? { Cookie: cookieHeader } : {}),
+          },
           body: JSON.stringify({ generationRunId }),
           cache: "no-store",
         }
