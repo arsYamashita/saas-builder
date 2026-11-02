@@ -5,6 +5,23 @@ import { runSignupFlow } from "@/lib/auth/signup-flow";
 import { rateLimit } from "@/lib/rate-limit";
 import { parseJsonBody } from "@/lib/api/errors";
 
+/**
+ * このルートは 1 リクエストの中で次を順に待つ。
+ *   1. supabase.auth.signUp                                  (1 回)
+ *   2. runSignupFlow                                         (最大 7 回)
+ *      users upsert, 所属の確認, ensure_signup_tenant RPC,
+ *      紹介コードがあれば affiliate 検索と referral の確認・作成(最大 4 回)
+ *   3. supabase.auth.signInWithPassword                      (1 回)
+ * 合計で最大 9 回。Supabase の応答が遅い時間帯を 1 回 7 秒と見ると、
+ * 最悪で 63 秒かかる。maxDuration はこれより長い 90 秒にして、途中で
+ * プラットフォームに打ち切られ「認証ユーザーだけ残る」状態になるのを避ける。
+ * 値を変えるときは、この見積もりと lib/auth/__tests__/signup-flow.test.ts の
+ * 遅延試験も合わせて見直すこと。
+ * (Next.js はこの値を静的に読むため、リテラルで書く必要がある。デプロイ先の
+ * プランの上限が 90 秒未満なら、上限に合わせて下げ、待ちの回数を減らすこと。)
+ */
+export const maxDuration = 90;
+
 export async function POST(req: NextRequest) {
   try {
     const ip = req.headers.get("x-forwarded-for")?.split(",")[0] ?? "unknown";
