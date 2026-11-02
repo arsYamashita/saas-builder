@@ -1,5 +1,6 @@
 import { getAuthSession } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/db/supabase/admin";
+import { runSignupFlow } from "@/lib/auth/signup-flow";
 import { resetStuckSteps } from "@/lib/db/step-review";
 import type { GenerationStep } from "@/types/generation-run";
 
@@ -12,11 +13,26 @@ export async function requireCurrentUser() {
 
   const supabase = createAdminClient();
 
-  const { data: userRecord, error } = await supabase
-    .from("users")
-    .select("*")
-    .eq("id", session.user.id)
-    .single();
+  const fetchProfile = () =>
+    supabase.from("users").select("*").eq("id", session.user.id).single();
+
+  let { data: userRecord, error } = await fetchProfile();
+
+  // users の行が無い (PGRST116 = 0 行) のは、auth.signUp の後、users の
+  // upsert の前に登録が止まった場合。ログイン後の入口はここを最初に通るので、
+  // runSignupFlow と同じ復旧 (users の upsert と冪等なテナント作成) をここで
+  // 1 回だけ行い、もう一度探す。再帰はしない。DB 障害など他のエラーでは復旧しない。
+  if (error?.code === "PGRST116") {
+    const displayName =
+      session.user.displayName || session.user.email.split("@")[0] || "workspace";
+    await runSignupFlow({
+      userId: session.user.id,
+      email: session.user.email,
+      displayName,
+      tenantName: displayName,
+    });
+    ({ data: userRecord, error } = await fetchProfile());
+  }
 
   if (error) {
     throw new Error(`User profile not found: ${error.message}`);
