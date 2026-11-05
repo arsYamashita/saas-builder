@@ -15,12 +15,12 @@ import {
   Plus,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
-import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { createClient } from "@/lib/db/supabase/client";
+import { useLogout } from "@/hooks/use-logout";
 
 const mainNav = [
   { href: "/projects", label: "プロジェクト", icon: FolderKanban },
@@ -39,7 +39,6 @@ const systemNav = [
 
 export function BuilderSidebar() {
   const pathname = usePathname();
-  const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [user, setUser] = useState<{ email: string; displayName: string } | null>(null);
 
@@ -57,12 +56,7 @@ export function BuilderSidebar() {
     });
   }, []);
 
-  const handleLogout = async () => {
-    const res = await fetch("/api/auth/logout", { method: "POST" });
-    const json = await res.json();
-    router.push(json.redirectTo || "/auth/login");
-    router.refresh();
-  };
+  const handleLogout = useLogout();
 
   const renderNavGroup = (
     items: typeof mainNav,

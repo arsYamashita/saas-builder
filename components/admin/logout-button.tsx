@@ -1,31 +1,17 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useLogout } from "@/hooks/use-logout";
 import { Button } from "@/components/ui/button";
 import { LogOut } from "lucide-react";
 
 export function LogoutButton() {
-  const router = useRouter();
+  const logout = useLogout();
 
   return (
     <Button
       variant="ghost"
       size="sm"
-      onClick={async () => {
-        const res = await fetch("/api/auth/logout", {
-          method: "POST",
-        });
-
-        const json = await res.json();
-
-        if (!res.ok) {
-          alert(json.error || "ログアウトに失敗しました");
-          return;
-        }
-
-        router.push(json.redirectTo || "/auth/login");
-        router.refresh();
-      }}
+      onClick={logout}
     >
       <LogOut className="h-3.5 w-3.5" />
       ログアウト
