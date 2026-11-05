@@ -8,6 +8,11 @@
  */
 export { getStripeClient } from "./stripe-client";
 export { buildIdempotencyKey } from "./idempotency";
+export {
+  canonicalJson,
+  hashPayload,
+  isStripeIdempotencyError,
+} from "./payload-hash";
 export { createCheckoutSession } from "./checkout";
 export { verifyWebhookSignature } from "./webhook";
 export { MissingWebhookMetadataError } from "./errors";

@@ -78,6 +78,12 @@ timestamp. `attemptId` should be a client-generated id minted once per
 purchase attempt and reused across retries of that attempt, so retries
 converge on the same key while a fresh attempt gets a new one.
 
+Also append `hashPayload(params)` (SHA-256 of the key-sorted canonical JSON,
+first 16 hex chars) of the exact params object you pass to
+`createCheckoutSession`, so the key changes when the content changes and
+Stripe does not answer `idempotency_error`. Use `isStripeIdempotencyError`
+to tell that error apart from other Stripe failures.
+
 ### 2. Webhook signatures MUST be verified — no escape hatch
 
 `verifyWebhookSignature` is the only supported way to turn a raw webhook

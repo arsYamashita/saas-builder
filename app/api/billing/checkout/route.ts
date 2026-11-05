@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import type Stripe from "stripe";
 import {
   getStripeClient,
   buildIdempotencyKey,
   createCheckoutSession,
+  hashPayload,
+  isStripeIdempotencyError,
   reserveSubscriptionCheckoutSlot,
   releaseSubscriptionCheckoutSlot,
   SubscriptionConflictError,
@@ -156,35 +159,45 @@ export async function POST(req: NextRequest) {
       // deduplicated within Stripe's 24h key window (acceptable for
       // subscription checkout, where an immediate same-plan re-purchase is
       // itself almost always a duplicate).
+      // The key also carries a hash of the exact params sent to Stripe. Stripe
+      // rejects a reused key whose parameters differ (idempotency_error), so
+      // when the content changes within one attempt (referral cookie set,
+      // price_id swapped, ...) the key must change too, while an identical
+      // retry keeps the same key. The hash and the request use this one
+      // object so they cannot drift apart.
+      // See [[idempotency_key_only_completion_check_ignores_changed_input_after_reconnect]].
+      const checkoutParams: Stripe.Checkout.SessionCreateParams = {
+        mode: "subscription",
+        line_items: [
+          {
+            price: plan.price_id,
+            quantity: 1,
+          },
+        ],
+        success_url: `${process.env.NEXT_PUBLIC_APP_URL}/billing?checkout=success`,
+        cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/billing?checkout=cancel`,
+        client_reference_id: user.id,
+        customer_email: user.email,
+        metadata: {
+          tenant_id: tenantId,
+          app_user_id: user.id,
+          membership_plan_id: membershipPlanId,
+          referral_id: referralId ?? "",
+          affiliate_id: affiliateId ?? "",
+        },
+      };
+
       const idempotencyKey = buildIdempotencyKey([
         "checkout",
         user.id,
         membershipPlanId,
         attemptId ?? "",
+        hashPayload(checkoutParams),
       ]);
 
       const session = await createCheckoutSession(
         stripe,
-        {
-          mode: "subscription",
-          line_items: [
-            {
-              price: plan.price_id,
-              quantity: 1,
-            },
-          ],
-          success_url: `${process.env.NEXT_PUBLIC_APP_URL}/billing?checkout=success`,
-          cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/billing?checkout=cancel`,
-          client_reference_id: user.id,
-          customer_email: user.email,
-          metadata: {
-            tenant_id: tenantId,
-            app_user_id: user.id,
-            membership_plan_id: membershipPlanId,
-            referral_id: referralId ?? "",
-            affiliate_id: affiliateId ?? "",
-          },
-        },
+        checkoutParams,
         idempotencyKey
       );
 
@@ -206,6 +219,20 @@ export async function POST(req: NextRequest) {
       throw error;
     }
   } catch (error) {
+    if (isStripeIdempotencyError(error)) {
+      // Stripe saw this key with different parameters. Do not log the key or
+      // the customer email; the message from Stripe is generic.
+      console.error("[billing/checkout] stripe idempotency_error", {
+        message: error instanceof Error ? error.message : undefined,
+      });
+      return NextResponse.json(
+        {
+          error: "checkout_retry_required",
+          message: "もう一度お試しください",
+        },
+        { status: 409 }
+      );
+    }
     return serverErrorResponse("billing/checkout", error, {
       message: "Failed to create checkout session",
     });
