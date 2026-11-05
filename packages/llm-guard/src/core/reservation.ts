@@ -28,7 +28,11 @@
  *      を返す。
  *   2. 呼び出し成功後: finalize(reservation, actual) — 実測トークンとの
  *      差分を **予約時のバケット** に対して補正。
- *   3. 呼び出し失敗時: release(reservation) — 予約分を予約時のバケットへ返却。
+ *   3. 呼び出し失敗時: settleOnFailure(guard, reservation, err) — 失敗の種類で
+ *      精算を分ける。release(予約分を予約時のバケットへ返却)は、提供元が
+ *      HTTP 状態(4xx/5xx)付きで断ったときだけ。時間切れ・通信断・中断など
+ *      状態の無い失敗は途中まで課金された可能性があるので、見込み額のまま
+ *      finalize する(多めに数える側に倒す)。catch で無条件に release しない。
  *
  * ## 予約が期間キーを保持する理由 (Codex review 2026-07-06 P2 on PR #39)
  *
