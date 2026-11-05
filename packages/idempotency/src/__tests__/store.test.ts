@@ -31,7 +31,7 @@ describe("InMemoryIdempotencyStore", () => {
     await store.complete("tenant-1", "k1", 201, { orderId: "o1" }, token);
 
     const replay = await store.claim("tenant-1", "k1", 60_000);
-    expect(replay).toEqual({ kind: "completed", status: 201, body: { orderId: "o1" } });
+    expect(replay).toEqual({ kind: "completed", status: 201, body: { orderId: "o1" }, requestHash: null });
   });
 
   it("allows a fresh claim again after release() (failed attempt)", async () => {
@@ -256,7 +256,7 @@ describe("createSupabaseIdempotencyStore", () => {
     await store.complete("tenant-1", "k1", 201, { id: "abc" }, token);
 
     const replay = await store.claim("tenant-1", "k1", 60_000);
-    expect(replay).toEqual({ kind: "completed", status: 201, body: { id: "abc" } });
+    expect(replay).toEqual({ kind: "completed", status: 201, body: { id: "abc" }, requestHash: null });
   });
 
   it("isolates the same key across two different scopes (tenant boundary)", async () => {
@@ -306,5 +306,92 @@ describe("createSupabaseIdempotencyStore", () => {
 
     const rejectedForStale = await store.extend("tenant-1", "k1", "wrong-token", 999_999);
     expect(rejectedForStale).toBe(false);
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// request_hash persistence (instruction 190)
+// ---------------------------------------------------------------------------
+
+describe("InMemoryIdempotencyStore request hash", () => {
+  it("returns the stored hash on completed and in_progress", async () => {
+    const store = new InMemoryIdempotencyStore();
+    const first = await store.claim("s", "k1", 60_000, "hash-a");
+    expect(await store.claim("s", "k1", 60_000, "hash-b")).toEqual({
+      kind: "in_progress",
+      requestHash: "hash-a",
+    });
+    await store.complete("s", "k1", 200, { ok: 1 }, (first as { token: string }).token);
+    expect(await store.claim("s", "k1", 60_000, "hash-b")).toEqual({
+      kind: "completed",
+      status: 200,
+      body: { ok: 1 },
+      requestHash: "hash-a",
+    });
+  });
+
+  it("returns null when no hash was supplied at claim time", async () => {
+    const store = new InMemoryIdempotencyStore();
+    await store.claim("s", "k1", 60_000);
+    expect(await store.claim("s", "k1", 60_000, "hash-a")).toEqual({
+      kind: "in_progress",
+      requestHash: null,
+    });
+  });
+});
+
+describe("createSupabaseIdempotencyStore request hash", () => {
+  it("writes request_hash on the claimed row", async () => {
+    const { client, rows } = makeFakeSupabase();
+    const store = createSupabaseIdempotencyStore(client);
+    await store.claim("s", "k1", 60_000, "hash-a");
+    expect(rows.get("s::k1")?.request_hash).toBe("hash-a");
+  });
+
+  it("returns the stored hash on in_progress and completed", async () => {
+    const { client } = makeFakeSupabase();
+    const store = createSupabaseIdempotencyStore(client);
+    const first = await store.claim("s", "k1", 60_000, "hash-a");
+    expect(await store.claim("s", "k1", 60_000, "hash-b")).toEqual({
+      kind: "in_progress",
+      requestHash: "hash-a",
+    });
+    await store.complete("s", "k1", 201, { id: 1 }, (first as { token: string }).token);
+    expect(await store.claim("s", "k1", 60_000, "hash-b")).toEqual({
+      kind: "completed",
+      status: 201,
+      body: { id: 1 },
+      requestHash: "hash-a",
+    });
+  });
+
+  it("returns null for a legacy row without request_hash (fail-closed input)", async () => {
+    const { client, rows } = makeFakeSupabase();
+    rows.set("s::legacy", {
+      scope: "s",
+      key: "legacy",
+      status: "completed",
+      token: "t",
+      response_status: 200,
+      response_body: { old: true },
+    });
+    const store = createSupabaseIdempotencyStore(client);
+    expect(await store.claim("s", "legacy", 60_000, "hash-a")).toEqual({
+      kind: "completed",
+      status: 200,
+      body: { old: true },
+      requestHash: null,
+    });
+  });
+
+  it("stores the new hash when a stale claim is reclaimed", async () => {
+    const { client, rows } = makeFakeSupabase();
+    const store = createSupabaseIdempotencyStore(client);
+    await store.claim("s", "k1", 60_000, "hash-a");
+    rows.get("s::k1")!.expires_at = new Date(Date.now() - 1000).toISOString();
+    const re = await store.claim("s", "k1", 60_000, "hash-b");
+    expect(re.kind).toBe("own");
+    expect(rows.get("s::k1")?.request_hash).toBe("hash-b");
   });
 });

@@ -263,3 +263,208 @@ describe("withRoute", () => {
     expect(handlerB).toHaveBeenCalledTimes(1);
   });
 });
+
+
+// ---------------------------------------------------------------------------
+// request hash / 422 idempotency_mismatch (instruction 190)
+// ---------------------------------------------------------------------------
+
+function post(body: string, qs = "", key = "k1"): Request {
+  return new Request(`http://localhost/api/orders${qs}`, {
+    method: "POST",
+    headers: { "Idempotency-Key": key, "Content-Type": "application/json" },
+    body,
+  });
+}
+
+describe("withRoute request hash", () => {
+  it("replays the previous response for the same key and the same body", async () => {
+    const store = new InMemoryIdempotencyStore();
+    const handler = vi.fn(async () => Response.json({ n: 1 }));
+    const wrapped = withRoute(handler, { store, ...UNSCOPED });
+
+    await wrapped(post('{"name":"a"}'), undefined);
+    const res = await wrapped(post('{"name":"a"}'), undefined);
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Idempotency-Replayed")).toBe("true");
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it("treats JSON key order as the same body", async () => {
+    const store = new InMemoryIdempotencyStore();
+    const handler = vi.fn(async () => Response.json({ n: 1 }));
+    const wrapped = withRoute(handler, { store, ...UNSCOPED });
+
+    await wrapped(post('{"a":1,"b":2}'), undefined);
+    const res = await wrapped(post('{"b":2,"a":1}'), undefined);
+
+    expect(res.headers.get("Idempotency-Replayed")).toBe("true");
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns 422 idempotency_mismatch when the body differs by one character (completed)", async () => {
+    const store = new InMemoryIdempotencyStore();
+    const handler = vi.fn(async () => Response.json({ n: 1 }));
+    const wrapped = withRoute(handler, { store, ...UNSCOPED });
+
+    await wrapped(post('{"name":"abc"}'), undefined);
+    const res = await wrapped(post('{"name":"abd"}'), undefined);
+
+    expect(res.status).toBe(422);
+    expect((await res.json()).error).toBe("idempotency_mismatch");
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns 422 when raw text `hello` is followed by the JSON string \"hello\"", async () => {
+    const store = new InMemoryIdempotencyStore();
+    const handler = vi.fn(async () => Response.json({ n: 1 }));
+    const wrapped = withRoute(handler, { store, ...UNSCOPED });
+
+    await wrapped(post("hello"), undefined);
+    const res = await wrapped(post('"hello"'), undefined);
+
+    expect(res.status).toBe(422);
+    expect((await res.json()).error).toBe("idempotency_mismatch");
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns 422 for a different body while the first request is still in progress", async () => {
+    const store = new InMemoryIdempotencyStore();
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const handler = vi.fn(async () => {
+      await gate;
+      return Response.json({ n: 1 });
+    });
+    const wrapped = withRoute(handler, { store, ...UNSCOPED });
+
+    const first = wrapped(post('{"name":"a"}'), undefined);
+    await vi.waitFor(() => expect(handler).toHaveBeenCalledTimes(1));
+    const other = await wrapped(post('{"name":"b"}'), undefined);
+    expect(other.status).toBe(422);
+    expect((await other.json()).error).toBe("idempotency_mismatch");
+
+    release();
+    await first;
+  });
+
+  it("still returns 409 for the same body while the first request is in progress", async () => {
+    const store = new InMemoryIdempotencyStore();
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const handler = vi.fn(async () => {
+      await gate;
+      return Response.json({ n: 1 });
+    });
+    const wrapped = withRoute(handler, { store, ...UNSCOPED });
+
+    const first = wrapped(post('{"name":"a"}'), undefined);
+    await vi.waitFor(() => expect(handler).toHaveBeenCalledTimes(1));
+    const same = await wrapped(post('{"name":"a"}'), undefined);
+    expect(same.status).toBe(409);
+
+    release();
+    await first;
+  });
+
+  it("treats a different query order only as the same request", async () => {
+    const store = new InMemoryIdempotencyStore();
+    const handler = vi.fn(async () => Response.json({ n: 1 }));
+    const wrapped = withRoute(handler, { store, ...UNSCOPED });
+
+    await wrapped(post("{}", "?a=1&b=2"), undefined);
+    const res = await wrapped(post("{}", "?b=2&a=1"), undefined);
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Idempotency-Replayed")).toBe("true");
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns 422 when the query value differs", async () => {
+    const store = new InMemoryIdempotencyStore();
+    const handler = vi.fn(async () => Response.json({ n: 1 }));
+    const wrapped = withRoute(handler, { store, ...UNSCOPED });
+
+    await wrapped(post("{}", "?a=1"), undefined);
+    const res = await wrapped(post("{}", "?a=2"), undefined);
+
+    expect(res.status).toBe(422);
+  });
+
+  it("returns 400 idempotency_body_unhashable when the body exceeds maxHashBodyBytes", async () => {
+    const store = new InMemoryIdempotencyStore();
+    const handler = vi.fn(async () => Response.json({ n: 1 }));
+    const wrapped = withRoute(handler, { store, maxHashBodyBytes: 16, ...UNSCOPED });
+
+    const res = await wrapped(post(JSON.stringify({ big: "x".repeat(100) })), undefined);
+
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("idempotency_body_unhashable");
+    expect(handler).not.toHaveBeenCalled();
+    expect(store.size()).toBe(0);
+  });
+
+  it("returns 400 when the body is over the limit even without a Content-Length header", async () => {
+    const store = new InMemoryIdempotencyStore();
+    const handler = vi.fn(async () => Response.json({ n: 1 }));
+    const wrapped = withRoute(handler, { store, maxHashBodyBytes: 16, ...UNSCOPED });
+    const stream = new ReadableStream<Uint8Array>({
+      start(c) {
+        c.enqueue(new TextEncoder().encode("x".repeat(100)));
+        c.close();
+      },
+    });
+    const r = new Request("http://localhost/api/orders", {
+      method: "POST",
+      headers: { "Idempotency-Key": "k1" },
+      body: stream,
+      duplex: "half",
+    } as RequestInit);
+
+    const res = await wrapped(r, undefined);
+
+    expect(res.status).toBe(400);
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 when the body was already consumed (cannot be hashed)", async () => {
+    const store = new InMemoryIdempotencyStore();
+    const handler = vi.fn(async () => Response.json({ n: 1 }));
+    const wrapped = withRoute(handler, { store, ...UNSCOPED });
+    const r = post('{"a":1}');
+    await r.text();
+
+    const res = await wrapped(r, undefined);
+
+    expect(res.status).toBe(400);
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("returns 422 for a completed row whose stored hash is NULL (legacy row, fail-closed)", async () => {
+    const legacy: IdempotencyStore = {
+      claim: async () => ({ kind: "completed", status: 200, body: { bodyText: "{}", contentType: null }, requestHash: null }),
+      complete: async () => true,
+      release: async () => undefined,
+      extend: async () => true,
+    };
+    const handler = vi.fn(async () => Response.json({ n: 1 }));
+    const wrapped = withRoute(handler, { store: legacy, ...UNSCOPED });
+
+    const res = await wrapped(post("{}"), undefined);
+
+    expect(res.status).toBe(422);
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("does not read the body when required: false and the header is absent", async () => {
+    const store = new InMemoryIdempotencyStore();
+    const handler = vi.fn(async (r: Request) => Response.json(await r.json()));
+    const wrapped = withRoute(handler, { store, required: false, ...UNSCOPED });
+    const r = new Request("http://localhost/api/orders", { method: "POST", body: '{"a":1}' });
+
+    const res = await wrapped(r, undefined);
+
+    expect(await res.json()).toEqual({ a: 1 });
+  });
+});

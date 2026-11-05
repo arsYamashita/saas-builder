@@ -71,7 +71,18 @@ export const POST = withRoute(handlePost, {
   headers — `Set-Cookie`, `Location`, caching headers, etc. — are NOT
   replayed; a route that needs those preserved on replay can't rely on
   `withRoute` alone for them.)
-- Same key, prior call still running → `409 { error: "request_in_progress" }`.
+- Same key, prior call still running, same content → `409 { error: "request_in_progress" }`.
+- Same key, **different content** → `422 { error: "idempotency_mismatch" }`,
+  whether the prior call completed or is still running. "Content" is a
+  sha256 of the canonical JSON of `[namespace, pathname, sorted query,
+  body]` (parsed JSON, or the raw text when the body is not JSON). Query
+  order and JSON key order do not matter; any other change does. The hash
+  is stored in `idempotency_keys.request_hash` (migration
+  `0020_idempotency_request_hash.sql`). A row with no stored hash (written
+  before the migration) never matches, so it answers 422 (fail-closed).
+- Body unreadable, already consumed, or larger than `maxHashBodyBytes`
+  (default 1 MiB) → `400 { error: "idempotency_body_unhashable" }`. The
+  check is never skipped to let such a request through.
 - `handlePost` succeeded but the claim was lost mid-flight (see "At-most-once
   is a lease, not a guarantee" below) → `500 { error: "idempotency_claim_lost" }`
   — the response was already sent back to `handlePost`'s original caller in
@@ -136,6 +147,18 @@ the heartbeat detects the lock was lost (reclaimed by someone else) while
 `fn` is still running, `fn`'s `AbortSignal` fires and `withLock` throws
 `LockLostError` once `fn` settles — see "At-most-once is a lease, not a
 guarantee" below.
+
+## How to draw the line around a key
+
+1. A key belongs to one operation with one content. Make a new key when
+   the user changes the input; reuse the key only for a resend of the
+   exact same request.
+2. A refusal with a reason (4xx) is a settled failure. Do not retry it
+   with the same key; fix the cause and send a new key.
+3. Only a dropped connection or a 5xx means "the result is unknown".
+   Resend those with the same key and the same content. If the content
+   has changed in the meantime, the server answers 422
+   `idempotency_mismatch` instead of returning the old result.
 
 ## Tenant isolation
 

@@ -22,6 +22,7 @@ export class InMemoryIdempotencyStore implements IdempotencyStore {
       token: string;
       responseStatus?: number;
       responseBody?: unknown;
+      requestHash: string | null;
       expiresAt: number;
     }
   >();
@@ -30,14 +31,19 @@ export class InMemoryIdempotencyStore implements IdempotencyStore {
     return `${scope}::${key}`;
   }
 
-  async claim(scope: string, key: string, ttlMs: number): Promise<ClaimOutcome> {
+  async claim(
+    scope: string,
+    key: string,
+    ttlMs: number,
+    requestHash: string | null = null
+  ): Promise<ClaimOutcome> {
     const rowKey = this.rowKey(scope, key);
     const now = Date.now();
     const existing = this.rows.get(rowKey);
 
     if (!existing) {
       const token = randomToken();
-      this.rows.set(rowKey, { status: "processing", token, expiresAt: now + ttlMs });
+      this.rows.set(rowKey, { status: "processing", token, requestHash, expiresAt: now + ttlMs });
       return { kind: "own", token };
     }
 
@@ -46,6 +52,7 @@ export class InMemoryIdempotencyStore implements IdempotencyStore {
         kind: "completed",
         status: existing.responseStatus ?? 200,
         body: existing.responseBody,
+        requestHash: existing.requestHash,
       };
     }
 
@@ -57,11 +64,11 @@ export class InMemoryIdempotencyStore implements IdempotencyStore {
       // write). A real backing store must achieve the same guarantee with
       // an atomic conditional statement — see IdempotencyStore.claim doc.
       const token = randomToken();
-      this.rows.set(rowKey, { status: "processing", token, expiresAt: now + ttlMs });
+      this.rows.set(rowKey, { status: "processing", token, requestHash, expiresAt: now + ttlMs });
       return { kind: "own", token };
     }
 
-    return { kind: "in_progress" };
+    return { kind: "in_progress", requestHash: existing.requestHash };
   }
 
   async complete(
@@ -87,6 +94,7 @@ export class InMemoryIdempotencyStore implements IdempotencyStore {
       token,
       responseStatus: status,
       responseBody: body,
+      requestHash: existing.requestHash,
       expiresAt: Number.POSITIVE_INFINITY,
     });
     return true;
@@ -221,6 +229,7 @@ export function createSupabaseIdempotencyStore(
     scope: string,
     key: string,
     ttlMs: number,
+    requestHash: string | null = null,
     attempt = 0
   ): Promise<ClaimOutcome> {
     const nowIso = new Date().toISOString();
@@ -235,6 +244,7 @@ export function createSupabaseIdempotencyStore(
           key,
           status: "processing",
           token,
+          request_hash: requestHash,
           started_at: nowIso,
           expires_at: expiresAtIso,
           response_status: null,
@@ -263,7 +273,7 @@ export function createSupabaseIdempotencyStore(
           `idempotency claim for scope=${scope} key=${key} could not settle after ${maxClaimAttempts} attempts (contention)`
         );
       }
-      return claim(scope, key, ttlMs, attempt + 1);
+      return claim(scope, key, ttlMs, requestHash, attempt + 1);
     }
 
     if (existing.status === "completed") {
@@ -271,13 +281,17 @@ export function createSupabaseIdempotencyStore(
         kind: "completed",
         status: (existing.response_status as number) ?? 200,
         body: existing.response_body,
+        requestHash: (existing.request_hash as string | null | undefined) ?? null,
       };
     }
 
     // status === "processing"
     const expiresAt = new Date(existing.expires_at as string).getTime();
     if (expiresAt > Date.now()) {
-      return { kind: "in_progress" };
+      return {
+        kind: "in_progress",
+        requestHash: (existing.request_hash as string | null | undefined) ?? null,
+      };
     }
 
     // Stale — attempt atomic reclaim with a fresh token.
@@ -286,6 +300,7 @@ export function createSupabaseIdempotencyStore(
       .update({
         status: "processing",
         token,
+        request_hash: requestHash,
         started_at: nowIso,
         expires_at: expiresAtIso,
         response_status: null,
@@ -313,7 +328,7 @@ export function createSupabaseIdempotencyStore(
         `idempotency claim for scope=${scope} key=${key} could not settle after ${maxClaimAttempts} attempts (contention)`
       );
     }
-    return claim(scope, key, ttlMs, attempt + 1);
+    return claim(scope, key, ttlMs, requestHash, attempt + 1);
   }
 
   return {
