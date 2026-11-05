@@ -55,7 +55,116 @@ export interface WithRouteOptions<Ctx = unknown> {
    * happens again.
    */
   required?: boolean;
+  /**
+   * Upper bound (bytes) on the request body that is read to build the
+   * request hash. Default 1 MiB. A body that is larger, or cannot be read,
+   * is rejected with 400 `idempotency_body_unhashable` — the guard never
+   * skips the same-key/different-content check by letting such a request
+   * through unhashed.
+   */
+  maxHashBodyBytes?: number;
   store: IdempotencyStore;
+}
+
+/** Default for `WithRouteOptions.maxHashBodyBytes`. */
+export const DEFAULT_MAX_HASH_BODY_BYTES = 1024 * 1024;
+
+class BodyUnhashableError extends Error {}
+
+/** Reads at most `maxBytes` of the (cloned) request body as UTF-8 text.
+ * Throws `BodyUnhashableError` when it is larger or cannot be read. */
+async function readBodyText(req: Request, maxBytes: number): Promise<string> {
+  const declared = req.headers.get("content-length");
+  if (declared !== null && Number(declared) > maxBytes) {
+    throw new BodyUnhashableError("body exceeds maxHashBodyBytes");
+  }
+  let clone: Request;
+  try {
+    clone = req.clone();
+  } catch {
+    throw new BodyUnhashableError("body cannot be cloned (already consumed?)");
+  }
+  if (!clone.body) return "";
+  const reader = clone.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        // Do not await: cancelling one branch of a cloned (tee'd) body
+        // only settles once the other branch is also done.
+        void reader.cancel().catch(() => undefined);
+        throw new BodyUnhashableError("body exceeds maxHashBodyBytes");
+      }
+      chunks.push(value);
+    }
+  } catch (err) {
+    if (err instanceof BodyUnhashableError) throw err;
+    throw new BodyUnhashableError("body could not be read");
+  }
+  const all = new Uint8Array(total);
+  let offset = 0;
+  for (const c of chunks) {
+    all.set(c, offset);
+    offset += c.byteLength;
+  }
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(all);
+  } catch {
+    throw new BodyUnhashableError("body is not valid UTF-8");
+  }
+}
+
+/** JSON with object keys sorted recursively, so key order never changes the hash. */
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value !== null && typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    return `{${Object.keys(obj)
+      .sort()
+      .map((k) => `${JSON.stringify(k)}:${canonicalJson(obj[k])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+async function sha256Hex(input: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+/**
+ * sha256 over the canonical JSON of
+ * `[namespace, pathname, sorted query pairs, parsed body or raw text, each tagged "json"/"raw"]`.
+ * Same shape as aria-next's `requestHash()`; query order and JSON key
+ * order do not matter, any other difference does.
+ */
+async function computeRequestHash(
+  req: Request,
+  namespace: string,
+  maxBytes: number
+): Promise<string> {
+  const rawText = await readBodyText(req, maxBytes);
+  // Tag the body with its form so raw text `hello` and the JSON string
+  // `"hello"` can never normalize to the same value.
+  let body: unknown = ["raw", rawText];
+  if (rawText.length > 0) {
+    try {
+      body = ["json", JSON.parse(rawText)];
+    } catch {
+      body = ["raw", rawText];
+    }
+  }
+  const url = new URL(req.url);
+  const query = Array.from(url.searchParams.entries()).sort(([ak, av], [bk, bv]) =>
+    ak === bk ? (av < bv ? -1 : av > bv ? 1 : 0) : ak < bk ? -1 : 1
+  );
+  return sha256Hex(canonicalJson([namespace, url.pathname, query, body]));
 }
 
 function jsonResponse(payload: unknown, status: number): Response {
@@ -106,7 +215,12 @@ function encodeScopeNamespace(callerScope: string, namespace: string): string {
  *   - Same key, prior run completed: replays the STORED response
  *     (identical status + body + content-type) WITHOUT re-running
  *     `handler` — the "同一キー同一レスポンス" requirement.
- *   - Same key, prior run still in flight: 409 — the "処理中409"
+ *   - Same key, different request content (route/query/body hash): 422
+ *     `idempotency_mismatch`, whether the prior run completed or is still
+ *     in flight. A stored hash of NULL (legacy row) counts as different.
+ *   - Body unreadable or over `maxHashBodyBytes`: 400
+ *     `idempotency_body_unhashable`.
+ *   - Same key and content, prior run still in flight: 409 — the "処理中409"
  *     requirement — rather than starting a second concurrent execution of
  *     `handler` for the same logical request.
  *
@@ -123,6 +237,7 @@ export function withRoute<Ctx = unknown>(
   const required = opts.required ?? true;
   const ttlMs = opts.ttlMs ?? DEFAULT_TTL_MS;
   const heartbeatIntervalMs = opts.heartbeatIntervalMs ?? Math.max(1, Math.floor(ttlMs / 3));
+  const maxHashBodyBytes = opts.maxHashBodyBytes ?? DEFAULT_MAX_HASH_BODY_BYTES;
   const { store, namespace } = opts;
 
   if (!namespace || !namespace.trim()) {
@@ -170,7 +285,38 @@ export function withRoute<Ctx = unknown>(
     const callerScope = await opts.getScope(req, ctx);
     const scope = encodeScopeNamespace(callerScope, namespace);
 
-    const claim = await store.claim(scope, key, ttlMs);
+    // Hash BEFORE claiming. A body we cannot hash is refused outright:
+    // skipping the check would let a changed payload replay an old answer.
+    let requestHash: string;
+    try {
+      requestHash = await computeRequestHash(req, namespace, maxHashBodyBytes);
+    } catch {
+      return jsonResponse(
+        {
+          error: "idempotency_body_unhashable",
+          message:
+            "The request body could not be read or exceeds the size limit for idempotency checking",
+        },
+        400
+      );
+    }
+
+    const claim = await store.claim(scope, key, ttlMs, requestHash);
+
+    // Same key, different content (or a stored hash that is missing, which
+    // cannot be proven equal): refuse rather than replay or report 409.
+    if (
+      (claim.kind === "completed" || claim.kind === "in_progress") &&
+      claim.requestHash !== requestHash
+    ) {
+      return jsonResponse(
+        {
+          error: "idempotency_mismatch",
+          message: "This Idempotency-Key was already used with a different request",
+        },
+        422
+      );
+    }
 
     if (claim.kind === "completed") {
       const stored = claim.body as StoredResponse;

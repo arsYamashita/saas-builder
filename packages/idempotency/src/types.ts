@@ -35,11 +35,11 @@ export type ClaimOutcome =
   | { kind: "own"; token: string }
   /** A prior attempt already finished. Replay its response verbatim —
    * do NOT re-run the side effect. */
-  | { kind: "completed"; status: number; body: unknown }
+  | { kind: "completed"; status: number; body: unknown; requestHash: string | null }
   /** A prior attempt is still in flight (within its TTL). The caller
    * should surface this as "processing, try again shortly" (HTTP 409)
    * rather than starting a second concurrent execution. */
-  | { kind: "in_progress" };
+  | { kind: "in_progress"; requestHash: string | null };
 
 export interface IdempotencyStore {
   /**
@@ -60,8 +60,22 @@ export interface IdempotencyStore {
    * atomic conditional operation (e.g. `UPDATE ... WHERE status =
    * 'processing' AND expires_at < now()`), not a read-then-write, or two
    * callers can both believe they reclaimed it.
+   *
+   * `requestHash` identifies the request content (route + query + body)
+   * the key was first used with. The store persists it on the claimed
+   * row and returns the STORED value (`string`, or `null` for a row
+   * written before the column existed or without a hash) on
+   * `completed` / `in_progress`, so the caller can tell "same key, same
+   * content" (replay / 409) from "same key, different content" (422).
+   * A `null` stored hash never equals a request hash: fail-closed.
+   * Omit it for callers that key on identity alone (`withIdempotency`).
    */
-  claim(scope: IdempotencyScope, key: string, ttlMs: number): Promise<ClaimOutcome>;
+  claim(
+    scope: IdempotencyScope,
+    key: string,
+    ttlMs: number,
+    requestHash?: string | null
+  ): Promise<ClaimOutcome>;
 
   /** Mark a claimed (scope, key) as completed and store the response to
    * replay for future retries. `token` must be the one returned by the
