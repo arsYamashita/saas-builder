@@ -87,14 +87,28 @@ describe("analyzeDiff", () => {
     expect(client.messages.create).not.toHaveBeenCalled();
   });
 
-  it("releases the reservation and alerts on a Claude call error", async () => {
+  it("releases the reservation and alerts when the provider rejects with an HTTP status", async () => {
+    const rejection = Object.assign(new Error("overloaded"), { status: 529 });
     const client: ClaudeMessagesClient = {
-      messages: { create: vi.fn().mockRejectedValue(new Error("network down")) },
+      messages: { create: vi.fn().mockRejectedValue(rejection) },
     };
     const deps = makeDeps(client);
 
-    await expect(analyzeDiff(makeRequest(), deps)).rejects.toThrow("network down");
+    await expect(analyzeDiff(makeRequest(), deps)).rejects.toBe(rejection);
     expect(deps.usageGuard.getMonthlyUsed("tenant-1")).toBe(0); // reservation released, no residual charge
+    expect(deps.alertSink.failures.map((f) => f.reason)).toContain("call_error");
+  });
+
+  it("keeps the estimate charged and rethrows when the call fails without a status", async () => {
+    const failure = new Error("socket hang up");
+    const client: ClaudeMessagesClient = {
+      messages: { create: vi.fn().mockRejectedValue(failure) },
+    };
+    const deps = makeDeps(client);
+
+    await expect(analyzeDiff(makeRequest(), deps)).rejects.toBe(failure);
+    // 予約 8000 (DEFAULT_ESTIMATED_TOKENS_PER_REQUEST) が見込み額のまま残る
+    expect(deps.usageGuard.getMonthlyUsed("tenant-1")).toBe(8000);
     expect(deps.alertSink.failures.map((f) => f.reason)).toContain("call_error");
   });
 

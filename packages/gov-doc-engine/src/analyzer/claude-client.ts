@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { settleOnFailure } from "@saas/llm-guard";
 import { resolveClaudeModel } from "../config/models";
 import { buildUserPrompt, SYSTEM_INSTRUCTIONS } from "./prompt";
 import { SUBSIDY_OUTPUT_JSON_SCHEMA } from "./output-schema";
@@ -152,7 +153,7 @@ export async function analyzeDiff(
       messages: [{ role: "user", content: buildUserPrompt(request) }],
     });
   } catch (err) {
-    await deps.usageGuard.release(reservation);
+    await settleOnFailure(deps.usageGuard, reservation, err);
     await recordAiFailure(
       deps.alertSink,
       deps.failureTracker,

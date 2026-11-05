@@ -20,7 +20,8 @@ export interface UsageCheckResult {
   /**
    * allowed=true のときの予約ハンドル。LLM 呼び出し成功後は
    * `guard.finalize(reservation, actualTokens)`、失敗時は
-   * `guard.release(reservation)` に渡すこと（予約時の期間バケットに対して
+   * `settleOnFailure(guard, reservation, err)` に渡すこと（`release` は提供元が
+   * 状態付きで断ったときだけ。状態の無い失敗は見込み額で確定する）。いずれも渡すこと（予約時の期間バケットに対して
    * 補正するため必須 — Codex review 2026-07-06 P2 on PR #39）。
    */
   reservation?: Reservation;

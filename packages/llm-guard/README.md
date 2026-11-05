@@ -58,7 +58,10 @@ if (!check.allowed) {
 }
 // check.reservation carries the reservation-time period keys — pass it back:
 //   on success: await guard.finalize(check.reservation, actualTokens)
-//   on failure: await guard.release(check.reservation)
+//   on failure: await settleOnFailure(guard, check.reservation, err)
+//     (release only when the provider rejected with an HTTP status 4xx/5xx;
+//      timeouts, dropped connections and aborts have no status and may have
+//      been billed partly, so they are finalized at the estimate instead)
 // This guarantees the adjustment lands in the bucket the reservation was made
 // in, even if the call crosses a UTC day/month boundary (Codex P2 on PR #39).
 

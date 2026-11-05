@@ -23,6 +23,11 @@ export {
 } from "./core/reservation";
 
 export {
+  isProviderStatusRejection,
+  settleOnFailure,
+} from "./core/settle";
+
+export {
   InMemoryAlertSink,
   ConsoleAlertSink,
   type AlertSink,
