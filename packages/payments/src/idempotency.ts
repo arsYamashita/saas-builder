@@ -27,6 +27,10 @@
  * purchase UI is rendered and reused across retries of that attempt) —
  * never a timestamp.
  *
+ * An idempotency key sent to an external service must always include a
+ * hash of the content being sent (see `hashPayload`); otherwise the same
+ * key with changed content is rejected, or replays a stale result.
+ *
  * @param parts - ordered list of stable scoping values,
  *   e.g. ["checkout", userId, planId, attemptId]
  */

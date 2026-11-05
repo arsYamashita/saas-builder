@@ -21,6 +21,9 @@
 export {
   getStripeClient,
   buildIdempotencyKey,
+  canonicalJson,
+  hashPayload,
+  isStripeIdempotencyError,
   createCheckoutSession,
   verifyWebhookSignature,
   MissingWebhookMetadataError,
