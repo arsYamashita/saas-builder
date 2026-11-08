@@ -28,7 +28,8 @@ export type AiFailureReason =
   | "call_error"
   | "json_parse_error"
   | "refusal"
-  | "selector_missing";
+  | "selector_missing"
+  | "unsourced_numeric";
 
 export interface AiFailureEvent {
   pipeline: string;

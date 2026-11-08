@@ -22,7 +22,10 @@ function makeRequest(overrides: Partial<DiffAnalysisRequest> = {}): DiffAnalysis
     sourceId: "mirasapo-plus-subsidy-search",
     sourceUrl: "https://mirasapo-plus.go.jp/subsidy/",
     previousText: "ものづくり補助金のみ掲載",
-    currentText: "ものづくり補助金 + IT導入補助金2026 通常枠が追加",
+    // VALID_EXTRACTION の金額(5万〜450万)・締切(2026年8月28日)を本文に含めることで
+    // 数値グラウンディングが通り、confidence 据え置き・アラート0件になる。
+    currentText:
+      "ものづくり補助金 + IT導入補助金2026 通常枠が追加。補助額は5万円から450万円、申請期限は2026年8月28日。",
     ...overrides,
   };
 }
@@ -164,6 +167,95 @@ describe("analyzeDiff", () => {
     await analyzeDiff(makeRequest(), deps);
 
     expect(client.messages.create).toHaveBeenCalledWith(expect.objectContaining({ model: "claude-sonnet-5" }));
+  });
+});
+
+describe("analyzeDiff numeric grounding (指示書188)", () => {
+  // 本文「上限100万円」。amount.max 以外は null / 本文準拠にして、max だけを揺らす。
+  function groundingExtraction(overrides: {
+    max: number | null;
+    date?: string | null;
+    sourceUrl?: string;
+  }) {
+    return {
+      isRelevant: true,
+      subsidyName: "テスト補助金",
+      targetIndustries: ["全業種"],
+      amount: { min: null, max: overrides.max, unit: "JPY", description: null },
+      applicationDeadline: { date: overrides.date ?? null, description: null },
+      summary: "テスト",
+      sourceUrl: overrides.sourceUrl ?? "https://example.go.jp/subsidy/",
+      confidence: "high",
+    };
+  }
+
+  function groundingRequest(currentText: string): Partial<DiffAnalysisRequest> {
+    return { sourceUrl: "https://example.go.jp/subsidy/", currentText };
+  }
+
+  it("(a) downgrades confidence to low and records unsourced_numeric when AI invents a number", async () => {
+    // 本文は「上限100万円」(= 1,000,000)。AI は桁を1つ余計に付けて 1,000,000,000 と返す。
+    const client = makeClient({
+      stop_reason: "end_turn",
+      content: [{ type: "text", text: JSON.stringify(groundingExtraction({ max: 1_000_000_000 })) }],
+      usage: { input_tokens: 100, output_tokens: 10 },
+    });
+    const deps = makeDeps(client);
+
+    const result = await analyzeDiff(makeRequest(groundingRequest("補助金の上限100万円")), deps);
+
+    expect(result.confidence).toBe("low");
+    expect(result.unsourcedFields).toEqual(["amount.max"]);
+    // 抽出そのものは捨てない。
+    expect(result.amount.max).toBe(1_000_000_000);
+    const unsourced = deps.alertSink.failures.filter((f) => f.reason === "unsourced_numeric");
+    expect(unsourced).toHaveLength(1);
+    // detail はフィールド名のみ (本文・金額を載せない)。
+    expect(unsourced[0].detail).toBe("amount.max");
+  });
+
+  it("(b) keeps confidence and leaves unsourcedFields empty when amount and 和暦 date are grounded", async () => {
+    // 本文「上限100万円」「令和8年12月25日締切」。AI は max:1,000,000 / date:2026-12-25。
+    const client = makeClient({
+      stop_reason: "end_turn",
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(groundingExtraction({ max: 1_000_000, date: "2026-12-25" })),
+        },
+      ],
+      usage: { input_tokens: 100, output_tokens: 10 },
+    });
+    const deps = makeDeps(client);
+
+    const result = await analyzeDiff(
+      makeRequest(groundingRequest("補助金の上限100万円。令和8年12月25日締切。")),
+      deps,
+    );
+
+    expect(result.confidence).toBe("high");
+    expect(result.unsourcedFields).toEqual([]);
+    expect(deps.alertSink.failures).toHaveLength(0);
+  });
+
+  it("(c) always returns the request's sourceUrl even when the AI reports a different one", async () => {
+    const client = makeClient({
+      stop_reason: "end_turn",
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(
+            groundingExtraction({ max: 1_000_000, sourceUrl: "https://evil.example.com/other" }),
+          ),
+        },
+      ],
+      usage: { input_tokens: 100, output_tokens: 10 },
+    });
+    const deps = makeDeps(client);
+
+    const result = await analyzeDiff(makeRequest(groundingRequest("補助金の上限100万円")), deps);
+
+    expect(result.sourceUrl).toBe("https://example.go.jp/subsidy/");
   });
 });
 

@@ -4,6 +4,7 @@ import { buildUserPrompt, SYSTEM_INSTRUCTIONS } from "./prompt";
 import { SUBSIDY_OUTPUT_JSON_SCHEMA } from "./output-schema";
 import { SubsidyExtractionSchema, type SubsidyExtraction, type DiffAnalysisRequest } from "./schema";
 import { recordAiFailure, type AlertSink, type FailureThresholdTracker } from "./alerts";
+import { findUnsourcedFields } from "./grounding";
 import { DEFAULT_ESTIMATED_TOKENS_PER_REQUEST, type TenantUsageGuard } from "./usage-guard";
 
 const PIPELINE_NAME = "gov-doc-engine.subsidy-extraction";
@@ -207,5 +208,26 @@ export async function analyzeDiff(
     throw new AiResponseParseError(`Claude response failed schema validation: ${parsed.error.message}`);
   }
 
-  return parsed.data;
+  const data = parsed.data;
+
+  // sourceUrl は AI の自己申告を信用せず、常にリクエストの URL で上書きする
+  // (AI が本文中の別 URL を返しても、照合対象は収集元の URL に固定する)。
+  data.sourceUrl = request.sourceUrl;
+
+  // 数値グラウンディング: 本文に根拠の無い金額・締切日を検出する。
+  // 1件以上あれば confidence を low に落とし unsourcedFields に積んで返す
+  // (抽出そのものは捨てない)。detail はフィールド名のみ — 本文や金額は載せない。
+  const unsourced = findUnsourcedFields(data, request.currentText);
+  if (unsourced.length > 0) {
+    data.confidence = "low";
+    data.unsourcedFields = unsourced;
+    await recordAiFailure(
+      deps.alertSink,
+      deps.failureTracker,
+      { pipeline: PIPELINE_NAME, reason: "unsourced_numeric", detail: unsourced.join(",") },
+      now(),
+    );
+  }
+
+  return data;
 }

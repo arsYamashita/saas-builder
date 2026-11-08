@@ -53,5 +53,11 @@ export const SubsidyExtractionSchema = z.object({
   summary: z.string().max(1000),
   sourceUrl: z.string().url(),
   confidence: z.enum(["high", "medium", "low"]),
+  /**
+   * 数値グラウンディング (analyzer/grounding.ts) で本文に根拠が無いと判定された
+   * フィールド名。Claude の出力 JSON Schema (output-schema.ts) には足さない
+   * サーバ側の後付け値なので、Claude が返さなくても良いよう default([]) にする。
+   */
+  unsourcedFields: z.array(z.string()).default([]),
 });
 export type SubsidyExtraction = z.infer<typeof SubsidyExtractionSchema>;
