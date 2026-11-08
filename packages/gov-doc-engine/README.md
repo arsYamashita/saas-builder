@@ -17,7 +17,29 @@ YAML設定 + 差分検知      Claude構造化抽出              インター�
 - `config-loader.ts` — YAML → 検証済み設定
 - `normalize.ts` / `hash.ts` / `extract.ts` — HTML正規化・ハッシュ化・CSSセレクタ抽出。セレクタ不一致は空文字に黙変換せず `null` / `SelectorNotFoundError` として明示する（サイト改装で監視が「空 vs 空 = 変更なし」に固定されて静かに死ぬのを防ぐ、Codex P2 対応）
 - `diff.ts` — `detectDiff()`: 正規化 + ハッシュ比較による変更検知。現行ページがセレクタ不一致なら `SelectorNotFoundError` を投げる。保存済みスナップショット側だけ不一致（セレクタ設定変更直後等）は初回観測として `changed: true`
-- `watcher.ts` — `DocumentWatcher`（実サイトへの定期フェッチを実装。`FetchFn`/`WatcherStore` を DI するため**テストでは実サイトを一切叩かない**）、`startPolling()`（本番運用専用のスケジューラ、ユニットテスト対象外）。セレクタ不一致時は `WatcherAlertDeps`（AlertSink, `ai_api_silent_degradation_no_alert` と同経路）に `selector_missing` アラートを流し、不一致ページを snapshot 保存せず（直前の正常スナップショットを温存）、エラーを再スローする
+- `watcher.ts` — `DocumentWatcher`（実サイトへの定期フェッチを実装。`FetchFn`/`WatcherStore` を DI するため**テストでは実サイトを一切叩かない**）、`startPolling()`（本番運用専用のスケジューラ、ユニットテスト対象外）。セレクタ不一致時は `WatcherAlertDeps`（AlertSink, `ai_api_silent_degradation_no_alert` と同経路）に `selector_missing` アラートを流し、不一致ページを snapshot 保存せず（直前の正常スナップショットを温存）、エラーを再スローする。`WatcherAlertDeps` は**必須**の依存で省略できない（soft-404・セレクタ不一致を取りこぼさないため）
+- `soft404.ts` — `detectSoft404()`: 200 で返る移動済みページ（soft-404）や 200 で返る 404 本文を、検知前に塞ぐ。許可リスト方式で、`movedPhrases`/`expectTitleIncludes` を設定した source でだけ判定する。該当時は `source_moved` アラートを流し `SourceMovedError` を投げ、snapshot は保存しない
+
+#### soft-404 / ページ移動の設定（`movedPhrases` / `expectStatus` / `expectTitleIncludes`）
+
+官公庁サイトはページを移したあとも 200 で「このページは移動しました」と返すことがある（soft-404）。この場合 `selector_missing` も出ず、差分検知 → AI 解析 → `isRelevant: false` で静かに終わり、監視先が死んだことに気づけない。`sources.yaml` に次の省略可能フィールドを足すと、`detectSoft404()` が検知前に止める（いずれも許可リスト方式で、設定した source だけが対象）。
+
+- `movedPhrases`（文字列配列・最大20件）: 移動/404 を示す文言。`<title>`・最初の `<h1>`・selector 領域の先頭ブロック（先頭 300 文字程度）だけを対象に部分一致する。本文全体は見ない（記事が移動文言を引用しただけで誤検知するのを避ける）。
+- `expectTitleIncludes`（文字列）: 生きたページの `<title>` が必ず含む文字列。title にこれが無ければ移動/404 とみなす（肯定判定）。
+- `expectStatus`（整数）: 期待する HTTP ステータス。設定したときだけ実応答のステータスと突き合わせ、一致しなければ `source_moved` 扱いにする。未設定なら status 判定はしない。`defaultFetch` は 2xx では実ステータス付きの `FetchResponse` を返すので、`expectStatus: 202` のような正常応答も取りこぼさない。非 2xx では本文を差分検知へ流さず `FetchStatusError`（実ステータス付き）を投げる。`expectStatus` を設定した source なら、ハード 404/410（ページ削除）でも `checkSource` がその例外を拾って `source_moved` を記録してから再スローするので、ページ削除の見逃しと閾値アラート漏れを防げる。
+
+```yaml
+- id: mirasapo-plus-subsidy-search
+  name: "ミラサポplus 補助金・支援施策検索"
+  # ...
+  movedPhrases:
+    - "このページは移動しました"
+    - "お探しのページは見つかりませんでした"
+  expectTitleIncludes: "補助金"
+  expectStatus: 200
+```
+
+本番の組み立て時に、各 source の `movedPhrases`・`expectTitleIncludes` を**実サイトで確認してから**設定すること（実在しない文言を設定すると検知できない）。`sources.yaml` の既定値には soft-404 設定を入れていない（実サイトを叩かずに正しい文言を確定できないため）。
 
 公開 API（抜粋）:
 
@@ -79,7 +101,7 @@ npm run test:unit -- packages/gov-doc-engine   # リポジトリルートから
 cd packages/gov-doc-engine && npx vitest run
 ```
 
-72 tests、実サイト・実 Claude API 呼び出しなし（すべて DI したフェイク/モックで検証）。
+83 tests、実サイト・実 Claude API 呼び出しなし（すべて DI したフェイク/モックで検証）。
 
 ## navigator 統合の次ステップ
 

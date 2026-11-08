@@ -8,10 +8,14 @@ export { normalizeHtml } from "./collector/normalize";
 export { hashContent } from "./collector/hash";
 export { extractSection, SelectorNotFoundError } from "./collector/extract";
 export { detectDiff, type DiffResult } from "./collector/diff";
+export { detectSoft404 } from "./collector/soft404";
 export {
   DocumentWatcher,
   startPolling,
+  SourceMovedError,
+  FetchStatusError,
   type FetchFn,
+  type FetchResponse,
   type WatcherStore,
   type WatchResult,
   type WatcherAlertDeps,

@@ -19,7 +19,8 @@
 
 /**
  * "selector_missing" は収集層（watcher）のセレクタ不一致（サイト改装等）を表す。
- * AI 呼び出しの失敗ではないが、「監視パイプラインが静かに死ぬ」という点で
+ * "source_moved" は 200 で返る移動済みページ（soft-404）や 200 で返る 404 本文を表す。
+ * どちらも AI 呼び出しの失敗ではないが、「監視パイプラインが静かに死ぬ」という点で
  * ai_api_silent_degradation_no_alert と同種の問題のため、同じアラート経路に流す
  * (Codex P2 対応)。
  */
@@ -28,7 +29,8 @@ export type AiFailureReason =
   | "call_error"
   | "json_parse_error"
   | "refusal"
-  | "selector_missing";
+  | "selector_missing"
+  | "source_moved";
 
 export interface AiFailureEvent {
   pipeline: string;
